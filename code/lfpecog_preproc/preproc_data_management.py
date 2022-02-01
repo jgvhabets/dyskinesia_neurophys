@@ -1,21 +1,46 @@
-# Functions to pre-process neurophysiology data (LFP and ECOG)
-# in CFB295 ReTune's Dyskinesia Project
+'''
+Functions to pre-process neurophysiology data (LFP and ECOG)
+in ReTune's Dyskinesia Project
 
-# Importing general packages and functions
+Specifically contains functions and DataClasses to structure,
+save, and read data Objects as input and output in the preprocessing. 
+'''
+
+# Import general packages and functions
 import os
 import numpy as np
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from collections import namedtuple
 from typing import Any
-import matplotlib.pyplot as plt
 import mne_bids
-import mne
-from scipy.signal import resample_poly
 import csv
+
+
+
+'''
+Define namedtuple to store preprocessing settings per group
+'''
+PreprocSettings = namedtuple('PreprocSettings', (
+    'win_len '
+    'artfct_sd_tresh '
+    'bandpass_f '
+    'transBW '
+    'notchW '
+    'Fs_orig '
+    'Fs_resample '
+    'settings_version '
+))
+'''
+Define namedtuple to store the preprocessing settings of all
+three groups
+'''
+Settings = namedtuple('Settings', 'lfp_left lfp_right ecog')
+
 
 
 # creates Class-init, repr gives printing-info, frozen makes 'immutable'
 # dot not use frozen here, bcs of inheritance to non-frozen RunRawData Class
-@dataclass(init=True, repr=True, )  #frozen=True,
+@dataclass(init=True, repr=True, )
 class RunInfo:
     '''Stores the details of one specific run to import'''
     sub: str  # patient id, e.g. '008'
@@ -23,8 +48,9 @@ class RunInfo:
     task: str  # task id, e.g. 'Rest'
     acq: str  # acquisition: stimulation and Dysk-Meds (StimOffLevo30)
     run: str  # run sequence, e.g. '01'
-    sourcepath: str  # directory where source data (.Poly5) is stored
-    project_path: str  # folder with sub-folder code/data/figures
+    raw_path: str  # directory where raw data (.Poly5) is stored
+    project_path: str
+    # parent-folder of code/data/figures to store created files
     bidspath: Any = None  # made after initiazing
     store_str: Any = None  # made after initiazing
     preproc_sett: str = None  # foldername for specific settings
@@ -42,7 +68,7 @@ class RunInfo:
             suffix='ieeg',
             extension='.vhdr',
             datatype='ieeg',
-            root=self.sourcepath,
+            root=self.raw_path,
         )
         store_str = (f'{self.sub}_{self.ses}_{self.task}_'
                      f'{self.acq}_{self.run}')
@@ -150,26 +176,6 @@ class RunRawData:
 
 
 
-def resample(
-    data, group, Fs_orig, Fs_new
-):
-    """
-    Assuming downsampling; TO ADD DOC-STRING
-    """
-    data = data[group]
-    down = int(Fs_orig / Fs_new)  # factor to down sample
-    newdata = np.zeros((data.shape[0], data.shape[1],
-                        int(data.shape[2] / down)))
-    time = data[:, 0, :]  # all time rows from all windows
-    newtime = time[:, ::down]  # all windows, only times on down-factor
-    newdata[:, 0, :] = newtime  # alocate new times in new data array
-    newdata[:, 1:, :] = resample_poly(
-        data[:, 1:, :], up=1, down=down, axis=2
-    )  # fill signals rows with signals
-
-    return newdata
-
-
 def save_arrays(
     data: dict, names: dict, group: str, runInfo: Any,
 ):
@@ -243,3 +249,5 @@ def read_preprocessed_data(runInfo):
                          f'and names (csv) in {g}')
 
     return data, names
+
+
