@@ -13,6 +13,9 @@ def artefact_selection(
     save=None
 ):
     '''
+    *** IDEA: change function to check the difference between mean-window[N]
+    vs mean-winsow[N+1]; is this difference in means is > 2.5 SD -> remove ***
+
     Function to remove artefacts and visualize the resulting
     selection.
     Blocks-values are converted to NaNs when an outlier (value
