@@ -7,6 +7,7 @@ save, and read data Objects as input and output in the preprocessing.
 '''
 
 # Import general packages and functions
+from array import array
 import os
 import numpy as np
 from dataclasses import dataclass
@@ -46,7 +47,7 @@ class RunInfo:
     sub: str  # patient id, e.g. '008'
     ses: str  # sessions id, e.g. 'EphysMedOn02'
     task: str  # task id, e.g. 'Rest'
-    acq: str  # acquisition: stimulation and Dysk-Meds (StimOffLevo30)
+    acq: str  # acquisition: Stim and Dysk-Meds (StimOffLevo30)
     run: str  # run sequence, e.g. '01'
     raw_path: str  # directory where raw data (.Poly5) is stored
     project_path: str
@@ -177,13 +178,14 @@ class RunRawData:
 
 
 def save_arrays(
-    data: dict, names: dict, group: str, runInfo: Any,
+    data: array, names: list, group: str,
+    runInfo: Any, lfp_reref: str,
 ):
     '''
     Function to save preprocessed 3d-arrays as npy-files.
 
     Arguments:
-        - data (dict): containing 3d-arrays
+        - data (array): 3d-arrays with preprocessed data
         - names (dict): containing channel-name lists
         corresponding to data arrays
         - group(str): group to save
@@ -192,14 +194,17 @@ def save_arrays(
     Returns:
         - None
     '''
+    rrf = lfp_reref.capitalize()
     # define filename, save data-array per group (lfp L/R vs ecog)
-    f_name = f'preproc_{runInfo.preproc_sett}_{group}_data.npy'
-    np.save(os.path.join(runInfo.data_path, f_name), data[group])
+    f_name = (f'preproc_{group}_{runInfo.preproc_sett}_'
+             f'reref{rrf}_data.npy')
+    np.save(os.path.join(runInfo.data_path, f_name), data)
     # save list of channel-names as txt-file
-    f_name = f'preproc_{runInfo.preproc_sett}_{group}_chnames.csv'
+    f_name = (f'preproc_{group}_{runInfo.preproc_sett}_'
+             f'reref{rrf}_chnames.csv')
     with open(os.path.join(runInfo.data_path, f_name), 'w') as f:
             write = csv.writer(f)
-            write.writerow(names[group])
+            write.writerow(names)
 
     return
 

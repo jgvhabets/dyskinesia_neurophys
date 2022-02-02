@@ -36,7 +36,7 @@ if __name__ == '__main__':
     
     # Load JSON-files with settings and runinfo
     runsfile = os.path.join(json_path, f'runinfos_01FEB22.json')
-    settfile = os.path.join(json_path, f'settings_v0.2_Jan22.json')
+    settfile = os.path.join(json_path, f'settings_v0.1_Jan22.json')
 
     with open(os.path.join(json_path, settfile)) as f:
         setting_lists = json.load(f, )  # dict of group-settings
@@ -72,8 +72,6 @@ if __name__ == '__main__':
             runInfo.fig_path = None
         # check if fig path is correctly changed
         figcode = setting_lists['plot_figs']
-        print(f'\nJSON fig code: {figcode}'
-              f'\nFIG-PATH: {runInfo.fig_path}')
 
         # Load Data
         data = {}
@@ -90,18 +88,28 @@ if __name__ == '__main__':
         # Artefact Removal
         for group in groups:
             data[group], ch_names[group] = artefacts.artefact_selection(
-                bids_dict=data,
+                data_bids=data[group],
                 group=group,
                 win_len=getattr(settings, group).win_len,
                 n_stds_cut=getattr(settings, group).artfct_sd_tresh,
                 save=runInfo.fig_path,
             )
-        
+
+        # Quality check: delete groups without valid channels
+        to_del = []
+        for group in data.keys():
+            if data[group].shape[1] <= 1:
+                to_del.append(group)
+        for group in to_del:
+            del(data[group])
+            del(ch_names[group])
+            groups.remove(group)
+        print(f'\nREMOVED GROUP(s): {to_del}')
+
         # BandPass-Filtering
         for group in groups:
             data[group] = fltrs.bp_filter(
-                clean_dict=data,
-                group=group,
+                data=data[group],
                 sfreq=getattr(settings, group).Fs_orig,
                 l_freq=getattr(settings, group).bandpass_f[0],
                 h_freq=getattr(settings, group).bandpass_f[1],
@@ -112,7 +120,7 @@ if __name__ == '__main__':
         for group in groups:
             print(f'Start Notch-Filter GROUP: {group}')
             data[group] = fltrs.notch_filter(
-                bp_dict=data,
+                data=data[group],
                 group=group,
                 transBW=getattr(settings, group).transBW,
                 notchW=getattr(settings, group).notchW,
@@ -125,8 +133,7 @@ if __name__ == '__main__':
         # Resampling
         for group in groups:
             data[group] = resample.resample(
-                data=data,
-                group=group,
+                data=data[group],
                 Fs_orig=getattr(settings, 'ecog').Fs_orig,
                 Fs_new = getattr(settings, 'ecog').Fs_resample,
             )
@@ -136,24 +143,28 @@ if __name__ == '__main__':
         if 'reref_report.txt' in os.listdir(
                 runInfo.data_path):
             with open(os.path.join(runInfo.data_path,
-                    'reref_report.txt'), 'w'):
-                pass  # only overwrites, doesn't fill
+                    'reref_report.txt'), 'w') as f:
+                # pass  # only overwrites, doesn't fill
+                f.write('Groups removed after Artefact Removal '
+                        f'due to NO clean channels: {to_del}')
+
         for group in groups:
             data[group], ch_names[group] = reref.rereferencing(
-                data=data,
+                data=data[group],
                 group=group,
                 runInfo=runInfo,
                 lfp_reref=setting_lists['lfp_reref'],
-                ch_names_clean=ch_names,
+                chs_clean=ch_names[group],
             )
         
         # Saving Preprocessed Data
         for group in groups:
             dataMng.save_arrays(
-                data=data,
-                names=ch_names,
+                data=data[group],
+                names=ch_names[group],
                 group=group,
                 runInfo=runInfo,
+                lfp_reref=setting_lists['lfp_reref'],
             )
             print(f'Preprocessed data saved for {group}!')
 

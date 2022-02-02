@@ -31,7 +31,7 @@ import json
 
 # Define json-files to create + if fig's should be plotted
 create_settings = True
-create_runinfo = True
+create_runinfo = False
 plot_figures = False
 lfp_reref_method = 'levels'  # 'levels' or 'segments'
 
@@ -42,9 +42,9 @@ if __name__ == '__main__':
         [win_len, artfct_sd_tresh, bandpass_f, transBW, notchW,
         Fs_origin, Fs_resample, settings_version]
         '''
-        sett_version = 'v0.2_Jan22'
-        lfp_settings = [1, 4, (1, 120), 20, 5, 4000, 800, sett_version]
-        ecog_settings = [1, 4, (1, 120), 20, 5, 4000, 800, sett_version]
+        sett_version = 'v0.1_Jan22'
+        lfp_settings = [1, 4, (1, 120), 10, 2, 4000, 800, sett_version]
+        ecog_settings = [1, 4, (1, 120), 10, 2, 4000, 800, sett_version]
     
 
         # rest of code

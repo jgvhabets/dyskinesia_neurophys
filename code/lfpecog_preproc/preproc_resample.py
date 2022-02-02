@@ -1,9 +1,10 @@
 # Import general packages and functions
+from array import array
 import numpy as np
 from scipy.signal import resample_poly
 
 def resample(
-    data: dict, group: str, Fs_orig: int, Fs_new: int
+    data: array, Fs_orig: int, Fs_new: int
 ):
     """
     Function performs the downsampling of recorded
@@ -13,11 +14,9 @@ def resample(
     this will always be the case.
 
     Arguments:
-        - data (dict): dict containing the 3d arrays
-        with data of the different source-groups
-        (e.g. lfp-l, lfp-r, ecog)
-        - group (str): name of group, corresponding
-        to keys in the data dictionary
+        - data (array): 3d array with data, first dimension
+        are windows, second dim are rows, third dim are
+        the data points over time within one window
         - Fs_origin (int): original sampling freq
         - Fs_new (int): desired sampling freq
 
@@ -26,7 +25,6 @@ def resample(
         data arrays as input data, however downsampled
         and therefore less datapoints per window
     """
-    data = data[group]
     down = int(Fs_orig / Fs_new)  # factor to down sample
     newdata = np.zeros((data.shape[0], data.shape[1],
                         int(data.shape[2] / down)))

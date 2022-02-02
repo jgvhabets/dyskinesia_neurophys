@@ -1,4 +1,5 @@
 # Import packages and functions
+from array import array
 import os
 import numpy as np
 import mne
@@ -6,55 +7,85 @@ import matplotlib.pyplot as plt
 
 
 def bp_filter(
-    clean_dict, group, sfreq, l_freq, h_freq,
-    method='fir', fir_window='hamming', verbose=False
+    data: array,
+    sfreq: int,
+    l_freq: int,
+    h_freq: int,
+    method='fir',
+    fir_window='hamming',
+    verbose=False,
 ):
     '''
-    DOCT STRING TO WRITE
+    Function to execute bandpass filter over the recored,
+    cleaned data.
+
+    Arguments:
+        - data (array): 3d array with data, first dimension
+        are windows, second dim are rows, third dim are
+        the data points over time within one window
+        - sfreq (int): sampling freq
+        - l_freq (int): lower freq of bandpass
+        - h_freq (int): higher freq of bandpass
+        - method: method of filter to use (fir / iir)
+        - fir_window: type of fir_window, if fir applied
+    
+    Returns:
+        - data_out (array): corresponding 3d array with
+        filtered data
     '''
-    data_out = clean_dict[group].copy()
-    for w in np.arange(clean_dict[group].shape[0]):
-        data_out[w, 1:, :] = mne.filter.filter_data(
-            data=clean_dict[group][w, 1:, :],
-            sfreq=sfreq,
-            l_freq=l_freq,
-            h_freq=h_freq,
-            method=method,
-            fir_window=fir_window,
-            verbose=verbose,
-        )
+    data_out = data.copy()
+    for w in np.arange(data.shape[0]):
+        try:
+            data_out[w, 1:, :] = mne.filter.filter_data(
+                data=data[w, 1:, :],
+                sfreq=sfreq,
+                l_freq=l_freq,
+                h_freq=h_freq,
+                method=method,
+                fir_window=fir_window,
+                verbose=verbose,
+            )
+        except ValueError:
+            '''If there are no channels available after
+            artefact removal: fill with zeros'''
+            data_out = np.zeros((data.shape))
 
     return data_out
 
 
 def notch_filter(
-    bp_dict: dict,
+    data: array,
+    ch_names: list,  # clean incl channelnames per group
     group: str,
     transBW: int,  # Default in doc is 1
     notchW: int,  # Deafult in doc is f/200
     Fs: int = 4000,  # sample freq, default 4000 Hz
     freqs: list = [50, 100, 150, 200, 250, 350, 400],  # power line freqs EU
     method='fir',
-    ch_names: dict = None,  # clean incl channelnames per group
     save=None,
     verbose='Warning'
 ):
     '''
     Applies notch-filter to filter local peaks due to powerline
     noise. Uses mne-fucntion (see doc).
-    Inputs:
-    - data (array): 2D data array with channels to filter,
-    - transBW (int): transition bandwidth, try out and decide on
-        defaults for LFP and ECOG seperately,
-    - notchW (int): notch width, try out and decide on
-        defaults for LFP and ECOG seperately,
-    - save (str): if pre and post-filter figures should be saved,
-        directory should be given here,
-    - verbose (str): amount of documentation printed.
-    Output:
-    - data: filtered data array.
+    
+    Arguments:
+        - data (array): 3d array with data, first dimension
+        are windows, second dim are rows, third dim are
+        the data points over time within one window
+        - ch_names (list): channel-names
+        - group (str): name of inserted group
+        - transBW (int): transition bandwidth, try out and decide on
+            defaults for LFP and ECOG seperately
+        - notchW (int): notch width, try out and decide on
+            defaults for LFP and ECOG seperately,
+        - save (str): if pre and post-filter figures should be saved,
+            directory should be given here,
+        - verbose (str): amount of documentation printed.
+    
+    Returns:
+    - data_out: filtered data array.
     '''
-    data = bp_dict[group]
     data_out = data.copy()
     ch_names = ch_names[group]  # select list for corresponding group
     if save:
@@ -117,4 +148,4 @@ def notch_filter(
                     faceccolor='white')
         plt.close()
     
-    return data
+    return data_out

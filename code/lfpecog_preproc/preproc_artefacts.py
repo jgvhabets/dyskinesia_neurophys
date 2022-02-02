@@ -1,11 +1,12 @@
 # Import packages and functions
 import os
+from typing import Any
 import numpy as np
 import matplotlib.pyplot as plt
 
 
 def artefact_selection(
-    bids_dict: dict,
+    data_bids: Any,
     group: str,
     win_len: float=.5,
     overlap=None,
@@ -20,10 +21,11 @@ def artefact_selection(
     selection.
     Blocks-values are converted to NaNs when an outlier (value
     exceeds thresholds of n_std_cut times std dev of full recording).
-    Also ocnnverted to NaN's if more than 25% of block is 0.
+    Also oocnnverted to NaN's if more than 25% of block is 0.
     
     Arguments:
-        - bids_dict, Raw BIDS selection: grouped BIDS raw, e.g. rawRun1.ecog,
+        - data_bids (BIDS object): BIDS-Object of group
+        group (str): names of group (lfp_left, ecog, lfp_right)
         - win_len (float): block window length in seconds,
         - overlap (float): time of overlap between consec blocks (seconds),
         - n_stds_cut, int: number of std-dev's above and below mean that
@@ -36,10 +38,9 @@ def artefact_selection(
         are replaced by np.nan's.
     '''
     print(f'START ARTEFACT REMOVAL: {group}')
-    data = bids_dict[group]
-    ch_nms = data.ch_names
-    fs = data.info['sfreq']  # ONLY FOR BLOCKS
-    (ch_arr, ch_t) = data.get_data(return_times=True)
+    ch_nms = data_bids.ch_names
+    fs = data_bids.info['sfreq']  # ONLY FOR BLOCKS
+    (ch_arr, ch_t) = data_bids.get_data(return_times=True)
     # visual check by plotting before selection
     if save:
         fig, axes = plt.subplots(len(ch_arr), 2, figsize=(16, 16))
