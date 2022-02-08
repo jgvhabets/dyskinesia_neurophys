@@ -35,8 +35,8 @@ if __name__ == '__main__':
     json_path = os.path.join(data_path, 'preprocess/preprocess_jsons')
     
     # Load JSON-files with settings and runinfo
-    runsfile = os.path.join(json_path, f'runinfos_01FEB22.json')
-    settfile = os.path.join(json_path, f'settings_v0.1_Jan22.json')
+    runsfile = os.path.join(json_path, f'runinfos_08FEB22.json')
+    settfile = os.path.join(json_path, f'settings_v0.4_Feb22.json')
 
     with open(os.path.join(json_path, settfile)) as f:
         setting_lists = json.load(f, )  # dict of group-settings
@@ -121,11 +121,11 @@ if __name__ == '__main__':
             print(f'Start Notch-Filter GROUP: {group}')
             data[group] = fltrs.notch_filter(
                 data=data[group],
+                ch_names=ch_names[group],
                 group=group,
                 transBW=getattr(settings, group).transBW,
                 notchW=getattr(settings, group).notchW,
                 method='fir',
-                ch_names=ch_names,
                 save=runInfo.fig_path,
                 verbose=False,
             )

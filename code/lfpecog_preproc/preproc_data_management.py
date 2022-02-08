@@ -50,11 +50,11 @@ class RunInfo:
     acq: str  # acquisition: Stim and Dysk-Meds (StimOffLevo30)
     run: str  # run sequence, e.g. '01'
     raw_path: str  # directory where raw data (.Poly5) is stored
-    project_path: str
+    project_path: str  # directory with data and figures-folders
+    preproc_sett: str  # name settings-version (also for folder)
     # parent-folder of code/data/figures to store created files
     bidspath: Any = None  # made after initiazing
     store_str: Any = None  # made after initiazing
-    preproc_sett: str = None  # foldername for specific settings
     fig_path: str = None  # folder to store figures
     data_path: str = None  # folder to store preprocessed data
     lead_type: str = None  # pre-defined lead-type of subject

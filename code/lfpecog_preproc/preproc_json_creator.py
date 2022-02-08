@@ -30,9 +30,9 @@ import os
 import json
 
 # Define json-files to create + if fig's should be plotted
-create_settings = True
-create_runinfo = False
-plot_figures = False
+create_settings = False
+create_runinfo = True
+plot_figures = True
 lfp_reref_method = 'levels'  # 'levels' or 'segments'
 
 if __name__ == '__main__':
@@ -63,8 +63,12 @@ if __name__ == '__main__':
         }
 
         f = os.path.join(json_dir, f'settings_{sett_version}.json')
-        with open(f, 'w') as jsonfile:
-            json.dump(dict_settings, jsonfile, indent=4)
+        if os.path.isfile(f):
+            print(f'\n### WARNING ###\nSettings-JSON {sett_version} does '
+                  'already exist, create new name for current version\n')
+        if not os.path.isfile(f):
+            with open(f, 'w') as jsonfile:
+                json.dump(dict_settings, jsonfile, indent=4)
     
     if create_runinfo:
         '''
@@ -76,8 +80,8 @@ if __name__ == '__main__':
         '''
         rawpath = ('/Users/jeroenhabets/OneDrive - Charité - '
                   'Universitätsmedizin Berlin/BIDS_Berlin_ECOG_LFP/rawdata')
-        sub = '008'
-        ses = 'EphysMedOn01'  # 'EphysMedOn02' / LfpEcogMedOn01
+        sub = '009'
+        ses = 'EcogLfpMedOn02'
         task = 'Rest'
         acq = 'StimOff'  # 'StimOffLD00'
         run = '01'
@@ -106,7 +110,6 @@ if __name__ == '__main__':
         }
         list_dicts.append(dict_runinfo)
 
-        fname = f'runinfo_{sub}_{ses}_{task}_{acq}_{run}.json'
         fname = 'runinfos_01FEB22.json'
         f = os.path.join(json_dir, fname)
         with open(f, 'w') as jsonfile:

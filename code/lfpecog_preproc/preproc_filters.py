@@ -87,7 +87,6 @@ def notch_filter(
     - data_out: filtered data array.
     '''
     data_out = data.copy()
-    ch_names = ch_names[group]  # select list for corresponding group
     if save:
         # select range of win's to plot
         plot_wins = np.arange(int(data.shape[0] / 2), int(data.shape[0] / 2) + 20)
@@ -149,3 +148,4 @@ def notch_filter(
         plt.close()
     
     return data_out
+

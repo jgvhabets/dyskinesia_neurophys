@@ -52,34 +52,6 @@ def LeadLevels():
     return Leads
 
 
-def reref_common_average(data, ch_names):
-    """
-    Function to perform Common Average Rereferencing.
-    Default in ECoG signal processing.
-
-    Arguments:
-        - data (array): 3d array containing time- and signal-
-        rows
-        - ch_names (list): strings of clean channel names,
-        incl 'times', excl removed channels
-    
-    Returns:
-        - newdata (array): identical shape array as input,
-        signals re-referenced by extracting the mean over
-        all signals for each channel
-    """
-    print(f'\n ECoG Rereferncing: Common Average')
-    newdata = np.empty(data.shape)  # empty array with same shape
-    newdata[:, 0, :] = data[:, 0, :]  # copy time rows
-    for w in np.arange(data.shape[0]):  # loop over windows
-        # take window average of all channels
-        ref_mean = np.nanmean(data[w, 1:, :], axis=0)
-        for ch in np.arange(1, data.shape[1]):  # loop channels to reref
-            newdata[w, ch, :] = data[w, ch, :] - ref_mean
-    newnames = [n[:8] for n in ch_names]
-
-    return newdata, newnames
-
 @ dataclass
 class Segm_Lead_Setup:
     """
@@ -98,8 +70,10 @@ class Segm_Lead_Setup:
     name: str = None  # full description of lead-type
     n_levels: int = None  # number of levels on lead
     n_contacts: int = None  # number of total contacts
-    levels_str: dict = None  # dict with contact str-names per level
-    levels_num: dict = None  # numerical dict of contacts per level
+    levels_str: dict = None  # dict with channel-names per level
+    levels_num: dict = None  # numerical lead-setup per level
+    level_rows: dict = None  # correspoding data array-rows
+    # in clean channels in level_str
     
     def __post_init__(self):
         Leads = LeadLevels()  # create Leads-tuple
@@ -121,15 +95,55 @@ class Segm_Lead_Setup:
             nums = self.levels_num[l]  # takes num-list
             # creates list per level with string-names
             self.levels_str[l] = [contacts[c] for c in nums]
+
         # exclude channels not in clean-channel list
         combi_str = '\t'.join(self.chs_clean)  # all strings to one
+        self.level_rows = {}
+        startrow = 1  # row 0 is time
         for l in self.levels_str:  # loops over levels
-            for n, c in enumerate(self.levels_str[l]):
+            to_del = []  # channels to remove per level
+            for c in self.levels_str[l]:
                 # if ch-name is not in clean-channel combi-str
                 if c not in combi_str:
-                    self.levels_str[l].remove(c)
-                    self.levels_num[l].remove(self.levels_num[l][n])
-                    # keeps only clean channels in these dict's
+                    to_del.append(c)
+            for c in  to_del: self.levels_str[l].remove(c)
+            # create dict's with rows of data
+            self.level_rows[l] = list(np.arange(
+                startrow, startrow + len(self.levels_str[l])
+            ))
+            startrow += len(self.levels_str[l])
+            assert (len(self.level_rows[l]) == 
+                len(self.levels_str[l])), 'Wrong level-dicts'
+            # keeps only clean channels in these dict's
+
+
+def reref_common_average(data, ch_names):
+    """
+    Function to perform Common Average Rereferencing.
+    Default in ECoG signal processing.
+
+    Arguments:
+        - data (array): 3d array containing time- and signal-
+        rows
+        - ch_names (list): strings of clean channel names,
+        incl 'times', excl removed channels
+    
+    Returns:
+        - newdata (array): identical shape array as input,
+        signals re-referenced by extracting the mean over
+        all signals for each channel
+    """
+    print(f'\n ECoG Rereferencing: Common Average')
+    newdata = np.empty(data.shape)  # empty array with same shape
+    newdata[:, 0, :] = data[:, 0, :]  # copy time rows
+    for w in np.arange(data.shape[0]):  # loop over windows
+        # take window average of all channels
+        ref_mean = np.nanmean(data[w, 1:, :], axis=0)
+        for ch in np.arange(1, data.shape[1]):  # loop channels to reref
+            newdata[w, ch, :] = data[w, ch, :] - ref_mean
+    newnames = [n[:8] for n in ch_names]
+
+    return newdata, newnames
 
 
 def reref_segm_levels(data: array, lead: Any, report_file: str):
@@ -250,38 +264,37 @@ def reref_segm_contacts(
     reref_data = np.empty_like((data))
     reref_data[:, 0, :] = data[:, 0, :]  # copy time row
     names = ['time', ]
-    data = data[:, 1:, :]  # drop time row
-
-    for l in lead.levels_num:  # loop over level
-        chs = lead.levels_num[l]
+    for l in lead.level_rows:  # loop over level
+        chs = lead.level_rows[l]  # row numbers of channels
         if len(chs) > 1:  # if avail neighb channel on level
             for n, c in enumerate(chs):  # loop over contacts
                 refs = chs.copy()  # channels to use as ref
                 refs.remove(c)  # remove ch of interest itself
                 # take mean of other channel-rows as reference
+                print(f'Row REFS {refs}, SHAPE {data.shape}')
                 ref = np.nanmean(data[:, refs, :], axis=1)
-                reref_data[:, c + 1, :] = data[:, c, :] -  ref
+                reref_data[:, c, :] = data[:, c, :] -  ref
                 names.append(lead.levels_str[l][n])
                 # done, only test + put lfp_reref in filename!!
                 with open(report_file, 'a') as f:
-                    f.write(f'\n(level {l}) Contact {c}'
-                            f' is rereferenced against {refs}')
+                    f.write(f'\n(level {l}) contact-row {c} is '
+                            f'rereferenced against rows {refs}')
 
         elif len(chs) == 1:  # if not ring or 1 ch available
             try:  # reref against a neighbouring level
-                refs = lead.levels_num[l + 1]  # reref: sup. level
+                refs = lead.level_rows[l + 1]  # reref: sup. level
             except KeyError:  # highest contact has no [l + 1]
-                refs = lead.levels_num[l - 1]  # take lower level
+                refs = lead.level_rows[l - 1]  # take lower level
             ref = np.nanmean(data[:, refs, :])
-            reref_data[:, chs[0] + 1, :] = data[:, chs, :] -  ref
+            reref_data[:, chs, :] = data[:, chs, :] -  ref
             names.append(lead.levels_str[l][0])
             with open(report_file, 'a') as f:
-                f.write(f'\n(level {l}) Contact {lead.levels_num[l]}'
+                f.write(f'\n(level {l}) Contact {lead.levels_str[l]}'
                         f' is rereferenced against {refs}')
 
         else:
             with open(report_file, 'a') as f:
-                f.write(f'Level {l} has no valid channels'
+                f.write(f'\n(level {l}) has no valid channels'
                         f' {lead.levels_str[l]}')
 
     return reref_data, names
@@ -358,7 +371,7 @@ def rereferencing(
 
     # Quality check, delete only nan-channels
     ch_del = []
-    for ch in np.arange(1, len(chs_clean)):
+    for ch in np.arange(1, rerefdata.shape[1]):
         # check whether ALL values in channel are NaN
         if not (np.isnan(rerefdata[:, ch, :]) == False).any():
             ch_del.append(ch)
@@ -370,9 +383,6 @@ def rereferencing(
                 f'{names[ch]}) only contained NaNs and is deleted'
             ) 
         names.remove(names[ch])
-    
-    assert (rerefdata.shape[1] == len(names),
-        'Length of data rows and channel names are not equal!')
 
 
     return rerefdata, names

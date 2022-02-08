@@ -127,7 +127,7 @@ def artefact_selection(
             nans = np.isnan(new_arr[:, c, :]).sum()
             length = new_arr.shape[0] * new_arr.shape[2]
             nanpart = nans / length
-            print(f'Ch {c}: {round(nanpart * 100, 2)}'
+            print(f'Ch {ch_nms[c - 1]}: {round(nanpart * 100, 2)}'
                   f'% is NaN (artefact or zero)')
             if nanpart < .5:
                 ch_sel.append(c)
