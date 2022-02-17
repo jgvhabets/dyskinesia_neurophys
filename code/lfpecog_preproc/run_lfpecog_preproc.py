@@ -26,8 +26,9 @@ if __name__ == '__main__':
     import preproc_resample as resample
     import preproc_reref as reref
 
-    # Import py_neuromodulation functions (for later use)
-    # import py_neuromodulation  # toggled inactive to save time
+    # TODO: CHANGE ORDER, FIRST REREFERENCING, ON WHOLE SESSIONS FILTERING
+    # THEN WINDOWED ARTIFACT REMOVAL (INCL LINEAR TREND)
+    # THENR RESAMPLING
 
     OSpath = os.getcwd()  # is dyskinesia_neurophys/ (project_folder)
     print(f'\nCheck if project-path is correct: {OSpath}\n')
@@ -68,23 +69,17 @@ if __name__ == '__main__':
         )
         rawRun = dataMng.RunRawData(bidspath=runInfo.bidspath)
 
-        # To Plot or Not To Plot Figures (True or False)
+        # To Plot or Not To Plot (reset fig_path if no plotting)
         if setting_lists['plot_figs'] == False:
             runInfo.fig_path = None
-        # check if fig path is correctly changed
-        figcode = setting_lists['plot_figs']
 
         # Load Data
         data = {}
         for field in rawRun.__dataclass_fields__:
             # loops over variables within the data class
-            if str(field)[:4] == 'lfp_':
-                data[str(field)] = getattr(rawRun, field).load_data()
-            elif str(field)[:4] == 'ecog':
-                data[str(field)] = getattr(rawRun, field).load_data()
+            data[str(field)] = getattr(rawRun, field).load_data()
         ch_names = {}
-        for group in groups:
-            ch_names[group] = data[group].info['ch_names']
+        for g in groups: ch_names[g] = data[g].info['ch_names']
 
         # Artefact Removal
         for group in groups:
