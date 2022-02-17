@@ -26,14 +26,17 @@ def resample(
         and therefore less datapoints per window
     """
     down = int(Fs_orig / Fs_new)  # factor to down sample
-    newdata = np.zeros((data.shape[0], data.shape[1],
-                        int(data.shape[2] / down)))
-    time = data[:, 0, :]  # all time rows from all windows
-    newtime = time[:, ::down]  # all windows, only times on down-factor
+    newdata = np.zeros((
+        data.shape[0],
+        data.shape[1],
+        int(data.shape[2] / down),
+    ))
+    time = data[:, 0, :]  # time row over all windows
+    newtime = time[:, ::down][:, :newdata.shape[2]]
     newdata[:, 0, :] = newtime  # alocate new times in new data array
     newdata[:, 1:, :] = resample_poly(
         data[:, 1:, :], up=1, down=down, axis=2
-    )  # fill signals rows with signals
+    )[:, :, :newdata.shape[2]]  # fill signals rows with signals
 
     return newdata
 

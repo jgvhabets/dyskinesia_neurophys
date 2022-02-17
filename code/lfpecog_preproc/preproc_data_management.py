@@ -89,25 +89,40 @@ class RunInfo:
                 os.mkdir(os.path.join(
                     folder, f'preprocess/sub-{self.sub}',
                 ))
-        # check (+ create) run figure- and data-folders
+        ''' Make sure there are sub-XXX folders in
+        - project-folder/data/preprocess,
+        - project-folder/figures/preprocess,
+        - project-folder/figures/exploration,
+        '''
+        # check ses and version specific preproc folders
         for folder in [self.data_path, self.fig_path]:
-            if not os.path.exists(os.path.join(
+            ses_folder = os.path.join(
                 folder, f'preprocess/sub-{self.sub}',
                 self.store_str,
-            )):
-                os.mkdir(os.path.join(
-                    folder, f'preprocess/sub-{self.sub}',
-                    self.store_str,
-                ))
+            )
+            if not os.path.exists(ses_folder):
+                os.mkdir(ses_folder)
             # check (+ create) ft-version folders
             if not os.path.exists(os.path.join(
-                folder, f'preprocess/sub-{self.sub}',
-                self.store_str, self.preproc_sett,
+                ses_folder, self.preproc_sett,
             )):
                 os.mkdir(os.path.join(
-                    folder, f'preprocess/sub-{self.sub}',
-                    self.store_str, self.preproc_sett,
+                    ses_folder, self.preproc_sett,
                 ))
+        # check ses + version exploration-fig folders
+        ses_fig_expl = os.path.join(
+            self.fig_path, f'exploration/sub-{self.sub}',
+            self.store_str,
+        )
+        # print(ses_fig_expl)
+        if not os.path.exists(ses_fig_expl):
+            os.mkdir(ses_fig_expl)
+        if not os.path.exists(os.path.join(
+            ses_fig_expl, self.preproc_sett, 
+        )):
+            os.mkdir(os.path.join(
+                ses_fig_expl, self.preproc_sett, 
+            ))
         # Finally overwrites data_path and fig_path with
         # specific path's incl run and ft-version
         self.data_path = os.path.join(

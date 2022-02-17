@@ -8,10 +8,10 @@ import matplotlib.pyplot as plt
 def artefact_selection(
     data_bids: Any,
     group: str,
-    win_len: float=.5,
-    overlap=None,
+    win_len: int=1024,
     n_stds_cut: float=2.5,
-    save=None
+    save=None,
+    RunInfo=None,
 ):
     '''
     *** IDEA: change function to check the difference between mean-window[N]
@@ -26,8 +26,7 @@ def artefact_selection(
     Arguments:
         - data_bids (BIDS object): BIDS-Object of group
         group (str): names of group (lfp_left, ecog, lfp_right)
-        - win_len (float): block window length in seconds,
-        - overlap (float): time of overlap between consec blocks (seconds),
+        - win_len (int): block window length in milliseconds,
         - n_stds_cut, int: number of std-dev's above and below mean that
             is used for cut-off's in artefact detection,
         - save (str): 1) directory where to store figure, 2) 'show' to only
@@ -39,7 +38,7 @@ def artefact_selection(
     '''
     print(f'START ARTEFACT REMOVAL: {group}')
     ch_nms = data_bids.ch_names
-    fs = data_bids.info['sfreq']  # ONLY FOR BLOCKS
+    fs = data_bids.info['sfreq']  # Sampl freq in Hertz
     (ch_arr, ch_t) = data_bids.get_data(return_times=True)
     # visual check by plotting before selection
     if save:
@@ -50,8 +49,8 @@ def artefact_selection(
         axes[0, 0].set_title('Raw signal BEFORE artefact deletion')
 
     # Artefact removal part
-    win_n = int(win_len * fs)  # number of samples to fit in one window
-    n_wins = int(ch_arr.shape[1] / win_n)  # num of windows to split in
+    win_n = int((win_len * fs) // 1000)  # number samples in one window
+    n_wins = int(ch_arr.shape[1] // win_n)  # num of windows to split in
     # new array to store data without artefact, ch + 1 is for time
     new_arr = np.zeros((n_wins, len(ch_nms) + 1, win_n), dtype=float)
     n_nan = {}  # number of blocks corrected to nan
@@ -100,8 +99,10 @@ def artefact_selection(
                 where=ynan > 1,
             )
             axes[c, 1].set_title(f'{n_nan[c]} windows deleted')
-        fig.suptitle('Raw signal artefact deletion (blocks: {win_len} sec, cut'
-                f' off: {n_stds_cut} std dev +/- channel mean', size=14)
+        fig.suptitle(f'{RunInfo.store_str}: Artifact deletion (window'
+                    f'length: {win_len} msec, cutoff: {n_stds_cut}'
+                    f' std dev +/- channel mean)', size=14,
+                    color='gray', alpha=.3, x=.3, y=.99, )
         fig.tight_layout(h_pad=.2)
 
         if save != 'show':

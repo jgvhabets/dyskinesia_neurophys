@@ -35,8 +35,9 @@ if __name__ == '__main__':
     json_path = os.path.join(data_path, 'preprocess/preprocess_jsons')
     
     # Load JSON-files with settings and runinfo
-    runsfile = os.path.join(json_path, f'runinfos_08FEB22.json')
-    settfile = os.path.join(json_path, f'settings_v0.4_Feb22.json')
+    # MANUALLY DEFINE TO 2 REQUIRED JSON FILES HERE !!!
+    runsfile = os.path.join(json_path, f'runinfos_11FEB22b.json')
+    settfile = os.path.join(json_path, f'settings_v0.6_Feb22.json')
 
     with open(os.path.join(json_path, settfile)) as f:
         setting_lists = json.load(f, )  # dict of group-settings
@@ -93,6 +94,7 @@ if __name__ == '__main__':
                 win_len=getattr(settings, group).win_len,
                 n_stds_cut=getattr(settings, group).artfct_sd_tresh,
                 save=runInfo.fig_path,
+                RunInfo=runInfo,
             )
 
         # Quality check: delete groups without valid channels
@@ -128,6 +130,7 @@ if __name__ == '__main__':
                 method='fir',
                 save=runInfo.fig_path,
                 verbose=False,
+                RunInfo=runInfo,
             )
 
         # Resampling

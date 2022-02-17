@@ -39,6 +39,7 @@ def bp_filter(
             data_out[w, 1:, :] = mne.filter.filter_data(
                 data=data[w, 1:, :],
                 sfreq=sfreq,
+                filter_length=data.shape[2] // 2,
                 l_freq=l_freq,
                 h_freq=h_freq,
                 method=method,
@@ -49,6 +50,8 @@ def bp_filter(
             '''If there are no channels available after
             artefact removal: fill with zeros'''
             data_out = np.zeros((data.shape))
+            print('### BandPass Filter Warning ###\n'
+                  'filled with zeros')
 
     return data_out
 
@@ -63,7 +66,8 @@ def notch_filter(
     freqs: list = [50, 100, 150, 200, 250, 350, 400],  # power line freqs EU
     method='fir',
     save=None,
-    verbose='Warning'
+    verbose='Warning',
+    RunInfo=None,
 ):
     '''
     Applies notch-filter to filter local peaks due to powerline
@@ -139,6 +143,11 @@ def notch_filter(
         lastrow = data_out.shape[1] - 2  # minus time, start 0
         axes[lastrow, 0].set_xlabel('Frequency (Hz)')
         axes[lastrow, 1].set_xlabel('Frequency (Hz)')
+
+        plt.suptitle(f'{RunInfo.store_str}: Notch-Filtering ('
+                    f'{method}, transition bw: {transBW}, notch'
+                    f' width {notchW})', size=14,
+                    color='gray', alpha=.3, x=.3, y=.99, )
 
         plt.tight_layout(w_pad=.05, h_pad=0.01)
 

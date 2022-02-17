@@ -39,12 +39,13 @@ if __name__ == '__main__':
     if create_settings:
         '''
         MANUAL INPUT FOR PREPROCESS-SETTINGS:
-        [win_len, artfct_sd_tresh, bandpass_f, transBW, notchW,
-        Fs_origin, Fs_resample, settings_version]
+        [win_len (msec), artfct_sd_tresh (std dev), bandpass_f ((Hz, Hz)),
+        transBW (Hz), notchW (Hz), Fs_origin (Hz),
+        Fs_resample (Hz), settings_version (str)]
         '''
         sett_version = 'v0.1_Jan22'
-        lfp_settings = [1, 4, (1, 120), 10, 2, 4000, 800, sett_version]
-        ecog_settings = [1, 4, (1, 120), 10, 2, 4000, 800, sett_version]
+        lfp_settings = [1024, 4, (1, 120), 10, 2, 4000, 800, sett_version]
+        ecog_settings = [1024, 4, (1, 120), 10, 2, 4000, 800, sett_version]
     
 
         # rest of code
