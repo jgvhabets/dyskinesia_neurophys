@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 
 def artefact_selection(
-    data_bids: Any,
+    data: Any,
     group: str,
     win_len: int=1024,
     n_stds_cut: float=2.5,
@@ -24,7 +24,7 @@ def artefact_selection(
     Also oocnnverted to NaN's if more than 25% of block is 0.
     
     Arguments:
-        - data_bids (BIDS object): BIDS-Object of group
+        - data (2d array): BIDS-Object of group
         group (str): names of group (lfp_left, ecog, lfp_right)
         - win_len (int): block window length in milliseconds,
         - n_stds_cut, int: number of std-dev's above and below mean that

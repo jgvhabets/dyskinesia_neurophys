@@ -18,6 +18,7 @@ if __name__ == '__main__':
     # Import packages and functions
     import os
     import json
+    import numpy as np
 
     # Import own functions
     import preproc_data_management as dataMng
@@ -26,9 +27,8 @@ if __name__ == '__main__':
     import preproc_resample as resample
     import preproc_reref as reref
 
-    # Import py_neuromodulation functions (for later use)
-    # import py_neuromodulation  # toggled inactive to save time
-
+    # set cd due to vscode debugger behavior
+    os.chdir('/Users/jeroenhabets/Research/CHARITE/projects/dyskinesia_neurophys')
     OSpath = os.getcwd()  # is dyskinesia_neurophys/ (project_folder)
     print(f'\nCheck if project-path is correct: {OSpath}\n')
     data_path = os.path.join(OSpath, 'data')
@@ -36,8 +36,8 @@ if __name__ == '__main__':
     
     # Load JSON-files with settings and runinfo
     # MANUALLY DEFINE TO 2 REQUIRED JSON FILES HERE !!!
-    runsfile = os.path.join(json_path, f'runinfos_11FEB22b.json')
-    settfile = os.path.join(json_path, f'settings_v0.6_Feb22.json')
+    runsfile = os.path.join(json_path, f'runinfos_008_medOn2_all.json')
+    settfile = os.path.join(json_path, f'settings_v1.0_Feb22.json')
 
     with open(os.path.join(json_path, settfile)) as f:
         setting_lists = json.load(f, )  # dict of group-settings
@@ -66,6 +66,7 @@ if __name__ == '__main__':
             preproc_sett=settings.lfp_left.settings_version,
             project_path=Run['project_path'],  # used to write the created figures and processed data
         )
+        # runrawdata-class defines channels: ECOG / LFP (L / R)
         rawRun = dataMng.RunRawData(bidspath=runInfo.bidspath)
 
         # To Plot or Not To Plot Figures (True or False)
@@ -74,39 +75,67 @@ if __name__ == '__main__':
         # check if fig path is correctly changed
         figcode = setting_lists['plot_figs']
 
-        # Load Data
+        # Create raw mne-object (mne's load_data())
         data = {}
-        for field in rawRun.__dataclass_fields__:
-            # loops over variables within the data class
-            if str(field)[:4] == 'lfp_':
-                data[str(field)] = getattr(rawRun, field).load_data()
-            elif str(field)[:4] == 'ecog':
-                data[str(field)] = getattr(rawRun, field).load_data()
-        ch_names = {}
-        for group in groups:
-            ch_names[group] = data[group].info['ch_names']
+        ch_names = {}  # collects only channel names, no times
+        for g in groups:
+            data[g] = getattr(rawRun, g).load_data()
+            ch_names[g] = ['time'] + data[g].info['ch_names']
 
-        # Artefact Removal
-        for group in groups:
-            data[group], ch_names[group] = artefacts.artefact_selection(
-                data_bids=data[group],
-                group=group,
-                win_len=getattr(settings, group).win_len,
-                n_stds_cut=getattr(settings, group).artfct_sd_tresh,
-                save=runInfo.fig_path,
-                RunInfo=runInfo,
+        # Actual read in the data (mne's get_data())
+        for g in data:
+            (ch_arr, ch_t) = data[g].get_data(return_times=True)
+            ch_t = np.reshape(ch_t, (1, len(ch_t)))
+            data[g] = np.vstack((ch_t, ch_arr))    
+        
+        # Remove channel with flatlines (based on samples every sec)
+        thresh = 0.66  # threshold of fraction flatline in channel
+        for g in data:
+            flat_chs = []
+            for c in np.arange(1, data[g].shape[0]):
+                samples = np.arange(0, len(data[g][c]), 4000)
+                diffs = np.array([data[g][c][s + 1] -
+                            data[g][c][s] for s in samples])
+                diff0 = sum(diffs == 0)  # count zeros
+                if diff0 / len(diffs) > thresh:
+                    flat_chs.append(c)
+            if len(flat_chs) > 0:  # if list has content: drop name/ch
+                del_names = []
+                for f_c in flat_chs: del_names.append(ch_names[g][f_c])
+                for c in del_names: ch_names[g].remove(c)
+                np.delete(data[g], flat_chs, axis=0)
+                print(f'\nFrom {g}, removed: {del_names} '
+                      f'due to >{thresh} flatline\n')
+
+        # Delete empty groups
+        del_group = []
+        for g in data.keys():
+            if data[g].shape[1] <= 1: del_group.append(g)
+        for group in del_group: 
+            del(data[group], ch_names[group])
+            groups.remove(group)
+        print(f'\Empty Group(s) removed: {del_group}')
+
+
+        # Rereferencing
+        # start with deleting existing report-file (if appl)
+        if 'reref_report.txt' in os.listdir(
+                runInfo.data_path):
+            with open(os.path.join(runInfo.data_path,
+                    'reref_report.txt'), 'w') as f:
+                # pass  # only overwrites, doesn't fill
+                f.write('Empty groups removed after flatline'
+                        f'check: {del_group}')
+        # Start rereferencing per group
+        for g in groups:
+            data[g], ch_names[g] = reref.rereferencing(
+                data=data[g],
+                group=g,
+                runInfo=runInfo,
+                lfp_reref=setting_lists['lfp_reref'],
+                chs_clean=ch_names[g],
             )
 
-        # Quality check: delete groups without valid channels
-        to_del = []
-        for group in data.keys():
-            if data[group].shape[1] <= 1:
-                to_del.append(group)
-        for group in to_del:
-            del(data[group])
-            del(ch_names[group])
-            groups.remove(group)
-        print(f'\nREMOVED GROUP(s): {to_del}')
 
         # BandPass-Filtering
         for group in groups:
@@ -117,6 +146,7 @@ if __name__ == '__main__':
                 h_freq=getattr(settings, group).bandpass_f[1],
                 method='iir',
             )
+
 
         # Notch-Filters
         for group in groups:
@@ -133,6 +163,7 @@ if __name__ == '__main__':
                 RunInfo=runInfo,
             )
 
+
         # Resampling
         for group in groups:
             data[group] = resample.resample(
@@ -141,25 +172,19 @@ if __name__ == '__main__':
                 Fs_new = getattr(settings, 'ecog').Fs_resample,
             )
 
-        # Rereferencing
-        # deleting possible existing report-file
-        if 'reref_report.txt' in os.listdir(
-                runInfo.data_path):
-            with open(os.path.join(runInfo.data_path,
-                    'reref_report.txt'), 'w') as f:
-                # pass  # only overwrites, doesn't fill
-                f.write('Groups removed after Artefact Removal '
-                        f'due to NO clean channels: {to_del}')
 
-        for group in groups:
-            data[group], ch_names[group] = reref.rereferencing(
-                data=data[group],
-                group=group,
-                runInfo=runInfo,
-                lfp_reref=setting_lists['lfp_reref'],
-                chs_clean=ch_names[group],
-            )
-        
+     # # Artefact Removal
+        # for group in groups:
+        #     data[group], ch_names[group] = artefacts.artefact_selection(
+        #         data=data[group],
+        #         group=group,
+        #         win_len=getattr(settings, group).win_len,
+        #         n_stds_cut=getattr(settings, group).artfct_sd_tresh,
+        #         save=runInfo.fig_path,
+        #         RunInfo=runInfo,
+        #     )   
+
+
         # Saving Preprocessed Data
         for group in groups:
             dataMng.save_arrays(

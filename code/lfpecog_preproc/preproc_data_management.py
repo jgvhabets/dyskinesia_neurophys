@@ -96,19 +96,19 @@ class RunInfo:
         '''
         # check ses and version specific preproc folders
         for folder in [self.data_path, self.fig_path]:
-            ses_folder = os.path.join(
+            version_folder = os.path.join(
                 folder, f'preprocess/sub-{self.sub}',
-                self.store_str,
+                self.preproc_sett,
             )
-            if not os.path.exists(ses_folder):
-                os.mkdir(ses_folder)
-            # check (+ create) ft-version folders
-            if not os.path.exists(os.path.join(
-                ses_folder, self.preproc_sett,
-            )):
-                os.mkdir(os.path.join(
-                    ses_folder, self.preproc_sett,
-                ))
+            if not os.path.exists(version_folder):
+                os.mkdir(version_folder)
+            # # check (+ create) ft-version folders
+            # if not os.path.exists(os.path.join(
+            #     ses_folder, self.preproc_sett,
+            # )):
+            #     os.mkdir(os.path.join(
+            #         ses_folder, self.preproc_sett,
+            #     ))
         # check ses + version exploration-fig folders
         ses_fig_expl = os.path.join(
             self.fig_path, f'exploration/sub-{self.sub}',
@@ -126,12 +126,14 @@ class RunInfo:
         # Finally overwrites data_path and fig_path with
         # specific path's incl run and ft-version
         self.data_path = os.path.join(
-                self.data_path, f'preprocess/sub-{self.sub}',
-                self.store_str, self.preproc_sett,
+                self.data_path,
+                f'preprocess/sub-{self.sub}',
+                self.preproc_sett,
             )
         self.fig_path = os.path.join(
-            self.fig_path, f'preprocess/sub-{self.sub}',
-            self.store_str, self.preproc_sett,
+            self.fig_path,
+            f'preprocess/sub-{self.sub}',
+            self.preproc_sett,
         )  
         
         lead__type_dict = {
@@ -211,12 +213,15 @@ def save_arrays(
     '''
     rrf = lfp_reref.capitalize()
     # define filename, save data-array per group (lfp L/R vs ecog)
-    f_name = (f'preproc_{group}_{runInfo.preproc_sett}_'
-             f'reref{rrf}_data.npy')
+    f_name = (
+        f'preproc_data_{group}_{runInfo.store_str}_'
+        f'{runInfo.preproc_sett}_reref{rrf}.npy'
+    )
     np.save(os.path.join(runInfo.data_path, f_name), data)
     # save list of channel-names as txt-file
-    f_name = (f'preproc_{group}_{runInfo.preproc_sett}_'
-             f'reref{rrf}_chnames.csv')
+    f_name = (
+        f'preproc_chnames_{group}_{runInfo.store_str}_'
+        f'{runInfo.preproc_sett}_reref{rrf}.csv')
     with open(os.path.join(runInfo.data_path, f_name), 'w') as f:
             write = csv.writer(f)
             write.writerow(names)
@@ -263,7 +268,7 @@ def read_preprocessed_data(runInfo):
                         reader = csv.reader(csvfile, delimiter=',')
                         for row in reader:
                             names[g] = row
-        s1 = data[g].shape[1]
+        s1 = data[g].shape[-2]
         s2 = len(names[g])
         assert s1 == s2, ('# rows not equal for data (npy)'
                          f'and names (csv) in {g}')
