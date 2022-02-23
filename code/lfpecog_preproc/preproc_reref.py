@@ -35,18 +35,18 @@ def LeadLevels():
     )
     Leads = LeadLevels(
         {  # first is Boston Sc Verc Cart X
-        0: [0, 1, 2],
+        0: [0, 1, 2],  # lowest/deepest in brain
         1: [3, 4, 5],
         2: [6, 7, 8],
         3: [9, 10, 11],
         4: [12, 13, 14],
-        5: [15, ]
+        5: [15, ]  # highest, closest to skull
         },
         {  # second is MedTronic SenseSight
-        0: [0, ],
+        0: [0, ],  # lowest
         1: [1, 2, 3],
         2: [4, 5, 6],
-        3: [7, ]   
+        3: [7, ]   # highest
         })
 
     return Leads

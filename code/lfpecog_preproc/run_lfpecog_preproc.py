@@ -14,7 +14,7 @@ if __name__ == '__main__':
     '''makes sure code is only run when script is called
     prevents code from running when script is
     only imported by another script'''
-    
+
     # Import packages and functions
     import os
     import json
@@ -33,11 +33,11 @@ if __name__ == '__main__':
     print(f'\nCheck if project-path is correct: {OSpath}\n')
     data_path = os.path.join(OSpath, 'data')
     json_path = os.path.join(data_path, 'preprocess/preprocess_jsons')
-    
+
     # Load JSON-files with settings and runinfo
     # MANUALLY DEFINE TO 2 REQUIRED JSON FILES HERE !!!
-    runsfile = os.path.join(json_path, f'runinfos_008_medOn2_all.json')
-    settfile = os.path.join(json_path, f'settings_v1.0_Feb22.json')
+    runsfile = os.path.join(json_path, 'runinfos_008_medOn2_all.json')  # runinfos_008_medOn2_all
+    settfile = os.path.join(json_path, f'settings_v1.1_Feb22.json')
 
     with open(os.path.join(json_path, settfile)) as f:
         setting_lists = json.load(f, )  # dict of group-settings
@@ -86,8 +86,8 @@ if __name__ == '__main__':
         for g in data:
             (ch_arr, ch_t) = data[g].get_data(return_times=True)
             ch_t = np.reshape(ch_t, (1, len(ch_t)))
-            data[g] = np.vstack((ch_t, ch_arr))    
-        
+            data[g] = np.vstack((ch_t, ch_arr))
+
         # Remove channel with flatlines (based on samples every sec)
         thresh = 0.66  # threshold of fraction flatline in channel
         for g in data:
@@ -111,7 +111,7 @@ if __name__ == '__main__':
         del_group = []
         for g in data.keys():
             if data[g].shape[1] <= 1: del_group.append(g)
-        for group in del_group: 
+        for group in del_group:
             del(data[group], ch_names[group])
             groups.remove(group)
         print(f'\Empty Group(s) removed: {del_group}')
@@ -182,7 +182,7 @@ if __name__ == '__main__':
         #         n_stds_cut=getattr(settings, group).artfct_sd_tresh,
         #         save=runInfo.fig_path,
         #         RunInfo=runInfo,
-        #     )   
+        #     )
 
 
         # Saving Preprocessed Data
@@ -195,5 +195,3 @@ if __name__ == '__main__':
                 lfp_reref=setting_lists['lfp_reref'],
             )
             print(f'Preprocessed data saved for {group}!')
-
-
