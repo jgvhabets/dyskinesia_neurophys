@@ -29,6 +29,7 @@ if __name__ == '__main__':
 
     # set cd due to vscode debugger behavior
     os.chdir('/Users/jeroenhabets/Research/CHARITE/projects/dyskinesia_neurophys')
+
     OSpath = os.getcwd()  # is dyskinesia_neurophys/ (project_folder)
     print(f'\nCheck if project-path is correct: {OSpath}\n')
     data_path = os.path.join(OSpath, 'data')
@@ -69,11 +70,9 @@ if __name__ == '__main__':
         # runrawdata-class defines channels: ECOG / LFP (L / R)
         rawRun = dataMng.RunRawData(bidspath=runInfo.bidspath)
 
-        # To Plot or Not To Plot Figures (True or False)
+        # To Plot or Not To Plot (reset fig_path if no plotting)
         if setting_lists['plot_figs'] == False:
             runInfo.fig_path = None
-        # check if fig path is correctly changed
-        figcode = setting_lists['plot_figs']
 
         # Create raw mne-object (mne's load_data())
         data = {}
