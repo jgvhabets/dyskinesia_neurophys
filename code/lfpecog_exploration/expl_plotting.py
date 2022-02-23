@@ -11,6 +11,124 @@ import lfpecog_preproc.preproc_filters as fltrs
 
 
 
+def blank_empty_axes(axes):
+    '''
+    Function to make empty axes in a 2d figure
+    blank. For example, subplot, 4 rows, 2 cols.
+    In second col, last row is empty.
+    -> Function deletes x/y-axis for that ax.
+    '''
+    for row in range(axes.shape[0]):
+        for col in range(axes.shape[1]):
+            if not axes[row, col].lines:
+                axes[row, col].axis('off')
+            # scatterplots would need if not .collections
+
+
+def electrode_spectral_check(
+    sessionClass,
+    savedir: str,
+    fname_add: str = '',
+    sides: list = ['lfp_left', 'lfp_right', 'ecog'],
+    tasks_incl: list = ['Rest',],
+    method: str = 'Welch',
+    nseg = 512,
+):
+    '''
+    
+    '''
+    # Data Selection
+    exmpl_run = sessionClass.runs_incl[0]
+    chs = {}
+    for side in sides: 
+        chs[side] = getattr(
+            sessionClass.runs[exmpl_run], f'{side}_names'
+        )[1:]
+    fig_len = np.max([
+        len(chs[side]) for side in sides
+    ])
+
+    fig, axes = plt.subplots(fig_len, len(sides),
+                            figsize=(12, 16))
+    cols = {
+        'Dopa00': 'r',
+        'Dopa10': 'orange',
+        'Dopa15': 'orange',
+        'Dopa30': 'olive',
+        'Dopa35': 'olive',
+        'Dopa50': 'g',
+        'Dopa60': 'g',
+    }
+    lstyles = {  # indicate acq-activity with first 5 letters
+        'Rest': 'solid',
+        'Selfp': 'dotted',
+    }
+ 
+    ### TODO: add movement run's as dotted lines
+    for col, side in enumerate(sides):
+        for row, ch in enumerate(range(axes.shape[0])):
+            ch = row + 1
+
+            for run in sessionClass.runs_incl:
+                if ch >= len(getattr(
+                        sessionClass.runs[run], f'{side}_names')):
+                    continue  # prevent out of range
+
+                # loop over different runs/dopa states
+                sub = sessionClass.runs[run].sub
+                ses = sessionClass.runs[run].ses[5:]
+                task = sessionClass.runs[run].task[:5]
+                chname = getattr(
+                    sessionClass.runs[run], f'{side}_names')[ch]
+                if task in tasks_incl:
+                    # Get and prepare data
+                    Dmin = run[-6:]
+                    d = getattr(sessionClass.runs[run], f'{side}_arr')
+                    d = d[ch, :]  # insert a end index to decrease incl time
+                    windows = len(d) // nseg
+                    d = d[:windows * nseg]
+                    d = np.reshape(d, newshape=(windows, nseg))
+                    # calculate FFT's, take 10*log10 and mean over run
+                    if method == 'FFT': 
+                        f, ps = periodogram(d, fs=800, nfft=nseg,
+                            axis=1, window='hanning')
+                    elif method == 'Welch':
+                        f, ps = periodogram(d, fs=800, nfft=nseg,
+                            axis=1, window='hanning')
+                    logps = 10 * np.log10(ps)
+                    meanps = np.nanmean(logps, axis=0)
+
+                    # Plotting
+                    axes[row, col].plot(
+                        f, meanps, c=cols[Dmin], alpha=.7,
+                        label=f'{Dmin} {task}',
+                        ls=lstyles[task],
+                    )
+                    axes[row, col].set_title(
+                        f'{chname} (sub {sub}, ses {ses})'
+                    )
+                    axes[row, col].set_xlim(0, 120)
+                    axes[row, col].set_ylabel(
+                        'Spectral Power (10 * log10(power (FFT))'
+                    )
+                    axes[row, col].set_xlabel('Freq (Hz)')
+                    axes[row, col].legend(ncol=2, fontsize=10)
+    # for row in range(axes.shape[0]):
+    #     for col in range(axes.shape[1]):
+            
+    plt.suptitle(sessionClass.runs[run].run_string,
+                 color='gray', alpha=.5, x=.4, y=.99, size=16)
+    # tidy figure up
+    blank_empty_axes(axes)  # remove empty ax
+    plt.tight_layout()
+    # save figure
+    fname = f'Electrodes_Spect_Pow_{sub}_{ses}'
+    if fname_add: fname += fname_add
+    plt.savefig(os.path.join(savedir, fname), dpi=150, facecolor='white',)
+    plt.close()
+
+    return 'Figure saved!'
+
 
 
 def meanPSDs_session_channels(

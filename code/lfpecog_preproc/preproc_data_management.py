@@ -96,19 +96,19 @@ class RunInfo:
         '''
         # check ses and version specific preproc folders
         for folder in [self.data_path, self.fig_path]:
-            ses_folder = os.path.join(
+            version_folder = os.path.join(
                 folder, f'preprocess/sub-{self.sub}',
-                self.store_str,
+                self.preproc_sett,
             )
-            if not os.path.exists(ses_folder):
-                os.mkdir(ses_folder)
-            # check (+ create) ft-version folders
-            if not os.path.exists(os.path.join(
-                ses_folder, self.preproc_sett,
-            )):
-                os.mkdir(os.path.join(
-                    ses_folder, self.preproc_sett,
-                ))
+            if not os.path.exists(version_folder):
+                os.mkdir(version_folder)
+            # # check (+ create) ft-version folders
+            # if not os.path.exists(os.path.join(
+            #     ses_folder, self.preproc_sett,
+            # )):
+            #     os.mkdir(os.path.join(
+            #         ses_folder, self.preproc_sett,
+            #     ))
         # check ses + version exploration-fig folders
         ses_fig_expl = os.path.join(
             self.fig_path, f'exploration/sub-{self.sub}',
@@ -126,12 +126,14 @@ class RunInfo:
         # Finally overwrites data_path and fig_path with
         # specific path's incl run and ft-version
         self.data_path = os.path.join(
-                self.data_path, f'preprocess/sub-{self.sub}',
-                self.store_str, self.preproc_sett,
+                self.data_path,
+                f'preprocess/sub-{self.sub}',
+                self.preproc_sett,
             )
         self.fig_path = os.path.join(
-            self.fig_path, f'preprocess/sub-{self.sub}',
-            self.store_str, self.preproc_sett,
+            self.fig_path,
+            f'preprocess/sub-{self.sub}',
+            self.preproc_sett,
         )  
         
         lead__type_dict = {
@@ -209,65 +211,20 @@ def save_arrays(
     Returns:
         - None
     '''
-    rrf = lfp_reref.capitalize()
     # define filename, save data-array per group (lfp L/R vs ecog)
-    f_name = (f'preproc_{group}_{runInfo.preproc_sett}_'
-             f'reref{rrf}_data.npy')
+    f_name = (
+        f'{runInfo.store_str}_{runInfo.preproc_sett}_'
+        f'{group.upper()}_PREPROC_data.npy'
+    )
     np.save(os.path.join(runInfo.data_path, f_name), data)
     # save list of channel-names as txt-file
-    f_name = (f'preproc_{group}_{runInfo.preproc_sett}_'
-             f'reref{rrf}_chnames.csv')
+    f_name = (
+        f'{runInfo.store_str}_{runInfo.preproc_sett}_'
+        f'{group.upper()}_PREPROC_rownames.csv'
+    )
     with open(os.path.join(runInfo.data_path, f_name), 'w') as f:
             write = csv.writer(f)
             write.writerow(names)
 
     return
-
-
-
-def read_preprocessed_data(runInfo):
-    '''
-    Function which reads the saved preprocessed 3d-ararys and lists
-    with channel-names again into Python Objects.
-
-    Arguments:
-        - runInfo: class contains the location where the files of the defined
-        ft-version are saved
-
-    Returns:
-        - data (dict): dict with a 3d array of processed data, per group
-        (e.g. lfp-l, lfp-r, ecog)
-        - names (dict): dict containing the corresponding row-names
-        belonging to the data groups (incl 'time', 'LFP_L_01', etc)
-    '''
-    files = os.listdir(runInfo.data_path)  # get filenames in folder
-    sel_npy = [f[-3:] == 'npy' for f in files]  # make Boolean for .npy
-    sel_csv = [f[-3:] == 'csv' for f in files]  # make Boolean for .csv
-    # only includes files for which npy/csv-Boolean is True
-    f_npy = [f for (f, s) in zip(files, sel_npy) if s]
-    f_csv = [f for (f, s) in zip(files, sel_csv) if s]
-
-    data = {}  # dict to store processed data arrays
-    names = {}  # dict to store corresponding names
-    groups = ['ecog', 'lfp_left', 'lfp_right']
-    for g in groups:
-        for fdat in f_npy:
-            for fname in f_csv:
-                if np.logical_and(g in fdat, g in fname):
-                    # for matching files with defined group
-                    data[g] = np.load(os.path.join(
-                        runInfo.data_path, fdat))
-                    names[g] = []
-                    with open(os.path.join(runInfo.data_path, fname),
-                            newline='') as csvfile:
-                        reader = csv.reader(csvfile, delimiter=',')
-                        for row in reader:
-                            names[g] = row
-        s1 = data[g].shape[1]
-        s2 = len(names[g])
-        assert s1 == s2, ('# rows not equal for data (npy)'
-                         f'and names (csv) in {g}')
-
-    return data, names
-
 

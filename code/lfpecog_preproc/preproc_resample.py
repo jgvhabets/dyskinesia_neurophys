@@ -2,6 +2,7 @@
 from array import array
 import numpy as np
 from scipy.signal import resample_poly
+import mne
 
 def resample(
     data: array, Fs_orig: int, Fs_new: int
@@ -26,17 +27,33 @@ def resample(
         and therefore less datapoints per window
     """
     down = int(Fs_orig / Fs_new)  # factor to down sample
-    newdata = np.zeros((
-        data.shape[0],
-        data.shape[1],
-        int(data.shape[2] / down),
-    ))
-    time = data[:, 0, :]  # time row over all windows
-    newtime = time[:, ::down][:, :newdata.shape[2]]
-    newdata[:, 0, :] = newtime  # alocate new times in new data array
-    newdata[:, 1:, :] = resample_poly(
-        data[:, 1:, :], up=1, down=down, axis=2
-    )[:, :, :newdata.shape[2]]  # fill signals rows with signals
+    if len(data.shape) == 3:
+        newdata = np.zeros((
+            data.shape[0],
+            data.shape[1],
+            int(data.shape[2] / down),
+        ))
+        time = data[:, 0, :]  # time row over all windows
+        newtime = time[:, ::down][:, :newdata.shape[2]]
+        newdata[:, 0, :] = newtime  # alocate new times in new data array
+        newdata[:, 1:, :] = resample_poly(
+            data[:, 1:, :], up=1, down=down, axis=2
+        )[:, :, :newdata.shape[2]]  # fill signals rows with signals
+    
+    if len(data.shape) == 2:
+        newdata = np.zeros((
+            data.shape[0],
+            data.shape[1] // down,
+        ))
+        time = data[0, :]  # time row over all windows
+        newtime = time[::down][:newdata.shape[1]]
+        newdata[0, :] = newtime  # alocate new times in new data array
+        # newdata[1:, :] = resample_poly(
+        #     data[1:, :], up=1, down=down, axis=1
+        # )[:, :newdata.shape[1]]  # fill signals rows with signals
+        newdata[1:, :] = mne.filter.resample(
+            data[1:, :], up=1, down=down, axis=1
+        )[:, :newdata.shape[1]]  # fill signals rows with signals
 
     return newdata
 
