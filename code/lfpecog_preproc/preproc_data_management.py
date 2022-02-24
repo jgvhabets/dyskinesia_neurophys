@@ -16,7 +16,14 @@ from typing import Any
 import mne_bids
 import csv
 
-
+## TODO:
+# add ACC-data to preprocess and load
+# add ACC dict to json for setting-lists
+# currently lfp-L/R and ecog are using lfp_left settings?
+# -> add functionality to recognize settings for group and use this as well
+# for ACC-data groups
+# include list with variables in json files to choose the type of data which
+# is included in preprocessing!!! (just as in read_data())
 
 '''
 Define namedtuple to store preprocessing settings per group
@@ -31,11 +38,24 @@ PreprocSettings = namedtuple('PreprocSettings', (
     'Fs_resample '
     'settings_version '
 ))
-'''
-Define namedtuple to store the preprocessing settings of all
-three groups
-'''
-Settings = namedtuple('Settings', 'lfp_left lfp_right ecog')
+
+
+def create_settings_list(json_settings):
+    '''
+    Creates a namedtuple which contains the list with preprocessing
+    settings per defined group in the json file.
+    '''
+    groups = [s for s in json_settings if type(
+        json_settings[s]) == list]  # excl str-variables from json
+    
+    Settings = namedtuple('Settings', groups)  # defines namedtuple
+    settings = [
+        PreprocSettings(*json_settings[g])
+        for g in groups
+    ]  # create per group a list with all defined settings
+    settings = Settings(*settings)  # fills namedtuple with lists
+
+    return settings, groups
 
 
 
@@ -155,6 +175,8 @@ class RunRawData:
       lfp_right: Any = None
       ecog: Any = None
       acc: Any = None
+      acc_left: Any = None
+      acc_right: Any = None
       emg: Any = None
       ecg: Any = None
 
@@ -173,13 +195,20 @@ class RunRawData:
             # select ECOG vs DBS channels (bad channels are dropped!)
             self.ecog = self.bids.copy().pick_types(ecog=True, exclude='bads')
             self.lfp = self.bids.copy().pick_types(dbs=True, exclude='bads')
-            # accelerometer channels are coded as misc(ellaneous)
-            self.acc = self.bids.copy().pick_types(misc=True, exclude='bads')
-            # splitting LFP in left right
+            # splitting ACC in left vs right
             lfp_chs_L = [c for c in self.lfp.ch_names if c[4]=='L' ]
             lfp_chs_R = [c for c in self.lfp.ch_names if c[4]=='R' ]
             self.lfp_left = self.lfp.copy().drop_channels(lfp_chs_R)
             self.lfp_right = self.lfp.copy().drop_channels(lfp_chs_L)
+
+            # accelerometer channels are coded as misc(ellaneous)
+            self.acc = self.bids.copy().pick_types(misc=True, exclude='bads')
+            # splitting ACC in left vs right
+            acc_chs_L = [c for c in self.acc.ch_names if c[4]=='L' ]
+            acc_chs_R = [c for c in self.acc.ch_names if c[4]=='R' ]
+            self.acc_left = self.acc.copy().drop_channels(acc_chs_R)
+            self.acc_right = self.acc.copy().drop_channels(acc_chs_L)
+
             # select EMG and ECG signals
             self.emg = self.bids.copy().pick_types(emg=True, exclude='bads')
             self.ecg = self.bids.copy().pick_types(ecg=True, exclude='bads')

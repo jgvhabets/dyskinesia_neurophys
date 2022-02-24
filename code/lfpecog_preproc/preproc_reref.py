@@ -160,7 +160,7 @@ def reref_common_average(data, ch_names):
     return newdata, newnames
 
 
-def reref_segm_levels(data: array, lead: Any, report_file: str):
+def reref_segm_levels(data: array, lead: Any, reportfile: str):
     """
     Function to aggregate/sum all segmented electrode contacts
     which belong to same level. The function takes into
@@ -180,7 +180,7 @@ def reref_segm_levels(data: array, lead: Any, report_file: str):
     """
 
     ### TODO: write functionality with 2d-array input
-    with open(report_file, 'a') as f:
+    with open(reportfile, 'a') as f:
         f.write(f'\nRereferencing: {lead.name} ({lead.side}) '
                  'against mean of neighbouring level')
     print(f'\n Rereferencing {lead.name} ({lead.side})'
@@ -217,7 +217,7 @@ def reref_segm_levels(data: array, lead: Any, report_file: str):
                 data[ch_start:ch_stop, :], axis=0
             )  # row is l + 1 bcs of time in first row
         # write in txt-file to check and document
-        with open(report_file, 'a') as f:
+        with open(reportfile, 'a') as f:
             f.write(  # documenting incl contacts per level
                 f'\nLevel {lead.side, l} '
                 f'contains rows {ch_start}:{ch_stop}'
@@ -284,7 +284,7 @@ def reref_neighb_levels_diff(
 
 
 def reref_segm_contacts(
-    data: array, lead: Any, report_file: str
+    data: array, lead: Any, reportfile: str
 ):
     """
     Function for local spatial specific rereferencing
@@ -301,7 +301,7 @@ def reref_segm_contacts(
         - reref_data (array): rereferenced signals
         - names (list): list with corresponding ch-names
     """
-    with open(report_file, 'a') as f:
+    with open(reportfile, 'a') as f:
         f.write(f'\nRereferencing: {lead.name} ({lead.side}) '
                 ' against other contacts of same level')
     print(f'\n Rereferencing {lead.name} ({lead.side})'
@@ -329,7 +329,7 @@ def reref_segm_contacts(
                     reref_data[c, :] = data[c, :] -  ref
                 names.append(lead.levels_str[l][n])
                 # done, only test + put lfp_reref in filename!!
-                with open(report_file, 'a') as f:
+                with open(reportfile, 'a') as f:
                     f.write(f'\n(level {l}) contact-row {c} is '
                             f'rereferenced against rows {refs}')
 
@@ -345,12 +345,12 @@ def reref_segm_contacts(
                 ref = np.nanmean(data[refs, :])
                 reref_data[chs, :] = data[chs, :] -  ref
             names.append(lead.levels_str[l][0])
-            with open(report_file, 'a') as f:
+            with open(reportfile, 'a') as f:
                 f.write(f'\n(level {l}) Contact {lead.levels_str[l]}'
                         f' is rereferenced against {refs}')
 
         else:
-            with open(report_file, 'a') as f:
+            with open(reportfile, 'a') as f:
                 f.write(f'\n(level {l}) has no valid channels'
                         f' {lead.levels_str[l]}')
 
@@ -359,7 +359,7 @@ def reref_segm_contacts(
 
 def rereferencing(
     data: dict, group: str, runInfo: Any, chs_clean: list,
-    lfp_reref: str=None,
+    reportfile:str, lfp_reref: str=None,
 ):
     """
     Function to execute rereferencing of LFP and ECoG data.
@@ -382,14 +382,12 @@ def rereferencing(
         - names (list): strings of row names, 'times',
         all reref'd signal channels
     """
-    report_file = os.path.join(runInfo.data_path,
-                            'reref_report.txt')
     # existing report file is deleted in main-script
-    with open(report_file, 'a') as f:
+    with open(reportfile, 'a') as f:
         f.write('\n\n======= REREFERENCING OVERVIEW ======\n')
  
     if group == 'ecog':
-        with open(report_file, 'a') as f:
+        with open(reportfile, 'a') as f:
             f.write(
                 f'For {group}: Common Average Reref\n'
             )
@@ -401,7 +399,7 @@ def rereferencing(
     elif group[:3] == 'lfp':
         if 'time' in chs_clean: chs_clean.remove('time')
         side = chs_clean[0][4]  # takes 'L' or 'R'
-        with open(report_file, 'a') as f:
+        with open(reportfile, 'a') as f:
             f.write(
                 f'For {group}: Rereferencing '
                 f'per separate {lfp_reref}.\n'
@@ -415,7 +413,7 @@ def rereferencing(
             rerefdata, names = reref_segm_levels(
                 data=data,
                 lead=lead,
-                report_file=report_file,
+                reportfile=reportfile,
             )
 
         elif lfp_reref == 'segments':
@@ -423,7 +421,7 @@ def rereferencing(
             rerefdata, names = reref_segm_contacts(
                 data=data,
                 lead=lead,
-                report_file=report_file,
+                reportfile=reportfile,
             )
 
     # Quality check, delete only nan-channels
@@ -438,7 +436,7 @@ def rereferencing(
                 ch_del.append(ch)
     for ch in ch_del:
         rerefdata = np.delete(rerefdata, ch, axis=-2)
-        with open(report_file, 'a') as f:
+        with open(reportfile, 'a') as f:
             f.write(
                 f'\n\n Auto Cleaning:\n In {group}: row {ch} ('
                 f'{names[ch]}) only contained NaNs and is deleted'

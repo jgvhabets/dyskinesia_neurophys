@@ -27,31 +27,25 @@ if __name__ == '__main__':
     import preproc_resample as resample
     import preproc_reref as reref
 
-    # set cd due to vscode debugger behavior
+    # set cd due to vscode debugger behavior (set to project-folder)
     os.chdir('/Users/jeroenhabets/Research/CHARITE/projects/dyskinesia_neurophys')
 
     OSpath = os.getcwd()  # is dyskinesia_neurophys/ (project_folder)
     print(f'\nCheck if project-path is correct: {OSpath}\n')
-    data_path = os.path.join(OSpath, 'data')
-    json_path = os.path.join(data_path, 'preprocess/preprocess_jsons')
+    json_path = os.path.join(OSpath, 'data/preprocess/preprocess_jsons')
 
     # Load JSON-files with settings and runinfo
     # MANUALLY DEFINE TO 2 REQUIRED JSON FILES HERE !!!
-    runsfile = os.path.join(json_path, 'runinfos_008_medOn2_all.json')  # runinfos_008_medOn2_all
-    settfile = os.path.join(json_path, f'settings_v1.1_Feb22.json')
+    runsfile = os.path.join(json_path, 'runinfos_11FEB22a.json')  # runinfos_008_medOn2_all
+    settfile = os.path.join(json_path, f'settings_v2.1_Feb22.json')
 
     with open(os.path.join(json_path, settfile)) as f:
-        setting_lists = json.load(f, )  # dict of group-settings
+        json_settings = json.load(f, )  # dict of group-settings
     with open(os.path.join(json_path, runsfile)) as f:
         runs = json.load(f, )  # list of runinfo-dicts
 
-    # Create Settings-DataClass, equal for all runs
-    settings = dataMng.Settings(  # order: lfp_left, lfp_right, ecog
-        dataMng.PreprocSettings(*setting_lists['lfp']),
-        dataMng.PreprocSettings(*setting_lists['lfp']),
-        dataMng.PreprocSettings(*setting_lists['ecog']),
-    )
-    groups = list(settings._fields)
+    settings, groups = dataMng.create_settings_list(json_settings)
+
 
     for Run in runs:
         print(f'\nStart Preprocessing Run: {Run}\n')
@@ -63,15 +57,15 @@ if __name__ == '__main__':
             task=Run['task'],
             acq=Run['acq'],
             run=Run['run'],
-            raw_path=Run['raw_path'],  # used to import the source-bids-data
-            preproc_sett=settings.lfp_left.settings_version,
-            project_path=Run['project_path'],  # used to write the created figures and processed data
+            raw_path=Run['raw_path'],  # to import the source-bids-data
+            preproc_sett= getattr(settings, groups[0]).settings_version,
+            project_path=Run['project_path'],
         )
         # runrawdata-class defines channels: ECOG / LFP (L / R)
         rawRun = dataMng.RunRawData(bidspath=runInfo.bidspath)
 
-        # To Plot or Not To Plot (reset fig_path if no plotting)
-        if setting_lists['plot_figs'] == False:
+        # To Plot or Not To Plot Figures (True or False)
+        if json_settings['plot_figs'] == False:
             runInfo.fig_path = None
 
         # Create raw mne-object (mne's load_data())
@@ -80,6 +74,7 @@ if __name__ == '__main__':
         for g in groups:
             data[g] = getattr(rawRun, g).load_data()
             ch_names[g] = ['time'] + data[g].info['ch_names']
+            if g[:3] == 'acc': ch_names[g] = [n[:7] for n in ch_names[g]]
 
         # Actual read in the data (mne's get_data())
         for g in data:
@@ -118,22 +113,25 @@ if __name__ == '__main__':
 
         # Rereferencing
         # start with deleting existing report-file (if appl)
-        if 'reref_report.txt' in os.listdir(
+        reportfile = os.path.join(
+            runInfo.data_path, f'reref_report_{groups}.txt')
+        if reportfile in os.listdir(
                 runInfo.data_path):
-            with open(os.path.join(runInfo.data_path,
-                    'reref_report.txt'), 'w') as f:
+            with open(reportfile, 'w') as f:
                 # pass  # only overwrites, doesn't fill
                 f.write('Empty groups removed after flatline'
                         f'check: {del_group}')
         # Start rereferencing per group
         for g in groups:
-            data[g], ch_names[g] = reref.rereferencing(
-                data=data[g],
-                group=g,
-                runInfo=runInfo,
-                lfp_reref=setting_lists['lfp_reref'],
-                chs_clean=ch_names[g],
-            )
+            if np.logical_or(g[:4] == 'lfp_', g[:4] == 'ecog'):
+                data[g], ch_names[g] = reref.rereferencing(
+                    data=data[g],
+                    group=g,
+                    runInfo=runInfo,
+                    lfp_reref=json_settings['lfp_reref'],
+                    chs_clean=ch_names[g],
+                    reportfile=reportfile,
+                )
 
 
         # BandPass-Filtering
@@ -167,8 +165,8 @@ if __name__ == '__main__':
         for group in groups:
             data[group] = resample.resample(
                 data=data[group],
-                Fs_orig=getattr(settings, 'ecog').Fs_orig,
-                Fs_new = getattr(settings, 'ecog').Fs_resample,
+                Fs_orig=getattr(settings, group).Fs_orig,
+                Fs_new = getattr(settings, group).Fs_resample,
             )
 
 
@@ -191,6 +189,6 @@ if __name__ == '__main__':
                 names=ch_names[group],
                 group=group,
                 runInfo=runInfo,
-                lfp_reref=setting_lists['lfp_reref'],
+                lfp_reref=json_settings['lfp_reref'],
             )
             print(f'Preprocessed data saved for {group}!')
