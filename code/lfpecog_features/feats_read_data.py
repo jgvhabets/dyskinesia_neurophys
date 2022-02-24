@@ -35,7 +35,9 @@ def show_runs(
     print(f'\n### SHOW RUNS ###\nFor subject {sub}, in'
         f' preproc-version {version} are available:\n')
 
-    for g in ['LFP_LEFT', 'LFP_RIGHT', 'ECOG']:
+    for g in [
+        'LFP_LEFT', 'LFP_RIGHT', 'ECOG', 'ACC_LEFT', 'ACC_RIGHT'
+    ]:
         g_files = [f for f in files if g in f]
         g_files = [gf.split('_')[:4] for gf in g_files]
         print(f'{g}:')
@@ -50,7 +52,8 @@ def select_runs(
     sess_incl: list = None,
     tasks_incl: list = None,
     acqs_incl: list = None,
-    groups_incl: list = ['ECOG', 'LFP_LEFT', 'LFP_RIGHT'],
+    groups_incl: list = ['ECOG', 'LFP_LEFT', 'LFP_RIGHT',
+        'ACC_LEFT', 'ACC_RIGHT'],
     ):
     '''
     Select run-files to use for eploration, or
@@ -191,18 +194,26 @@ class RunData:
     run: int
     proc_version: str
     run_string: str
-    lfp_left_arr: array = np.array(0)
-    # def-factory is std for empty field in dataclass
+    # lfp
+    lfp_left_arr: array = np.array(0)  # std empty fields
     lfp_left_names: list = field(default_factory=list)
     lfp_right_arr: array = np.array(0)
     lfp_right_names: list = field(default_factory=list)
+    # ecog
     ecog_arr: array = np.array(0)
     ecog_names: list = field(default_factory=list)
+    # acc
+    acc_left_arr: array = np.array(0)
+    acc_left_names: list = field(default_factory=list)
+    acc_right_arr: array = np.array(0)
+    acc_right_names: list = field(default_factory=list)
     present_datatypes: list = field(default_factory=list)
  
     def __post_init__(self, ):
         # fill present and available ieeg datatypes of given run
-        for dtype in ['LFP_LEFT', 'LFP_RIGHT', 'ECOG']:
+        for dtype in [
+            'LFP_LEFT', 'LFP_RIGHT', 'ECOG', 'ACC_LEFT', 'ACC_RIGHT'
+        ]:
             if (f'{self.run_string}_{dtype}_PREPROC_data.npy' not in
                     self.npy_files):  # check if dtype exist in files
                 continue
