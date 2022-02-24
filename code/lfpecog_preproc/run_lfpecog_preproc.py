@@ -29,6 +29,7 @@ if __name__ == '__main__':
 
     # set cd due to vscode debugger behavior (set to project-folder)
     os.chdir('/Users/jeroenhabets/Research/CHARITE/projects/dyskinesia_neurophys')
+
     OSpath = os.getcwd()  # is dyskinesia_neurophys/ (project_folder)
     print(f'\nCheck if project-path is correct: {OSpath}\n')
     json_path = os.path.join(OSpath, 'data/preprocess/preprocess_jsons')
