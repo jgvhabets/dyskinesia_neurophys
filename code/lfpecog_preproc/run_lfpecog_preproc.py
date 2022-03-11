@@ -1,13 +1,18 @@
 '''
 Python script to run full pre-processing pipeline for
-neurphysiology data (ECoG + STN LFP) in once
-for one or more specific recording(s) of a patient
-(defined by the runsfile (json)).
+neurphysiology and kinematic data (ECoG, STN LFP,
+acceleration).
+- The script runs the full preprocessing pipeline for the
+runs (recordings) which are defined in a 'runinfos_xxx'
+JSON file (referred in line 43).
+- The script uses the preprocessing-variables defined in
+the 'settings_xxx' JSON-file (referred in line 45).
+- Depending on system/program of use, the study's
+'project-folder' has to be set as working directory (line 36)
 
 Instructions to run and keep Git-Sync to repo:
 - set work dir: cd /.../dyskinesia_neurophys/
 - run file: python3 code/lfpecog_preproc/run_lfpecog_preproc.py
-
 '''
 
 if __name__ == '__main__':
@@ -28,16 +33,16 @@ if __name__ == '__main__':
     import preproc_reref as reref
 
     # set cd due to vscode debugger behavior (set to project-folder)
-    os.chdir('/Users/jeroenhabets/Research/CHARITE/projects/dyskinesia_neurophys')
+    # os.chdir('/Users/jeroenhabets/Research/CHARITE/projects/dyskinesia_neurophys')
 
     OSpath = os.getcwd()  # is dyskinesia_neurophys/ (project_folder)
     print(f'\nCheck if project-path is correct: {OSpath}\n')
     json_path = os.path.join(OSpath, 'data/preprocess/preprocess_jsons')
 
-    # Load JSON-files with settings and runinfo
-    # MANUALLY DEFINE TO 2 REQUIRED JSON FILES HERE !!!
-    runsfile = os.path.join(json_path, 'runinfos_11FEB22a.json')  # runinfos_008_medOn2_all
-    settfile = os.path.join(json_path, f'settings_v2.1_Feb22.json')
+    # Define JSON-files which selects RUNS to include
+    runsfile = os.path.join(json_path, 'runinfos_008_medOn2_all.json')  # runinfos_11FEB22a
+    # Define JSON-files which defines SETTINGS for preprocessing
+    settfile = os.path.join(json_path, f'settings_v2.0_MAR22.json')
 
     with open(os.path.join(json_path, settfile)) as f:
         json_settings = json.load(f, )  # dict of group-settings
@@ -98,13 +103,15 @@ if __name__ == '__main__':
                 for f_c in flat_chs: del_names.append(ch_names[g][f_c])
                 for c in del_names: ch_names[g].remove(c)
                 np.delete(data[g], flat_chs, axis=0)
+                # very important to delete rows based on rownumber
+                # in once, to prevent chancing row nrs during deletion!
                 print(f'\nFrom {g}, removed: {del_names} '
                       f'due to >{thresh} flatline\n')
 
         # Delete empty groups
         del_group = []
         for g in data.keys():
-            if data[g].shape[1] <= 1: del_group.append(g)
+            if data[g].shape[-2] <= 1: del_group.append(g)
         for group in del_group:
             del(data[group], ch_names[group])
             groups.remove(group)
@@ -132,6 +139,15 @@ if __name__ == '__main__':
                     chs_clean=ch_names[g],
                     reportfile=reportfile,
                 )
+        
+        # Delete empty groups (again after rereferencing!)
+        del_group = []
+        for g in data.keys():
+            if data[g].shape[-2] <= 1: del_group.append(g)
+        for group in del_group:
+            del(data[group], ch_names[group])
+            groups.remove(group)
+        print(f'\n\nEmpty Group(s) removed: {del_group}\n')
 
 
         # BandPass-Filtering

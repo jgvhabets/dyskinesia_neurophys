@@ -50,7 +50,7 @@ def electrode_spectral_check(
 
     fig, axes = plt.subplots(fig_len, len(sides),
                             figsize=(12, 16))
-    cols = {
+    cols = {  # TODO: AUTOMIZE
         'Dopa00': 'r',
         'Dopa10': 'orange',
         'Dopa15': 'orange',
@@ -178,8 +178,6 @@ def meanPSDs_session_channels(
             (nseg // 2) + 1),
         )  # if nseg=256: 129 freq's, etc
         Zpsx = np.empty_like(psx)
-
-        # data[src] = 
 
         for w in np.arange(data[src].shape[0]):
             if method == 'fft':

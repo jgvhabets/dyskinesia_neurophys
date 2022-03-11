@@ -31,10 +31,10 @@ def LeadLevels():
     '''
     LeadLevels =  namedtuple(
         'LeadLevels', 
-        'BSX MTSS'  # extent when necessary
+        'BS_VC_X MT_SS BS_VC'  # extent when necessary
     )
     Leads = LeadLevels(
-        {  # first is Boston Sc Verc Cart X
+        {  # first: BS_VC_X Boston Sc Verc Cart X
         0: [0, 1, 2],  # lowest/deepest in brain
         1: [3, 4, 5],
         2: [6, 7, 8],
@@ -42,12 +42,19 @@ def LeadLevels():
         4: [12, 13, 14],
         5: [15, ]  # highest, closest to skull
         },
-        {  # second is MedTronic SenseSight
+        {  # second: MT_SS: MedTronic SenseSight
         0: [0, ],  # lowest
         1: [1, 2, 3],
         2: [4, 5, 6],
         3: [7, ]   # highest
-        })
+        },
+        {  # third: BS_VC: Boston Sc Vercise Cart
+        0: [0, ],  # lowest
+        1: [1, 2, 3],
+        2: [4, 5, 6],
+        3: [7, ]   # highest
+        },
+        )
 
     return Leads
 
@@ -77,8 +84,9 @@ class Segm_Lead_Setup:
     
     def __post_init__(self):
         Leads = LeadLevels()  # create Leads-tuple
-        fullnames = {'BSX': 'BS Vercise Cartesia X',
-                     'MTSS': 'MT SenseSight',
+        fullnames = {'BS_VC_X': 'BS Vercise Cartesia X',
+                     'MT_SS': 'MT SenseSight',
+                     'BS_VC': 'BS Vercise Cartesia',
                      }
         self.name = fullnames[self.code]
         self.levels_num = getattr(Leads, self.code)
@@ -434,14 +442,20 @@ def rereferencing(
         if len(rerefdata.shape) == 2:
             if not (np.isnan(rerefdata[ch, :]) == False).any():
                 ch_del.append(ch)
-    for ch in ch_del:
-        rerefdata = np.delete(rerefdata, ch, axis=-2)
-        with open(reportfile, 'a') as f:
-            f.write(
-                f'\n\n Auto Cleaning:\n In {group}: row {ch} ('
-                f'{names[ch]}) only contained NaNs and is deleted'
-            ) 
-        names.remove(names[ch])
+    
+    rerefdata = np.delete(rerefdata, ch_del, axis=-2)
+    # very important to delete rows based on rownumber
+    # in once, to prevent chancing row nrs during deletion!
+    with open(reportfile, 'a') as f:
+        f.write(
+            f'\n\n Auto Cleaning:\n In {group}: row(s) {ch_del} ('
+            f'{[names[c] for c in ch_del]}) only contained NaNs and'
+            ' were deleted\nRemaining number of rows (incl time) is'
+            f' {rerefdata.shape[-2]}. If 1: group will be removed!'
+        ) 
+    if ch_del:
+        names_del = [names[c] for c in ch_del]
+        for name in names_del: names.remove(name)
 
 
     return rerefdata, names

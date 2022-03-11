@@ -184,6 +184,9 @@ class RunData:
     run.
     Function is called within SessionData, and will be set
     to a dict in SessionData.
+    Every RunData consists the requested and available data-
+    types. Every datatype has its own RunData-Class containing
+    the data-array (2d or 3d), rownames, current sample freq.
     '''
     npy_files: list
     fdir: str
@@ -194,19 +197,25 @@ class RunData:
     run: int
     proc_version: str
     run_string: str
-    # lfp
+    # lfp  -> consider to make extra DataClass type per
+    # data source containing array/names/Fs/... ?
     lfp_left_arr: array = np.array(0)  # std empty fields
     lfp_left_names: list = field(default_factory=list)
+    lfp_left_Fs: int = field(default_factory=int)
     lfp_right_arr: array = np.array(0)
     lfp_right_names: list = field(default_factory=list)
+    lfp_right_Fs: int = field(default_factory=int)
     # ecog
     ecog_arr: array = np.array(0)
     ecog_names: list = field(default_factory=list)
+    ecog_Fs: int = field(default_factory=int)
     # acc
     acc_left_arr: array = np.array(0)
     acc_left_names: list = field(default_factory=list)
+    acc_left_Fs: int = field(default_factory=int)
     acc_right_arr: array = np.array(0)
     acc_right_names: list = field(default_factory=list)
+    acc_right_Fs: int = field(default_factory=int)
     present_datatypes: list = field(default_factory=list)
  
     def __post_init__(self, ):
@@ -219,9 +228,14 @@ class RunData:
                 continue
             arr, names = read_ieeg_file(
                 f'{self.run_string}_{dtype}_PREPROC_data.npy', self.fdir
-            )  # read dtype array and names
+            )  # set datatype array, names, current sample freq
             setattr(self, f'{dtype.lower()}_arr', arr)  # set to fields
             setattr(self, f'{dtype.lower()}_names', names)
+            if len(arr.shape) == 3: timediff = arr[0, 0, 1] - arr[0, 0, 0]
+            if len(arr.shape) == 2: timediff = arr[0, 1] - arr[0, 0]
+            Fs = int(1 / timediff)
+            setattr(self, f'{dtype.lower()}_Fs', Fs)
+            # add dtype to list
             self.present_datatypes.append(dtype)
 
 

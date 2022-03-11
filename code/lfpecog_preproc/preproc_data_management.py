@@ -16,14 +16,6 @@ from typing import Any
 import mne_bids
 import csv
 
-## TODO:
-# add ACC-data to preprocess and load
-# add ACC dict to json for setting-lists
-# currently lfp-L/R and ecog are using lfp_left settings?
-# -> add functionality to recognize settings for group and use this as well
-# for ACC-data groups
-# include list with variables in json files to choose the type of data which
-# is included in preprocessing!!! (just as in read_data())
 
 '''
 Define namedtuple to store preprocessing settings per group
@@ -109,11 +101,13 @@ class RunInfo:
                 os.mkdir(os.path.join(
                     folder, f'preprocess/sub-{self.sub}',
                 ))
-        ''' Make sure there are sub-XXX folders in
-        - project-folder/data/preprocess,
-        - project-folder/figures/preprocess,
-        - project-folder/figures/exploration,
-        '''
+        if not os.path.exists(os.path.join(
+                self.fig_path, f'exploration/sub-{self.sub}',
+            )):
+                os.mkdir(os.path.join(
+                    self.fig_path, f'exploration/sub-{self.sub}',
+                ))
+
         # check ses and version specific preproc folders
         for folder in [self.data_path, self.fig_path]:
             version_folder = os.path.join(
@@ -122,13 +116,7 @@ class RunInfo:
             )
             if not os.path.exists(version_folder):
                 os.mkdir(version_folder)
-            # # check (+ create) ft-version folders
-            # if not os.path.exists(os.path.join(
-            #     ses_folder, self.preproc_sett,
-            # )):
-            #     os.mkdir(os.path.join(
-            #         ses_folder, self.preproc_sett,
-            #     ))
+ 
         # check ses + version exploration-fig folders
         ses_fig_expl = os.path.join(
             self.fig_path, f'exploration/sub-{self.sub}',
@@ -156,11 +144,14 @@ class RunInfo:
             self.preproc_sett,
         )  
         
-        lead__type_dict = {
-            '008': 'BSX',  # Boston Cartesia Vercice X
-            '009': 'MTSS',  # Medtronic SenSight
+        lead_type_dict = {
+            '002': 'BS_VC',  # Boston Cartesia Vercise
+            '004': 'BS_VC',  # Boston Cartesia Vercise
+            '005': 'MT_SS',  # Medtronic SenSight
+            '008': 'BS_VC_X',  # Boston Cartesia Vercise X
+            '009': 'MT_SS',  # Medtronic SenSight
         }
-        self.lead_type = lead__type_dict[self.sub]
+        self.lead_type = lead_type_dict[self.sub]
 
 
 
@@ -202,24 +193,35 @@ class RunRawData:
             self.lfp_right = self.lfp.copy().drop_channels(lfp_chs_L)
 
             # accelerometer channels are coded as misc(ellaneous)
-            self.acc = self.bids.copy().pick_types(misc=True, exclude='bads')
-            # splitting ACC in left vs right
-            acc_chs_L = [c for c in self.acc.ch_names if c[4]=='L' ]
-            acc_chs_R = [c for c in self.acc.ch_names if c[4]=='R' ]
-            self.acc_left = self.acc.copy().drop_channels(acc_chs_R)
-            self.acc_right = self.acc.copy().drop_channels(acc_chs_L)
-
+            try:
+                self.acc = self.bids.copy().pick_types(misc=True, exclude='bads')
+                # splitting ACC in left vs right
+                acc_chs_L = [c for c in self.acc.ch_names if c[4]=='L' ]
+                acc_chs_R = [c for c in self.acc.ch_names if c[4]=='R' ]
+                self.acc_left = self.acc.copy().drop_channels(acc_chs_R)
+                self.acc_right = self.acc.copy().drop_channels(acc_chs_L)
+            except ValueError:
+                print('\n### WARNING: No ACC-channels available ###\n')
+            
             # select EMG and ECG signals
-            self.emg = self.bids.copy().pick_types(emg=True, exclude='bads')
-            self.ecg = self.bids.copy().pick_types(ecg=True, exclude='bads')
+            try:
+                self.emg = self.bids.copy().pick_types(emg=True, exclude='bads')
+            except ValueError:
+                print('\n### WARNING: No EMG-channels available ###\n')
 
-            print(f'BIDS contains:\n{len(self.ecog.ch_names)} ECOG '
-                  f'channels,\n{len(self.lfp.ch_names)} DBS channels:'
-                  f' ({len(self.lfp_left.ch_names)} left, '
-                  f'{len(self.lfp_right.ch_names)} right), '
-                  f'\n{len(self.emg.ch_names)} EMG channels, '
-                  f'\n{len(self.ecg.ch_names)} ECG channel(s), '
-                  f'\n{len(self.acc.ch_names)} Accelerometry (misc) channels.\n\n')
+            try:
+                self.ecg = self.bids.copy().pick_types(ecg=True, exclude='bads')
+            except ValueError:
+                print('\n### WARNING: No ECG-channels available ###\n')
+
+            print('BIDS contains:\n:')
+            if self.ecog: print(f'{len(self.ecog.ch_names)} ECOG channels,\n')
+            if self.lfp: print(f'{len(self.lfp.ch_names)} DBS channels:'
+                               f' ({len(self.lfp_left.ch_names)} left, '
+                               f'{len(self.lfp_right.ch_names)} right),\n')
+            if self.emg: print(f'\n{len(self.emg.ch_names)} EMG channels,\n')
+            if self.ecg: print(f'\n{len(self.ecg.ch_names)} ECG channel(s),\n')
+            if self.acc: print(f'\n{len(self.acc.ch_names)} Accelerometry channels.\n\n')
 
 
 
