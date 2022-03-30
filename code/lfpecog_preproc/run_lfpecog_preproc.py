@@ -40,9 +40,9 @@ if __name__ == '__main__':
     json_path = os.path.join(OSpath, 'data/preprocess/preprocess_jsons')
 
     # Define JSON-files which selects RUNS to include
-    runsfile = os.path.join(json_path, 'runinfos_008_medOn2_all.json')  # runinfos_11FEB22a
+    runsfile = os.path.join(json_path, 'runinfos_008_medOn2_Selfp_Dopa60.json')  # runinfos_11FEB22a
     # Define JSON-files which defines SETTINGS for preprocessing
-    settfile = os.path.join(json_path, f'settings_v2.0_MAR22.json')
+    settfile = os.path.join(json_path, f'settings_v2.0_MAR22_lfp_right.json')
 
     with open(os.path.join(json_path, settfile)) as f:
         json_settings = json.load(f, )  # dict of group-settings
