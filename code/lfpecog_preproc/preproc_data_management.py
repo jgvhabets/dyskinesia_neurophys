@@ -150,7 +150,12 @@ class RunInfo:
             '005': 'MT_SS',  # Medtronic SenSight
             '008': 'BS_VC_X',  # Boston Cartesia Vercise X
             '009': 'MT_SS',  # Medtronic SenSight
+            '011': 'MT_SS',  # Medtronic SenSight
         }
+        if self.sub not in lead_type_dict.keys():
+            print(f'No Lead-type is defined for subject {self.sub}'
+                ' Please add to preproc_data_manegement.py')
+
         self.lead_type = lead_type_dict[self.sub]
 
 
