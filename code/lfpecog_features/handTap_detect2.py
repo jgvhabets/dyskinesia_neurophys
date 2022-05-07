@@ -8,418 +8,594 @@ import os
 import pandas as pd
 from scipy.signal import find_peaks
 from scipy.stats import variation
+from datetime import datetime, timedelta
 
 
 
+# def conduct  -> PUT OVERALL CONDUCT FUNCTION AND BLOCKSAVE FUNCTION
+# IN DIFFERENT .PY-FILE
 
-
-def handTapDetector(
-    accData,
-    posThr=-.5e-7,
-    negThr=.5e-7,
-
+def tapDetector(
+    x, y, z, fs, task, side='right',
 ):
-    '''
-    Function to detect blocks of movement in handtapping
-    runs. Detects typical Tap-pattern within the axis
-    which contains most variance and power (i.e. the
-    acc-axis which recorded the up and down movements).
+    """
+    Detect the moments of finger-raising and -lowering
+    during a fingertapping task.
+    Function detects the axis with most variation and then
+    first detects several large/small pos/neg peaks, then
+    the function determines sample-wise in which part of a
+    movement or tap the acc-timeseries is, and defines the
+    exact moments of finger-raising, finger-lowering, and
+    the in between stopping moments. 
 
-    Arguments:
-        - accData (array): array containing 3-axial acc data
+    Input:
+        - x, y, z (arr): all three one-dimensional data-
+            arrays containing one acc-axis each. Exact
+            labeling x/y/z is not important. Should have equal
+            lengths. Typically timeseries from one run.
+        - fs (int): corresponding sample frequency
+        - side (string): side where acc-data origin from
+    
+    Return:
+        - tapTimes (list of lists): each list contains 4 timestamps
+            (in seconds from array-start) indicating moments of:
+            [finger-raise start, finger raise end,
+            finger-lowering start, finger-lowering end]
+        - moveTimes, restTimes: idem but then for 'other
+            movements' and rest periods (of > 1 sec), each list
+            contains the first and last timestamp of move/rest
+            period.
+    """
+    # input sanity checks
+    assert len(x) == len(y), f'Arrays X and Y should have equal lengths'
+    assert len(x) == len(z), f'Arrays X and Z should have equal lengths'
+    assert side in ['left', 'right'], f'Side should be left or right'
+    assert task in ['paused', 'continuous'], (f'Task should be paused '
+        f'or continuous')
 
-        - check_plots (Boolean): make plots to check
-            algorithm or not
-        - plot_annot: if video-annotated times should be
-            plotted -> gives file_path here, otherwise False
-        - plotdir: diretory where to save plot if created
-        - savedir: diretory where to save taps
-
-    Returns:
-        - tap_ind (list): containing the indices of start-end
-            of the movements up and down, per tap
-    '''
-    tap_ind = {}
-
-    print(
-    'var x', variation(accData), 'pow x', sum(xEpoch ** 2),
-    'var y', variation(yEpoch), 'pow y', sum(yEpoch ** 2),
-    'var z', variation(zEpoch), 'pow z', sum(zEpoch ** 2),
-)
-
-    for run in SubClass.runs_incl:
-        if run in runs_excl: continue
-        print(f'\nStart {run}')
-        
-        # time = SubClass.runs[run].acc_right_arr[0, :]
-        sideblocks = {}
-        # calculate signal vector magnitudes
-        for side in ['left', 'right']:
-            sideblocks[side] = {}
-            s_acc = f'acc_{side}_arr'
-            svm = np.sqrt(
-                getattr(SubClass.runs[run], s_acc)[1, :]**2 +
-                getattr(SubClass.runs[run], s_acc)[2, :]**2 +
-                getattr(SubClass.runs[run], s_acc)[3, :]**2
-            )  # calculate sign vector magnitude
-            accFs = getattr(SubClass.runs[run], f'acc_{side}_Fs')
-            min_len_n = min_len / (1 / accFs)  # n of min samples in tap
-
-            iState = {
-                'Taps': np.where(svm > TAPthr)[0],
-                'Moves': np.where(svm > MOVthr)[0]
-            }
-            for i in iState['Taps']:  # iterate every tap index
-                # find Tap-i in Mov-i's, and delete: prevent doubles
-                idel = np.where(iState['Moves'] == i)
-                iState['Moves'] = np.delete(iState['Moves'], idel)
-                
-            gaps = 0.5  # seconds which ends a tap block
-            gap_n = gaps / (1 / accFs)  # n of samples in gap
-            
-            for state in iState: sideblocks[side][state] = {}
-            for state in iState:
-                blockN = 0
-                block = []
-                for i, idiff in zip(
-                    iState[state][:-1], np.diff(iState[state])
-                ):
-                    if idiff < gap_n:
-                        # add consecut i's betw 2 i's in seconds!)
-                        iadd = list(np.linspace(
-                            start=i,
-                            stop=i + idiff - 1,
-                            num=idiff,
-                        ) / accFs)
-                        block.extend(iadd)
-                    else:
-                        if len(block) > min_len_n:
-                            sideblocks[side][state][blockN] = block
-                            blockN += 1
-                        block = []
-            
-            # Check Tap-patterns (needs timestamp for annotation-check)
-            newTaps, extraMoves = tap_pattern_checker(
-                run=run, side=side,
-                tapblocks=sideblocks[side]['Taps'],
-                acc_og=getattr(SubClass.runs[run], s_acc),
-                accFs=accFs,
-                plot=check_plots,
-                plotdir=plotdir,
-            )
-            sideblocks[side]['Taps'] = newTaps
-            starti = len(sideblocks[side]['Moves'].keys())
-            for movb in extraMoves:
-                sideblocks[side]['Moves'][starti] = extraMoves[movb]
-                starti += 1
-            
-            RunMovBlocks[run] = sideblocks
-            
-        # add blocks in timestamps next to second-floats
-        # load tsv with start timestamps of neurophys+acc recording
-        bids_dir =  ('/Users/jeroenhabets/OneDrive - Charité - Uni'
-            'versitätsmedizin Berlin/BIDS_Berlin_ECOG_LFP/rawdata')
-        sub = f'sub-{SubClass.runs[run].sub}'
-        ses =  f'ses-{SubClass.runs[run].ses}'
-        scans = os.path.join(
-            bids_dir, sub, ses, f'{sub}_{ses}_scans.tsv'
-        )
-        scans = pd.read_csv(scans, sep='\t')
-        # convert detected second-timestamps into pd-timestamps
-        dopatime = run[-6:]
-        # find matching starttime in scans.tsv
-        for i in range(scans.shape[0]):
-            if dopatime in scans['filename'][i]:
-                RunMovBlocks[run]['starttime'] = pd.Timestamp(
-                    scans['acq_time'][i]
-                )
-        # add timedeltas to starttime
-        for side in ['left', 'right']:
-            for state in ['Taps', 'Moves']:
-                RunMovBlocks[run][f'{side}_{state}_stamps'] = {}
-                for block in RunMovBlocks[run][side][state]:
-                    ds = []
-                    for t in RunMovBlocks[run][side][state][block]:
-                        ds.append(pd.Timedelta(t, 'sec') )
-                    RunMovBlocks[run][f'{side}_{state}_stamps'][block
-                    ] = [RunMovBlocks[run]['starttime'] + d for d in ds]
-
-
-        if check_plots:
-            check_plots_handTapDetect(
-                SubClass,
-                RunMovBlocks,
-                run,
-                plotdir,
-                plot_annot,
-                fignamedetail=(f'buff{str(buffsec)[2:]}_Tap'
-                    f'{str(TAPthr)[:1]}_{str(TAPthr)[-2:]}_Mov'
-                    f'{str(MOVthr)[:1]}_{str(MOVthr)[-2:]}_'
-                    f'gap{gaps * 1000}'
-                )
-            )
-        
-        if savedir:
-            tap_saver(RunMovBlocks, savedir, sub)
-
-    return RunMovBlocks
-
-
-def check_plots_handTapDetect(
-    SubClass, RunMovBlocks, run,
-    plotdir, plot_annot, fignamedetail,
-):
-    print(f'PLOTTING FIGURE {run} .....')
-    # create range with timestamps along acc-array, instead of 
-    # floats of seconds since start (use for x-axis plot)
-    tstart = RunMovBlocks[run]['starttime']  # first timestamp in array
-    nsamples = getattr(SubClass.runs[run],'acc_left_arr').shape[-1]
-    arr_fs = getattr(SubClass.runs[run],'acc_left_Fs')
-    tend = tstart + pd.Timedelta(1 / arr_fs, unit='s') * nsamples
-    timeax = pd.date_range(
-        start=tstart, end=tend, freq=f'{1000 / arr_fs}ms')[:-1]
-
-    fig, ax = plt.subplots(1, 1, figsize=(8, 6))
-
-    for side in ['acc_left_arr', 'acc_right_arr']:
-        for r, axis in zip([1, 2, 3], ['X', 'Y', 'Z']):
-            ax.plot(
-                # getattr(SubClass.runs[run], side)[0, :],
-                timeax,
-                getattr(SubClass.runs[run], side)[r, :].T,
-                label=f'{axis} {side[4:-4]}',
-            )
-    ylim1=-3e-6
-    ylim2=5e-6
-
-    # clrs = {'left': 'steelblue', 'right': 'y'}  # colors for sides
-    alpha=.8
-    alpha2=.2
-    kwparms = {
-        'left_Moves': {
-            'color': 'springgreen',
-            'alpha': alpha2,
+    timeStamps = np.arange(0, len(x), 1 / fs)  # timestamps from start (in sec)
+    ax_arrays = [x, y, z]
+    # Find axis with most variation
+    maxVar = np.argmax([variation(arr) for arr in ax_arrays])
+    # maxRMS = np.argmax([sum(arr) for arr in ax_arrays])
+    sig = ax_arrays[maxVar]  # acc-signal to use
+    if sig.max() > 1e-4: sig = sig * 1e-6
+    
+    # Find peaks to help movement detection
+    peaksettings = {
+        'continuous': {
+            'peak_dist': 0.1,
+            'cutoff_time': .25,
         },
-        'left_Taps': {
-            'color': 'green',
-            'alpha': alpha,
-        },
-        'right_Moves': {
-            'color': 'gold',
-            'alpha': alpha2,
-        },
-        'right_Taps': {
-            'color': 'purple',
-            'alpha': alpha,
+        'paused': {
+            'peak_dist': .5,
+            'cutoff_time': 2,
         }
     }
-    for side in ['left', 'right']:
-        # color detected states
-        for state in ['Taps', 'Moves']:
-            for n, b in enumerate(RunMovBlocks[run][side][state]):
-                if n == 0:  # add legend-label only once
-                    ax.fill_between(
-                        RunMovBlocks[run][f'{side}_{state}_stamps'][b],
-                        y1=ylim1, y2=ylim2,
-                        label=f'{state} {side} (Acc-detect.)',
-                        **kwparms[f'{side}_{state}'],
-                    )
-                else:
-                    ax.fill_between(
-                        RunMovBlocks[run][f'{side}_{state}_stamps'][b],
-                        y1=ylim1, y2=ylim2,
-                        **kwparms[f'{side}_{state}'],
-                    )
-        # add manual annotations
-        if plot_annot:
-            annot = np.load(plot_annot, allow_pickle=True).item()
-            try:
-                ax.scatter(
-                    annot[run][f'{side}_stamps'],
-                    [4e-6] * len(annot[run][f'{side}_stamps']),
-                    c=kwparms[f'{side}_Taps']['color'], edgecolor='k',
-                    s=100, alpha=.5, marker='*',
-                    label=f'Tap {side} (Video-ann.)',
-                )
-            except KeyError:
-                print('No video-annotations for ', run)
-                pass
-
-    ax.set_ylabel('ACC (m/s/s)')
-    ax.set_xlabel('Time (sec)')
-    ax.set_ylim(ylim1, ylim2,)
-    n_xticks = 7
-    xticks = timeax[::len(timeax) // n_xticks]
-    xtlabels = timeax[::len(timeax) // n_xticks].strftime('%X')
-    ax.set_xticks(xticks)
-    ax.set_xticklabels(xtlabels)
-
-    if plot_annot:
-        ax.set_title(f'Tap Acc-Detection vs Video-Annotation\n'
-            f'{run} - {SubClass.runs[run].sub} '
-            f'{SubClass.runs[run].ses})', size=14)
-    else:
-        ax.set_title(f'Tap Detection {run}\n'
-            f'({SubClass.runs[run].sub} '
-            f'{SubClass.runs[run].ses})', size=14)
-    ax.legend(
-        loc='upper left', bbox_to_anchor=(-.1, -.13),
-        ncol=4, frameon=False, fontsize=12,
-    )
-    plt.tight_layout(pad=.1)
-    sub = SubClass.runs[run].sub
-    fname = f'ACC_TapvsMov_detection_{sub}_{run}_{fignamedetail}.png'
-    plt.savefig(os.path.join(plotdir, fname),
-        dpi=150, facecolor='w',)
-    plt.close()
-        
-
-"""
-copy function, include transfer from taps to move if not TAP-pattern
-"""
-def tap_pattern_checker(
-    run, side, tapblocks, acc_og, accFs, tapAxis='y', 
-    posThr=1e-7, negThr=1e-7, plot=False, plotdir=None,
-):
-    newTaps = {}  # true pattern tap-blocks: new Tap Dict
-    extraMoves={}  # false pattern tap-blocks: convert to moves
-    tap_i = 0  # indices to fill new dicts
-    mov_i = 0
-    smooth = False
-    i_incl = 24
-    if plot:
-        fig, axes=plt.subplots(i_incl // 4, 4, figsize=(12,16),
-            sharey='row')
-        axes = axes.flatten()
-
-    for b in np.arange(len(tapblocks)):
-        if b >= i_incl: plot = False
-
-        peakDict = {
-            'pos': {
-                'Thr': posThr,
-                'dir': 1,
-                'ind': [],
-                'top': []
-            },
-            'neg': {
-                'Thr': negThr,
-                'dir': -1,
-                'ind': [],
-                'top': []
-            }
-        }
-
-        try:
-            i0 = tapblocks[b][0] * 200 
-            i1 = tapblocks[b][-1] * 200 
-        except KeyError:
-            # print(f'Block {b} no more tap blocks')
-            continue
-        acc = {
-            'x': acc_og[1, int(i0):int(i1)],
-            'y': acc_og[2, int(i0):int(i1)],
-            'z': acc_og[3, int(i0):int(i1)]
-        }
-        acc['svm'] = np.sqrt(acc['x']**2 + acc['y']**2 + acc['z']**2)
-        
-        for sig in acc.keys():
-            # smoothinng
-            if smooth:
-                acc[sig] = pd.Series(acc[sig]).rolling(3).mean()
-            if plot: axes[b].plot(acc[sig], alpha=.5, label=sig)
-
-        for p in peakDict:
-            peaks = find_peaks(
-                peakDict[p]['dir'] * acc[tapAxis],
-                # height=peakDict[p]['Thr'] * .1,
-                width=1,
-                distance=25,
-                prominence=peakDict[p]['Thr'],
-                wlen=40,
-            )
-            if len(peaks[0]) > 0:
-                if plot:
-                    axes[b].scatter(
-                        peaks[0],
-                        peakDict[p]['dir'] * peaks[1]['prominences'],
-                        # label=f'{p} peaks'
-                    )
-                peakDict[p]['ind'].extend(peaks[0])
-                peakDict[p]['top'].extend(peaks[1]['prominences'])
-        # check pos-neg-neg-pos pattern
-        peakFound = False
-        try:
-            # taps longer than 1 sec -> moves
-            if len(acc[tapAxis]) > accFs:
-                extraMoves[mov_i] = tapblocks[b]
-                mov_i += 1
-            # check tap-double-sinusoid (+ - - +)
-            elif sum(np.logical_and(
-                peakDict['neg']['ind'] > peakDict['pos']['ind'][0],
-                peakDict['neg']['ind'] < peakDict['pos']['ind'][-1]
-            )) >= 2:  # if there are 2 neg peaks between 2 pos peaks
-                peakFound = True
-                newTaps[tap_i] = tapblocks[b]
-                tap_i += 1
-            else:  # other pattern -> moves
-                extraMoves[mov_i] = tapblocks[b]
-                mov_i += 1
-
-        except IndexError:
-            extraMoves[mov_i] = tapblocks[b]
-            mov_i += 1
-            
-        if plot:
-            # axes[b].set_xticks(np.arange(0, len(x), 100), size=10)
-            # axes[b].set_xticklabels(np.arange(i0, i0 + len(x), 100) / 200, size=10)
-            # axes[b].set_xlabel('Time (seconds)', size=10)
-            axes[b].set_ylim(-2e-6, 2e-6)
-            axes[b].set_ylabel('ACC', size=10)
-            if b == 0:
-                axes[b].legend(fontsize=16, ncol=6, frameon=False,
-                bbox_to_anchor=(0.5, 1.3), loc='upper left')
-        
-            # add peak detect as color
-            if peakFound:
-                axes[b].fill_between(
-                    alpha=.1, color='green',
-                    x=np.arange(len(acc['x'])), y1=-2e-6, y2=2e-6, )
-            else:
-                axes[b].fill_between(
-                    alpha=.1, color='red',
-                    x=np.arange(len(acc['x'])), y1=-2e-6, y2=2e-6, )
-    
-    if plot:
-        
-        fname = f'TapChecker_{run[-6:]}_{side}_scr'
-        if smooth: fname += 'smooth'
-        plt.savefig(
-            os.path.join(plotdir, fname),
-            dpi=150, facecolor='w',
+    if task == 'paused':
+        smallPos = find_peaks(
+            sig,
+            height=(np.max(sig) * .1, np.max(sig) * .6),  # first value is min, second is max
+            distance=fs * .2,  # 1 s
+            prominence=np.max(sig) * .1,
+            wlen=fs * .5,
         )
-        plt.close()
+        largePos = find_peaks(
+            sig,
+            height=np.max(sig) * .5,
+            distance=fs,  # 1 s
+        )
+        smallNeg = find_peaks(
+            -1 * sig,  # convert pos/neg for negative peaks
+            height=(-.5e-7, abs(np.min(sig)) * .4),
+            distance=fs * 0.2,  # 10 ms
+            prominence=abs(np.min(sig)) * .05,
+            # wlen=40,
+        )
+        largeNeg = find_peaks(
+            -1 * sig,
+            height=abs(np.min(sig)) * .4,  # first value is min, second is max
+            distance=fs * .5,  # 10 ms
+            # prominence=np.min(yEpoch) * .1,
+            # wlen=40,
+        )
 
-    return newTaps, extraMoves 
+    # Lists to store collected indices and timestamps
+    tapi = []  # list to store indices of tap
+    movei = []  # list to store indices of other move
+    resti = []  # list to store indices of rest
+    resttemp = []  # list to temporarily collect rest-indices
+    tempi = []  # for during detection process
+    state = 'lowRest'
 
-    
+    # Sample-wise movement detection
+    if task == 'paused':
+        # Thresholds for movement detection
+        posThr = .5e-7  # Try on new patients: adjust to person or tasks?!
+        negThr = -.5e-7
+        for n, y in enumerate(sig):
 
-def tap_saver(
-    blocks, savedir, sub
+            if state == 'otherMov':
+                if np.logical_and(
+                    y > posThr,
+                    any([Y in smallPos[0] for Y in range(n, n + int(fs * .2))])
+                ):  # from other Movement into tap-begin
+                    tempi = []  # start new index list
+                    state='upAcc1'
+                    tempi.append(n)  # START TIME Tap-UP
+                    continue
+
+                try:
+                    next10 = sum([negThr < Y < posThr for Y in sig[range(
+                        n, n + int(fs * .2)
+                    )]])
+                    if next10 > (fs * .2) * .8:
+                        # End 'other move' if 8 / 10 next samples are inactive
+                        tempi.append(n)  # END of OTHER MOVE
+                        if (tempi[-1] - tempi[0]) > fs * .1:
+                            movei.append(tempi)
+                        tempi = []
+                        state = 'lowRest'
+                except IndexError:  # prevent indexerror out of range for next10
+                    # print('end of timeseries')
+                    continue
+
+            elif state == 'lowRest':
+                if np.logical_and(
+                    y > posThr,
+                    any([Y in smallPos[0] for Y in range(n, n + int(fs * .2))])
+                ):
+
+                    if resttemp:  # close and store active rest period
+                        resttemp.append(n)  # Add second and last rest-ind
+                        if (resttemp[1] - resttemp[0]) > fs:  # if rest > 1 sec
+                            resti.append(resttemp)  # add finished rest-indices
+                        resttemp = []  # reset resttemp list
+                    
+                    state='upAcc1'
+                    tempi.append(n)  # START TIME Tap-UP
+
+                elif np.logical_or(
+                        np.logical_or(n in smallPos[0], n in smallNeg[0]),
+                        ~ (negThr < y < posThr)
+                ):
+
+                    if resttemp:  # close and store active rest period
+                        resttemp.append(n)  # Add second and last rest-ind
+                        if (resttemp[1] - resttemp[0]) > fs:  # if rest > 1 sec
+                            resti.append(resttemp)  # add finished rest-indices
+                        resttemp = []  # reset resttemp list
+
+                    state = 'otherMov'
+                    tempi.append(n)  # START TIME Othermovement
+                
+                else:  # lowRest stays lowRest
+                    if not resttemp:  # if rest-temp list is empty
+                        resttemp.append(n)  # start of rest period
+                    
+            elif state == 'upAcc1':
+                if n in smallPos[0]:  # PAUSED
+                    state='upAcc2'  # after acc-peak, movement still accelerating
+                    # print('peakpos1', n)
+            elif state == 'upAcc2':
+                if y < 0:   #negThr < y < posThr:
+                    state='upDec1'
+                    ### TODO -> ADD THIS MOMENT AS MAX SPEED MOMENT
+            elif state=='upDec1':
+                if n - tempi[0] > (fs * peaksettings[task]['cutoff_time']):
+                    # if movement-up takes > defined cutoff time
+                    state = 'otherMov'  # reset to start-state
+                    movei.append(tempi)  # was untoggled?
+                    tempi = []  # was untoggled?
+                elif n in smallNeg[0]:
+                    state='upDec2'
+                    # print('peakneg1', n)
+            elif state == 'upDec2':
+                if y > 0:  #negThr < y < posThr:
+                    state='highRest'
+                    tempi.append(n)  # end of Up
+                    # print('endUP', n)
+            elif state == 'highRest':
+                if n - tempi[1] > (fs * peaksettings[task]['cutoff_time']):
+                    # if highrest takes > defined cutoff time
+                    state = 'otherMov'  # reset to start-state
+                    movei.append(tempi)  # was untoggled?
+                    tempi = []  # was untoggled?
+                elif np.logical_and(
+                    y < negThr,
+                    any([Y in largeNeg[0] for Y in range(n, n + int(fs * .2))])
+                ):
+                    state='downAcc1'
+                    tempi.append(n)  # start of Tap-DOWN
+
+            elif state == 'downAcc1':
+                if n in largeNeg[0]:
+                    state='downAcc2'
+                elif n - tempi[2] > (fs * peaksettings[task]['cutoff_time']):
+                    # if down-move takes > defined cutoff time
+                    state = 'otherMov'  # reset to start-state
+                    movei.append(tempi)  # newly added
+                    tempi = []  # newly added
+
+            elif state == 'downAcc2':
+                if np.logical_or(
+                    negThr < y < posThr,
+                    y > posThr
+                ):
+                    state='downDec1'
+                elif n - tempi[2] > (fs * peaksettings[task]['cutoff_time']):
+                    # if down-move takes > defined cutoff time
+                    state = 'otherMov'  # reset to start-state
+                    movei.append(tempi)  # newly added
+                    tempi = []  # newly added
+                    
+            elif state=='downDec1':
+                if n in largePos[0]:
+                    state='downDec2'
+                elif n - tempi[2] > (fs * peaksettings[task]['cutoff_time']):
+                    # if down-move takes > defined cutoff time
+                    state = 'otherMov'  # reset to start-state
+                    movei.append(tempi)  # newly added
+                    tempi = []  # newly added
+                    
+            elif state == 'downDec2':
+                if negThr < y < posThr:
+                    state='lowRest'
+                    tempi.append(n)  # end of DOWN
+                    tapi.append(tempi)
+                    tempi = []
+
+        # remove otherMovements directly after tap
+        if tapi and movei:  # only when both exist
+            endTaps = [tap[-1] for tap in tapi]
+            movei_sel = []
+            for tap in movei:
+                if min([abs(tap[0] - end) for end in endTaps]) > (.25 * fs):
+                    movei_sel.append(tap)
+            movei = movei_sel
+
+    # convert detected indices-lists into timestamps
+    tapTimes = []  # list to store timeStamps of tap
+    moveTimes = []  # alternative list for movements
+    restTimes = []  # list to sore rest-timestamps
+    for tap in tapi: tapTimes.append(timeStamps[tap])
+    for tap in movei: moveTimes.append(timeStamps[tap])
+    for tap in resti: restTimes.append(timeStamps[tap])
+
+    return tapTimes, moveTimes, restTimes
+
+
+def ContTapDetector(
+    x, y, z, fs, task, side='right',
 ):
-    os.makedirs(savedir, exist_ok=True)
+    """
+    Detect the moments of finger-raising and -lowering
+    during a fingertapping task.
+    Function detects the axis with most variation and then
+    first detects several large/small pos/neg peaks, then
+    the function determines sample-wise in which part of a
+    movement or tap the acc-timeseries is, and defines the
+    exact moments of finger-raising, finger-lowering, and
+    the in between stopping moments. 
 
-    dict_name = f'taps_moves_{sub}'
-    np.save(
-        os.path.join(savedir, dict_name),
-        blocks
-    )
-
-    # TODO: add text file with parameters of blocks
+    Input:
+        - x, y, z (arr): all three one-dimensional data-
+            arrays containing one acc-axis each. Exact
+            labeling x/y/z is not important. Should have equal
+            lengths. Typically timeseries from one run.
+        - fs (int): corresponding sample frequency
+        - side (string): side where acc-data origin from
     
+    Return:
+        - tapTimes (list of lists): each list contains 4 timestamps
+            (in seconds from array-start) indicating moments of:
+            [finger-raise start, finger raise end,
+            finger-lowering start, finger-lowering end]
+        - moveTimes, restTimes: idem but then for 'other
+            movements' and rest periods (of > 1 sec), each list
+            contains the first and last timestamp of move/rest
+            period.
+    """
+    # input sanity checks
+    assert len(x) == len(y), f'Arrays X and Y should have equal lengths'
+    assert len(x) == len(z), f'Arrays X and Z should have equal lengths'
+    assert side in ['left', 'right'], f'Side should be left or right'
+    assert task in ['paused', 'continuous'], (f'Task should be paused '
+        f'or continuous')
 
-    # # Load annotation dict
-    # video_taps = np.load(os.path.join(deriv_dir, f'{dict_name}.npy'),
-    #                      allow_pickle=True).item()
+    timeStamps = np.arange(0, len(x), 1 / fs)  # timestamps from start (in sec)
+    ax_arrays = [x, y, z]
+    # Find axis with most variation
+    maxVar = np.argmax([variation(arr) for arr in ax_arrays])
+    # maxRMS = np.argmax([sum(arr) for arr in ax_arrays])
+    sig = ax_arrays[maxVar]  # acc-signal to use
+    if sig.max() > 1e-4: sig = sig * 1e-6
+    sigdf = np.diff(sig)
+    # Thresholds for movement detection
+    posThr = np.mean(sig)  # Try on new patients: adjust to person or tasks?!
+    negThr = -np.mean(sig)
+    
+    # Find peaks to help movement detection
+    peaksettings = {
+        'peak_dist': 0.1,
+        'cutoff_time': .25,
+    }
 
-    return f'Tap and Moves blocks-dictionary saved for {sub}'
+    # find relevant positive peaks
+    posPeaks = find_peaks(
+        sig,
+        height=(posThr, np.max(sig)),
+        distance=fs * .05,  # settings[task]['peak_dist']
+    )[0]
+    # select Pos-peaks with surrounding >> Pos and Neg Diff
+    endPeaks = [np.logical_or(
+        any(sigdf[i -3:i + 3] < np.percentile(sig, 10)),  #np.percentile(sig, 90) * .5)
+        any(sigdf[i -3:i + 3] > np.percentile(sig, 90))
+    ) for i in posPeaks]
+    endPeaks = posPeaks[endPeaks]
+    # delete endPeaks from posPeaks
+    for i in endPeaks:
+        idel = np.where(posPeaks == i)
+        posPeaks = np.delete(posPeaks, idel)
+    # delete endPeaks which are too close after each other
+    # by starting with std False before np.diff, the diff-scores
+    # represent the distance to the previous peak
+    tooclose = endPeaks[np.append(
+        np.array(False), np.diff(endPeaks) < (fs / 6))]
+    for p in tooclose:
+        i = np.where(endPeaks == p)
+        endPeaks = np.delete(endPeaks, i)
+        posPeaks = np.append(posPeaks, p)
+
+    smallNeg = find_peaks(
+        -1 * sig,  # convert pos/neg for negative peaks
+        height=(-.5e-7, abs(np.min(sig)) * .5),
+        distance=fs * peaksettings['peak_dist'] * .5,
+        prominence=abs(np.min(sig)) * .05,
+        # wlen=40,
+    )[0]
+
+    largeNeg = find_peaks(
+        -1 * sig,
+        height=abs(np.min(sig)) * .4,  # first value is min, second is max
+        distance=fs * peaksettings['peak_dist'],
+        # prominence=np.min(yEpoch) * .1,
+        # wlen=40,
+    )[0]
+
+    # Lists to store collected indices and timestamps
+    tapi = []  # list to store indices of tap
+    movei = []  # list to store indices of other move
+    resti = []  # list to store indices of rest
+    resttemp = []  # temp-list to collect rest-indices [1st, Last]
+    starttemp = [np.nan] * 5  # for during detection process
+    # [startUP, fastestUp, stopUP, startDown, stopDown]
+    tempi = starttemp.copy()  # to start process
+    state = 'lowRest'
+
+    # Sample-wise movement detection        
+    for n, y in enumerate(sig):
+
+        if state == 'otherMov':
+            if n in endPeaks:  # during other Move: end Tap
+                tempi[-1] = n  # finish and store index list
+                if (tempi[-1] - tempi[0]) > fs * .1:
+                    movei.append(tempi)  # save if long enough
+                state='lowRest'
+                tempi = starttemp.copy()  # after end: start lowRest
+                continue
+
+            try:
+                next10 = sum([negThr < Y < posThr for Y in sig[range(
+                    n, n + int(fs * .2)
+                )]])
+                if next10 > (fs * .2) * .8:
+                    # End 'other move' if 8 / 10 next samples are inactive
+                    tempi[-1] = n  # END of OTHER MOVE
+                    if (tempi[-1] - tempi[0]) > fs * .1:
+                        movei.append(tempi)
+                    tempi = starttemp.copy()  # after end: start lowRest
+                    state = 'lowRest'
+            except IndexError:  # prevent indexerror out of range for next10
+                # print('end of timeseries')
+                continue
+
+        elif state == 'lowRest':
+            if np.logical_and(
+                y > posThr,  # if value is over pos-threshold
+                sigdf[n] > np.percentile(sigdf, 75)  # AND diff is over Thr
+                # any([Y in posPeaks for Y in range(n, n + int(fs * .2))])  # USED IN PAUSED
+            ):
+                if resttemp:  # close and store active rest period
+                    resttemp.append(n)  # Add second and last rest-ind
+                    if (resttemp[1] - resttemp[0]) > fs:  # if rest > 1 sec
+                        resti.append(resttemp)  # add finished rest-indices
+                    resttemp = []  # reset resttemp list
+                
+                state='upAcc1'
+                tempi[0] = n  # START TIME Tap-UP
+
+            # elif np.logical_or(
+            #         np.logical_or(n in posPeaks, n in smallNeg[0]),
+            #         ~ (negThr < y < posThr)
+            # ):
+
+            #     if resttemp:  # close and store active rest period
+            #         resttemp.append(n)  # Add second and last rest-ind
+            #         if (resttemp[1] - resttemp[0]) > fs:  # if rest > 1 sec
+            #             resti.append(resttemp)  # add finished rest-indices
+            #         resttemp = []  # reset resttemp list
+                # state = 'otherMov'
+                # tempi.append(n)  # START TIME Othermovement
+            
+            elif n in endPeaks:  # during lowRest, endPeak found
+                resttemp.append(n)  # Add second and last rest-ind
+                if (resttemp[1] - resttemp[0]) > fs:  # if rest > 1 sec
+                    resti.append(resttemp)  # add finished rest-indices
+                resttemp = []  # reset resttemp list
+                state='lowRest'
+                tempi = starttemp.copy()  # after end: start lowRest
+                continue
+
+            else:  # lowRest stays lowRest
+                if not resttemp:  # if rest-temp list is empty
+                    resttemp.append(n)  # start of rest period
+                
+        elif state == 'upAcc1':
+            if n in posPeaks:
+                state='upAcc2'  # after acc-peak, movement still accelerating
+
+        elif state == 'upAcc2':
+            if y < 0:  # crossing zero-line, start of decelleration
+                tempi[1] = n  # save n as FADTEST MOMENT UP
+                state='upDec1'
+
+        elif state=='upDec1':
+            if n in smallNeg:
+                state='upDec2'
+        elif state == 'upDec2':
+            if np.logical_or(y > 0, sigdf[n] < 0):  # acc is pos, or not increasing anymore
+                state='highRest'  # end of UP-decell
+                tempi[2]= n  # END OF UP !!!
+
+######## TODO: GO FURTHER HERE (make ideal detect situation and assess later taps on completeness)
+
+        elif state == 'highRest':
+            # if n - tempi[1] > (fs * peaksettings[task]['cutoff_time']):
+            #     # if highrest takes > defined cutoff time
+            #     state = 'otherMov'  # reset to start-state
+            #     movei.append(tempi)  # was untoggled?
+            #     tempi = []  # was untoggled?
+            if np.logical_and(
+                y < negThr,
+                sigdf[n] < np.percentile(sigdf, 25)  # already done
+            ):
+                state='downAcc1'
+                tempi.append(n)  # start of Tap-DOWN
+
+        elif state == 'downAcc1':
+            if n in largeNeg[0]:
+                state='downAcc2'
+            elif n - tempi[2] > (fs * peaksettings[task]['cutoff_time']):
+                # if down-move takes > defined cutoff time
+                state = 'otherMov'  # reset to start-state
+                movei.append(tempi)  # newly added
+                tempi = []  # newly added
+
+        elif state == 'downAcc2':
+            if np.logical_or(
+                negThr < y < posThr,
+                y > posThr
+            ):
+                state='downDec1'
+            elif n - tempi[2] > (fs * peaksettings[task]['cutoff_time']):
+                # if down-move takes > defined cutoff time
+                state = 'otherMov'  # reset to start-state
+                movei.append(tempi)  # newly added
+                tempi = []  # newly added
+                
+        elif state=='downDec1':
+            if n in largePos[0]:
+                state='downDec2'
+            elif n - tempi[2] > (fs * peaksettings[task]['cutoff_time']):
+                # if down-move takes > defined cutoff time
+                state = 'otherMov'  # reset to start-state
+                movei.append(tempi)  # newly added
+                tempi = []  # newly added
+                
+        elif state == 'downDec2':
+            if negThr < y < posThr:
+                state='lowRest'
+                tempi.append(n)  # end of DOWN
+                tapi.append(tempi)
+                tempi = []
+
+    # convert detected indices-lists into timestamps
+    tapTimes = []  # list to store timeStamps of tap
+    moveTimes = []  # alternative list for movements
+    restTimes = []  # list to sore rest-timestamps
+    for tap in tapi: tapTimes.append(timeStamps[tap])
+    for tap in movei: moveTimes.append(timeStamps[tap])
+    for tap in resti: restTimes.append(timeStamps[tap])
+
+    return tapTimes, moveTimes, restTimes
+
+def saveAllEphysRestblocks(
+    ephysdata, fs, restTimes, dopaIntakeTime, runStart,
+    savedir, ephysname, runname, winlen=1024,
+):
+# TODO: include dopa time
+# TODO: include multiple runs in different start function
+    """
+    Select ephys-data that correspond with detected
+    accelerometer-rest moments. Prerequisite is that
+    neurophysiology and accelerometer data come from
+    identical time period. Sample frequencies can
+    differ, but total time-period measured must be equal!
+    Epochs are saved per window-length (default is 1024
+    samples), this leads to not considering some data
+    which falls out of this windows.
+
+    Input:
+        - ephysdata (arr): one-dimensional data array
+            containing 1 timeseries of neurophys data
+
+        - dopaIntakeTime (str): timepoint of L-Dopa
+            intake in format 'YYYY-MM-DD HH-MM'
+
+    """
+    # timestamps from start (in sec)
+    ephystime = np.arange(0, len(ephysdata), 1 / fs)
+    # create empty nd-array to store rest data in epochs
+    # of defined window length
+    tempdat = np.zeros((1, winlen))
+    rowTimes = []  # list to store times corresponding to data rows
+
+    for timeIdx in restTimes[1:-1]:  # skip first and last
+        # find acc-Rest-times in ephys-timestamps
+        neuInd1 = np.where(ephystime == timeIdx[0])[0][0]
+        neuInd2 = np.where(ephystime == timeIdx[1])[0][0]
+        dat_sel = ephysdata[neuInd1:neuInd2]
+        n_wins = len(dat_sel) // winlen
+        dat_sel = np.reshape(
+            dat_sel[:n_wins * winlen],
+            (n_wins, winlen),
+            order='C',  # fills row after row
+        )
+        tempdat = np.vstack([tempdat, dat_sel])
+        # add timestamp of start-time for every included row
+        for i in np.arange(n_wins):
+            rowTimes.append(timeIdx[0] + (i * winlen / fs))
+
+    rowTimes = np.round(rowTimes, 4)  # round .019999 values
+    tempdat = tempdat[1:, :]  # exclude first row of zeros
+
+    dopaIN = datetime.strptime(dopaIntakeTime, '%Y-%m-%d %H:%M')
+    # runStart into datetime delta from dopaIN (in seconds)
+    # for every row runStartDopaDelta + rowSeconds --> DopaSeconds
+
+
+    # saving data array  -> DONT SAVE DATA PER RUN, COLLET ALL RUNS IN
+    # OVERALL FUNCTION AND SAVE ONE OVERALL FILES WITH DATA ROWS
+    # AND A CORRESPONDING ROWTIMES FILE
+    fname = f'{runname}_{neu_ch}_win{winlen}'
+    # np.save(os.path.join(
+    #     tempdir, 'restblocks', f'restBlocks_sub08_{fname}'), tempdat)
+    # save list of rowtimes
+    np.save(os.path.join(
+        savedir, f'restTimes_sub08_{fname}'), rowTimes)
+
+
+    # return tempdat, rowTimes
+
+    ### Saving Rest Blocks
+    # determine neurophys axis before function input, function input
+    # only one timeseries
+    for neusource in ['lfp_left', 'ecog', 'lfp_right']:
+        SelAndSave_Restblocks(
+            neu_data = getattr(SUB08.runs[run], f'{neusource}_arr'),
+            fs = getattr(SUB08.runs[run], f'{neusource}_Fs'),
+            neu_names = getattr(SUB08.runs[run], f'{neusource}_names'),
+            restTimes=restTimes,
+            runname=run[-6:], neu_ch_incl=['ECOG_L_1', 'LFP_L_3_4']
+        )

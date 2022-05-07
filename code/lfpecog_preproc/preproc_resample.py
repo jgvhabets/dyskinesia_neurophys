@@ -40,7 +40,7 @@ def resample(
             data[:, 1:, :], up=1, down=down, axis=2
         )[:, :, :newdata.shape[2]]  # fill signals rows with signals
     
-    if len(data.shape) == 2:
+    if len(data.shape) == (2 or 1):
         newdata = np.zeros((
             data.shape[0],
             data.shape[1] // down,
