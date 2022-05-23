@@ -2,16 +2,27 @@
 Functions to extract spectral from neurophysiology
 data (LFP and ECOG) in ReTune's Dyskinesia Project
 
+Creates features for moments classified as [Rest,
+Movement, Tap] and annotates the time relative to
+L-Dopa intake.
 '''
 # Import general packages and functions
 from dataclasses import dataclass
-from mimetypes import init
-from multiprocessing.dummy import Array
 import os
 from typing import Any
 import json
 import numpy as np
 from scipy.signal import welch, cwt, morlet2
+
+"""
+Include in feature class:
+    per window (1 s?, 0.5 s?, .25 sec with >> sample freq):
+        - state (nomove, tap (after tap/taprest), move)
+        - beta peak
+        - gamma peak
+        - beta peak bandw
+        - peak heigth (Swann '16)
+"""
 
 @dataclass(init=True, repr=True,)
 class extractSpectralFts:
