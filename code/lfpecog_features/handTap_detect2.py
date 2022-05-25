@@ -72,7 +72,7 @@ def pausedTapDetector(
     # sig = check_PosNeg_and_Order(sig, fs)
 
     # # add differential  # OPTIMIZE MODEL LATER WITH DIFF
-    # sigdf = np.diff(sig)
+    sigdf = np.diff(sig)
 
     # timestamps from start (in sec)
     timeStamps = np.arange(0, len(sig), 1 / fs)
@@ -124,7 +124,7 @@ def pausedTapDetector(
     # posThr = .5e-7
     posSig = sig[sig > 1e-8]
     posThr = np.percentile(posSig, 75)  # TRY OUT
-    print(posThr, len(largePos[0]), len(smallPos[0]))
+    print(posThr, len(largePos[0]), len(largeNeg[0]))
     negThr = -posThr
     for n, y in enumerate(sig):
 
@@ -132,7 +132,7 @@ def pausedTapDetector(
             if np.logical_and(
                 y > posThr,
                 # any([Y in smallPos[0] for Y in range(n, n + int(fs * .2))])
-                any([Y in largePos[0] for Y in range(n, n + int(fs * .6))])  # TRY OUT
+                any([Y in largePos[0] for Y in range(n, n + int(fs))])  # TRY OUT
             ):  # from other Movement into tap-begin
                 tempi.append(n)  # END of OTHER MOVE
                 if (tempi[-1] - tempi[0]) > fs * .1:
@@ -141,6 +141,7 @@ def pausedTapDetector(
                 state='upAcc1'
                 tempi.append(n)  # START TIME Tap-UP
                 print('start of TAP/MOV from OTHER MOVEM', y, n)
+                maxUpAcc = np.max(sig[n:n + int(fs * .1)])
                 continue
 
             try:
@@ -176,6 +177,7 @@ def pausedTapDetector(
                 state='upAcc1'
                 tempi.append(n)  # START TIME Tap-UP
                 print('start of TAP/MOV', y, n)
+                maxUpAcc = np.max(sig[n:n + int(fs * .1)])
 
             elif np.logical_or(
                     np.logical_or(n in smallPos[0], n in smallNeg[0]),
@@ -197,75 +199,91 @@ def pausedTapDetector(
                     resttemp.append(n)  # start of rest period
                 
         elif state == 'upAcc1':
-            if n in smallPos[0]:  # PAUSED
-                state='upAcc2'  # after acc-peak, movement still accelerating
-                # print('peakpos1', n)
+            if y == maxUpAcc:
+                state='upAcc2'  # after acc-peak
 
-        elif state == 'upAcc2':
+        elif state == 'upAcc2':  # TRY OUT
             if y < 0:   #negThr < y < posThr:
-                state='upDec1'
-                ### TODO -> ADD THIS MOMENT AS MAX SPEED MOMENT
+                tempi.append(n)  # add moment of MAX UP-SPEED
+        #         state='upDec0'
+        #         maxUpDecc = np.min(sig[n:n + int(fs * .1)])
+
+        # elif state == 'upDec0':  # prevent taking an early small neg peak
+        #     if y == maxUpDecc:
+                state = 'upDec1'
+
         elif state=='upDec1':
-            if n - tempi[0] > (fs * peaksettings['cutoff_time']):
-                # if movement-up takes > defined cutoff time
-                state = 'otherMov'  # reset to start-state
-                movei.append(tempi)  # was untoggled?
-                tempi = []  # was untoggled?
-            elif n in smallNeg[0]:
+            # if n - tempi[0] > (fs * peaksettings['cutoff_time']):
+            #     # if movement-up takes > defined cutoff time
+            #     state = 'otherMov'  # reset to start-state
+            #     movei.append(tempi)  # was untoggled?
+            #     tempi = []  # was untoggled?
+            # elif n in smallNeg[0]:
+            if np.logical_and(
+                y < negThr, sigdf[n] > 0
+            ):  # ACC is increasing after neg peak
                 state='upDec2'
-                # print('peakneg1', n)
+                print('after lowpeak(UP) coming back up', n)
+
         elif state == 'upDec2':
             if y > 0:  #negThr < y < posThr:
                 state='highRest'
                 tempi.append(n)  # end of Up
-                # print('endUP', n)
+                print('endUP', n)
+
         elif state == 'highRest':
-            if n - tempi[1] > (fs * peaksettings['cutoff_time']):
+            if n - tempi[2] > (fs * peaksettings['cutoff_time']):
                 # if highrest takes > defined cutoff time
                 state = 'otherMov'  # reset to start-state
                 movei.append(tempi)  # was untoggled?
                 tempi = []  # was untoggled?
             elif np.logical_and(
-                y < negThr,
-                any([Y in largeNeg[0] for Y in range(n, n + int(fs * .2))])
+                # np.logical_and(
+                    y < negThr, sigdf[n] < negThr#,
+                # (any([Y in largeNeg[0] for Y in range(n, n + int(fs * .2))])
             ):
                 state='downAcc1'
+                print('START DOWN MOVEMENT', n)
                 tempi.append(n)  # start of Tap-DOWN
 
         elif state == 'downAcc1':
             if n in largeNeg[0]:
                 state='downAcc2'
-            elif n - tempi[2] > (fs * peaksettings['cutoff_time']):
-                # if down-move takes > defined cutoff time
+            elif np.logical_and(
+                y < negThr, sigdf[n] > posThr
+            ):
+                state='downAcc2'
+            elif n - tempi[3] > (fs * peaksettings['cutoff_time']):
                 state = 'otherMov'  # reset to start-state
-                movei.append(tempi)  # newly added
-                tempi = []  # newly added
+                movei.append(tempi)
+                tempi = []
 
         elif state == 'downAcc2':
-            if np.logical_or(
-                negThr < y < posThr,
-                y > posThr
+            if np.logical_and(
+                y < 0,
+                sigdf[n] > posThr
             ):
+                print('Fastest DOWN MOVEMENT', n)
+                tempi.append(n)  # fastest point in TAP-DOWN
                 state='downDec1'
-            elif n - tempi[2] > (fs * peaksettings['cutoff_time']):
-                # if down-move takes > defined cutoff time
+
+            elif n - tempi[3] > (fs * peaksettings['cutoff_time']):
                 state = 'otherMov'  # reset to start-state
-                movei.append(tempi)  # newly added
-                tempi = []  # newly added
+                movei.append(tempi)
+                tempi = []
                 
         elif state=='downDec1':
             if n in largePos[0]:
                 state='downDec2'
-            elif n - tempi[2] > (fs * peaksettings['cutoff_time']):
-                # if down-move takes > defined cutoff time
+            elif n - tempi[3] > (fs * peaksettings['cutoff_time']):
                 state = 'otherMov'  # reset to start-state
-                movei.append(tempi)  # newly added
-                tempi = []  # newly added
+                movei.append(tempi)
+                tempi = []
                 
         elif state == 'downDec2':
             if negThr < y < posThr:
                 state='lowRest'
-                tempi.append(n)  # end of DOWN
+                tempi.append(n)  # end point of DOWN-TAP
                 tapi.append(tempi)
                 tempi = []
 
@@ -275,7 +293,7 @@ def pausedTapDetector(
         endTaps = [tap[-1] for tap in tapi]
         movei_sel = []
         for tap in movei:
-            if min([abs(tap[0] - end) for end in endTaps]) > (.25 * fs):
+            if min([abs(tap[0] - end) for end in endTaps]) > (.2 * fs):
                 movei_sel.append(tap)
         movei = movei_sel
 
