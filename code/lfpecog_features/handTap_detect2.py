@@ -1,9 +1,7 @@
 '''Feature Extraction Preparation Functions'''
 
 # Import public packages and functions
-from xmlrpc.client import Boolean
 import numpy as np
-import matplotlib.pyplot as plt
 import os
 import pandas as pd
 from scipy.signal import find_peaks
@@ -11,10 +9,8 @@ from scipy.stats import variation
 from datetime import datetime, timedelta
 from itertools import compress
 
+# Import own functions
 
-
-# def conduct  -> PUT OVERALL CONDUCT FUNCTION AND BLOCKSAVE FUNCTION
-# IN DIFFERENT .PY-FILE
 
 def pausedTapDetector(
     fs: int, x=[], y=[], z=[], side='right',
@@ -126,7 +122,7 @@ def pausedTapDetector(
     posThr = np.percentile(posSig, 75)  # TRY OUT
     print(posThr, len(largePos[0]), len(largeNeg[0]))
     negThr = -posThr
-    for n, y in enumerate(sig):
+    for n, y in enumerate(sig[:-1]):
 
         if state == 'otherMov':
             if np.logical_and(
@@ -307,37 +303,6 @@ def pausedTapDetector(
 
     return tapTimes, moveTimes, restTimes
 
-
-def check_PosNeg_and_Order(
-    sig, fs,
-):
-    # check if pos/neg is switched in axis due to
-    # different placement during experiment
-    hop = 3
-    impacts = []
-    for n in np.arange(hop, fs * 5):
-        if np.logical_and(
-            any(np.diff(sig)[n - hop:n] >
-                np.percentile(sig, 90)),
-            any(np.diff(sig)[n- hop:n] <
-                np.percentile(sig, 10))
-        ):
-            impacts.append(n)
-    if len(impacts) < 10:
-        numImp = len(impacts)
-    else:
-        numImp = 10
-    # print(impacts, sig.shape)
-    # if the mean around the impact moments is negative
-    if np.mean([sig[impacts[i] - 2: impacts[i] + 2
-            ] for i in np.arange(1, numImp)]) < 0:
-        sig = sig * -1  # switch pos - neg
-    
-    # Check for order of magnitude
-    # if not in order of 1e-6, then covert
-    if sig.max() > 1e-4: sig = sig * 1e-6
-    
-    return sig
         
 
 def continTapDetector(
@@ -354,10 +319,9 @@ def continTapDetector(
     the in between stopping moments. 
 
     Input:
-        - x, y, z (arr): all three one-dimensional data-
-            arrays containing one acc-axis each. Exact
-            labeling x/y/z is not important. Should have equal
-            lengths. Typically timeseries from one run.
+        - x, y, z (arr): 1, 2, or 3 one-dimensional data-
+            arrays containing one acc-axis each, from same
+            assessment. Arrays must have equal lengths.
         - fs (int): corresponding sample frequency
         - side (string): side where acc-data origin from
     
@@ -384,15 +348,8 @@ def continTapDetector(
     assert side in ['left', 'right'], f'Side should be '
     'left or right'
 
-    ax_arrs = []
-    for ax in [x, y, z]:
-        if ax != []: ax_arrs.append(ax)
-    # Find axis with most variation
-    maxVar = np.argmax([variation(arr) for arr in ax_arrs])
-    # maxRMS = np.argmax([sum(arr) for arr in ax_arrays])
-    sig = ax_arrs[maxVar]  # acc-signal to use
-    # check data for pos/neg and order of magn
-    sig = check_PosNeg_and_Order(sig, fs)
+    axes, mainAxInd = check_PosNeg_and_Order(x, y, z, fs)
+    sig = axes[mainAxInd]
     
     # add differential of signal
     sigdf = np.diff(sig)
