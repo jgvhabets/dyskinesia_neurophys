@@ -11,35 +11,41 @@ def run_preproc_acc(
     to_detrend: bool=True,
     to_remove_outlier=True,
     to_check_magnOrder: bool=True,
-    to_check_polarity: bool=True
+    to_check_polarity: bool=True,
+    verbose: bool=True
 ):
     """
     Preprocess accelerometer according to defined steps
     """
     main_ax_index = find_main_axis(dat_arr)
-    
+
     if to_check_magnOrder: dat_arr = check_order_magnitude(
         dat_arr, main_ax_index)
 
     if to_detrend: dat_arr = detrend_bandpass(dat_arr, fs)
 
     if to_check_polarity: dat_arr = check_polarity(
-        dat_arr, main_ax_index, fs)
+        dat_arr, main_ax_index, fs, verbose)
 
     if to_remove_outlier: dat_arr = remove_outlier(
-        dat_arr, main_ax_index, fs)
+        dat_arr, main_ax_index, fs, verbose)
 
-    return dat_arr
+    return dat_arr, main_ax_index
 
 
 def find_main_axis(dat_arr):
     """
     Select acc-axis which recorded tapping the most
+
+    Input:
+        - dat_arr (arr): triaxial acc signals
+    Returns:
+        - main_ax_index (int): [0, 1, or 2], axis
+            with most tapping activity detected
     """
     maxs = np.max(dat_arr, axis=1)
     mins = abs(np.min(dat_arr, axis=1))
     main_ax_index = np.argmax(maxs + mins)
-    # main_axis = dat_arr[main_ax_index]
 
     return main_ax_index
 
@@ -62,7 +68,7 @@ def detrend_bandpass(
     return filt_dat
 
 
-def remove_outlier(dat_arr, main_ax_index, fs):
+def remove_outlier(dat_arr, main_ax_index, fs, verbose):
     """
     Removes large outliers, empirical threshold testing
     resulted in using a percentile multiplication.
@@ -77,7 +83,9 @@ def remove_outlier(dat_arr, main_ax_index, fs):
         main_ax < -thresh, main_ax > thresh)
     if np.sum(outliers) == 0: return dat_arr
 
-    print(f'{np.sum(outliers)} outlier-timepoints to remove')
+    if verbose: print(
+        f'{np.sum(outliers)} outlier-timepoints to remove'
+    )
     remove_i = np.zeros_like((main_ax))
     
     for i, outl in enumerate(outliers):
@@ -91,36 +99,31 @@ def remove_outlier(dat_arr, main_ax_index, fs):
 def check_order_magnitude(dat_arr, main_ax_index):
     """
     Checks and corrects if the order of magnitude of
-    the acc-signal is between 0 instead of 1e-6.
+    the acc-signal is in range [0 - 10] m/s/s, equal
+    to range in g (9.81 m/s/s).
+    Occasionaly sensor recordings are in order 1e-6,
+    or 1e6.
     """
-    # print('before', dat_arr[:, :10])
     if np.percentile(dat_arr[main_ax_index], 99) < 1e-2:
     
-        print('small magnitude detected')
         for i in range(dat_arr.shape[0]):
             dat_arr[i, :] = dat_arr[i, :] / 1e-6
     
     elif np.percentile(dat_arr[main_ax_index], 99) > 1e2:
     
-        print('large magnitude detected')
         for i in range(dat_arr.shape[0]):
             dat_arr[i, :] = dat_arr[i, :] * 1e-6
-    
-    else:
-        print('normal range')
-    
-    # print('after', dat_arr[:, :10])
 
     return dat_arr
 
 
-def check_polarity(dat_arr, main_ax_index: int, fs: int):
+def check_polarity(
+    dat_arr, main_ax_index: int, fs: int, verbose):
     """
     Check whether accelerometer was placed correctly.
     Correct is defined as when upwards movement is
     recorded as positive acceleration.
     """
-    print(f'Index chosen: {main_ax_index}')
     main_ax = dat_arr[main_ax_index]
     impacts = find_peaks(
         np.diff(main_ax),
@@ -138,7 +141,7 @@ def check_polarity(dat_arr, main_ax_index: int, fs: int):
             count += 1
 
     if (count / impacts.shape[0]) > .5:
-        # print('Pos/Neg switched')
+        if verbose: print('Pos/Neg switched')
         for i in range(dat_arr.shape[0]):
             dat_arr[i, :] = dat_arr[i, :] * -1
 

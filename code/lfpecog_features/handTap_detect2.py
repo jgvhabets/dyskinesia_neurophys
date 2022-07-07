@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 from itertools import compress
 
 # Import own functions
+import lfpecog_features.tapping_preprocess as preprocess
+from lfpecog_features.tapping_impact_finder import find_impacts
 
 
 def pausedTapDetector(
@@ -306,7 +308,7 @@ def pausedTapDetector(
         
 
 def continTapDetector(
-    fs: int, x=[], y=[], z=[], side='right',
+    acc_triax, main_ax_i: int, fs: int,
 ):
     """
     Detect the moments of finger-raising and -lowering
@@ -319,10 +321,11 @@ def continTapDetector(
     the in between stopping moments. 
 
     Input:
-        - x, y, z (arr): 1, 2, or 3 one-dimensional data-
-            arrays containing one acc-axis each, from same
-            assessment. Arrays must have equal lengths.
-        - fs (int): corresponding sample frequency
+        - acc_triax (arr): tri-axial accelerometer data-
+            array containing x, y, z.
+        - main_ax_i (int): index of axis which detected
+            strongest signal during tapping (0, 1, or 2)
+        - fs (int): sample frequency in Hz
         - side (string): side where acc-data origin from
     
     Return:
@@ -335,25 +338,8 @@ def continTapDetector(
             contains the first and last timestamp of move/rest
             period.
     """
-    # input sanity checks
-    if x != [] and y != []:
-        assert len(x) == len(y), f'Arrays X and Y should'
-        ' have equal lengths'
-    if x != [] and z != []:
-        assert len(x) == len(z), f'Arrays X and Z should'
-        ' have equal lengths'
-    if z != [] and y != []:
-        assert len(y) == len(z), f'Arrays X and Z should'
-        ' have equal lengths'
-    assert side in ['left', 'right'], f'Side should be '
-    'left or right'
-
-    axes, mainAxInd = check_PosNeg_and_Order(x, y, z, fs)
-    sig = axes[mainAxInd]
-    
-    # add differential of signal
+    sig = acc_triax[main_ax_i]
     sigdf = np.diff(sig)
-    # timestamps from start (in sec)
     timeStamps = np.arange(0, len(sig), 1 / fs)
 
     # Thresholds for movement detection
@@ -372,38 +358,39 @@ def continTapDetector(
         height=(posThr, np.max(sig)),
         distance=fs * .05,  # settings[task]['peak_dist']
     )[0]
-    # select Pos-peaks with surrounding >> Pos and Neg Diff
-    endPeaks = [np.logical_or(
-        any(sigdf[i -3:i + 3] < np.percentile(sig, 10)),
-        any(sigdf[i -3:i + 3] > np.percentile(sig, 90))
-    ) for i in posPeaks]
-    endPeaks = posPeaks[endPeaks]
-    # delete endPeaks from posPeaks
+    endPeaks = find_impacts(sig, 250)
+    # # select Pos-peaks with surrounding >> Pos and Neg Diff
+    # endPeaks = [np.logical_or(
+    #     any(sigdf[i -3:i + 3] < np.percentile(sig, 10)),
+    #     any(sigdf[i -3:i + 3] > np.percentile(sig, 90))
+    # ) for i in posPeaks]
+    # endPeaks = posPeaks[endPeaks]
+    # # delete endPeaks from posPeaks
     for i in endPeaks:
         idel = np.where(posPeaks == i)
         posPeaks = np.delete(posPeaks, idel)
-    # delete endPeaks which are too close after each other
-    # by starting with std False before np.diff, the diff- 
-    # scores represent the distance to the previous peak
-    tooclose = endPeaks[np.append(
-        np.array(False), np.diff(endPeaks) < (fs / 6))]
-    for p in tooclose:
-        i = np.where(endPeaks == p)
-        endPeaks = np.delete(endPeaks, i)
-        posPeaks = np.append(posPeaks, p)
-    # double check endPeaks with np.diff
-    hop = 3
-    endP2 = []
-    for n in np.arange(hop, sig.shape[0]):
-        if np.logical_and(
-            any(np.diff(sig)[n - hop:n] > np.percentile(sig, 90)),
-            any(np.diff(sig)[n- hop:n] < np.percentile(sig, 10))
-        ):  # if diff is above extremes within hop-distance
-            endP2.append(n)
-    endP2 = list(compress(endP2, np.diff(endP2) > hop))
-    for p2 in endP2:  # add to endPeaks if not containing
-        if min(abs(p2 - endPeaks)) > 5:
-            endPeaks = np.append(endPeaks, p2)
+    # # delete endPeaks which are too close after each other
+    # # by starting with std False before np.diff, the diff- 
+    # # scores represent the distance to the previous peak
+    # tooclose = endPeaks[np.append(
+    #     np.array(False), np.diff(endPeaks) < (fs / 6))]
+    # for p in tooclose:
+    #     i = np.where(endPeaks == p)
+    #     endPeaks = np.delete(endPeaks, i)
+    #     posPeaks = np.append(posPeaks, p)
+    # # double check endPeaks with np.diff
+    # hop = 3
+    # endP2 = []
+    # for n in np.arange(hop, sig.shape[0]):
+    #     if np.logical_and(
+    #         any(np.diff(sig)[n - hop:n] > np.percentile(sig, 90)),
+    #         any(np.diff(sig)[n- hop:n] < np.percentile(sig, 10))
+    #     ):  # if diff is above extremes within hop-distance
+    #         endP2.append(n)
+    # endP2 = list(compress(endP2, np.diff(endP2) > hop))
+    # for p2 in endP2:  # add to endPeaks if not containing
+    #     if min(abs(p2 - endPeaks)) > 5:
+    #         endPeaks = np.append(endPeaks, p2)
 
     smallNeg = find_peaks(
         -1 * sig,  # convert pos/neg for negative peaks

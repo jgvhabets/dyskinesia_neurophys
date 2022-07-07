@@ -14,24 +14,33 @@ def find_impacts(uni_arr, fs):
     thumb (or the leg) after moving down,
     also the 'closing moment'.
 
+    PM: *** include differet treshold values for good and
+    bad tappers; or check for numbers of peaks
+    detected and re-do with lower threshold in case
+    of too little peaks ***
+
     Input:
         - ax_arr: 1d-array of the acc-axis
             which recorded most variation /
             has the largest amplitude range.
     """
-    thresh = np.max(uni_arr) * .2
+    thresh = np.nanmax(uni_arr) * .2
     arr_diff = np.diff(uni_arr)
-    df_thresh = np.max(arr_diff) * .35
+    df_thresh = np.nanmax(arr_diff) * .35
     pos1 = find_peaks(
         np.diff(uni_arr),
-        height=[np.max(uni_arr) * .3, np.max(uni_arr)],
+        height=[np.nanmax(uni_arr) * .3, np.nanmax(uni_arr)],
         width=[1, 5],
     )[0]
+    pos1 = delete_too_close_peaks(
+        acc_ax=uni_arr, peak_pos=pos1,
+        min_distance=fs / 5
+    )
     
     # v2.0 method
     pos_peaks = find_peaks(
         uni_arr,
-        height=(thresh, np.max(uni_arr)),
+        height=(thresh, np.nanmax(uni_arr)),
         # distance=fs * .1,
     )[0]
 
@@ -46,22 +55,61 @@ def find_impacts(uni_arr, fs):
         uni_arr, impacts, rel_height=0.5)[0]
     sel = impact_widths < (fs / 40)  # 25 / 40
     impacts = impacts[sel]
-    
-    # INCLUDE EXCLUSION OF TOO CLOSE TOPS (PEAKS WITHIN 10 MSEC
-    # ): TAKE POINT WITH HIGHEST ACC-PEAK
-
-    # # delete endPeaks which are too close after each other
-    # # by starting with std False before np.diff, the diff- 
-    # # scores represent the distance to the previous peak
-    # tooclose = endPeaks[np.append(
-    #     np.array(False), np.diff(endPeaks) < (fs / 6))]
-    # for p in tooclose:
-    #     i = np.where(endPeaks == p)
-    #     endPeaks = np.delete(endPeaks, i)
-    #     posPeaks = np.append(posPeaks, p)
-
-    # print(len(pos1))
-    # print(len(pos2))
-    # print(len(pos2a))
+    impacts = delete_too_close_peaks(
+        acc_ax=uni_arr, peak_pos=impacts,
+        min_distance=fs / 5
+    )
 
     return pos1, impacts
+
+
+def delete_too_close_peaks(
+    acc_ax, peak_pos, min_distance
+):
+    """
+    Deletes tapping peaks which are too close on each
+    other.
+
+    Input:
+        - acc_ax (array): uni-axial acc-signal
+            from which the peaks are detected
+        - peak_pos (array): containing the samples
+            on which peaks are detected
+        - fs (int): sample frequency
+        - min_distance (int): peaks closer too each other
+            than this minimal distance (in samples)
+            will be removed
+    Returns:
+        - peak_pos: array w/ selected peak-positions
+    """
+    pos_diffs = np.diff(peak_pos)
+    del_impacts = []
+    acc_ax = np.diff(acc_ax)  # use diff as decision selection
+    for n, df in enumerate(pos_diffs):
+        if df < min_distance:
+            
+            pos1, pos2 = peak_pos[n], peak_pos[n + 1]
+            peak1, peak2 = acc_ax[pos1], acc_ax[pos2]
+            if peak1 >= peak2:
+                del_impacts.append(n + 1)
+
+            else:
+                del_impacts.append(n)
+            
+            for hop in [2, 3]:  # check distances to 2nd, 3rd
+                try:
+                    pos1, pos2 = peak_pos[n], peak_pos[n + hop]
+                    
+                    if (pos2 - pos1) < min_distance:
+                        peak1, peak2 = acc_ax[pos1], acc_ax[pos2]
+
+                        if peak1 >= peak2:
+                            del_impacts.append(n + hop)
+                        else:
+                            del_impacts.append(n)
+                except IndexError:
+                    pass
+    
+    peak_pos = np.delete(peak_pos, del_impacts)
+
+    return peak_pos

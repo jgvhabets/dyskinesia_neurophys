@@ -5,7 +5,35 @@ import numpy as np
 from itertools import compress
 
 # Import own functions
+from lfpecog_features.tapping_preprocess import run_preproc_acc, find_main_axis
 from lfpecog_features.handTap_detect2 import pausedTapDetector, continTapDetector
+
+
+def run_updrs_tapping(
+    acc_arr, fs: int, already_preprocd: bool=True
+):
+    """
+    Input:
+        - acc_arr (array): tri-axial acc array
+        - fs (int): sampling freq in Hz
+    """
+    if already_preprocd == False:
+        axes, main_ax_i = run_preproc_acc(
+            dat_arr=np.array(x, y, z),
+            fs=fs,
+            to_detrend=True,
+            to_check_magnOrder=True,
+            to_check_polarity=True,
+        )
+    else:
+        main_ax_i = find_main_axis(acc_arr)
+        
+    tapInd, tapTimes, endPeaks = continTapDetector(
+        acc_triax=acc_arr, fs=fs, main_ax_i=main_ax_i
+    )
+
+    return
+
 
 
 def runTapDetection(
@@ -13,6 +41,9 @@ def runTapDetection(
     leftxyz=[], rightxyz=[],
 ):
     """
+    ** USE FOR PAUSED TAPPING - MOVEMENT STATE DETECTION **
+
+
     Function for execution of (bilateral) tap-epoch
     detection. Detects for each side epochs of rest vs tap
     vs other movement. Then combines two sides to epochs

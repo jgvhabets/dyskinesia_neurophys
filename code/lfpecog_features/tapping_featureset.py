@@ -5,6 +5,28 @@ Functions to define tapping features
 import numpy as np
 
 
+def signalvectormagn(acc_arr):
+    """
+    Input:
+        - acc_arr (array): triaxial array
+            with x-y-z axes (3 x n_samples)
+    
+    Returns:
+        - svm (array): uniaxial array wih
+            signal vector magn (1, n_samples)
+    """
+    if acc_arr.shape[0] != 3: acc_arr = acc_arr.T
+    assert acc_arr.shape[0] == 3, ('Array must'
+    'be tri-axial (x, y, z from accelerometer')
+  
+    svm = np.sqrt(
+        acc_arr[0] ** 2 +
+        acc_arr[1] ** 2 +
+        acc_arr[2] ** 2
+    )
+
+    return svm
+
 def tapFt_duration(tapDict, fs):
     out = np.zeros(len(tapDict))
     for n, tap in enumerate(tapDict):

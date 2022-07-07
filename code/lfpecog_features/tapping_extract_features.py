@@ -36,19 +36,16 @@ class tapFeatures:
     RMS: Any = None
     
     def __post_init__(self,):
-        try:
-            if len(self.tapDict) > 0:
-                self.nTaps = len(self.tapDict)
-                self.nGoodTaps = sum(
-                    [np.nan not in t for t in self.tapDict])
-                self.duration = tap_feats.tapFt_duration(
-                    self.tapDict, self.fs)
-                self.freq = round(1 / self.duration.mean(), 1)
-                self.maxVelUp = tap_feats.tapFt_maxVeloUpwards(
-                    self.tapDict, self.accSig, self.fs)
-                self.dirChange = tap_feats.tapFt_dirChanges(
-                    self.tapDict, self.accSig,)
-                self.RMS = tap_feats.tapFt_RMS(
-                    self.tapDict, self.accSig,)
+        self.nTaps = len(self.tapDict)
+        self.nGoodTaps = sum(
+            [np.nan not in t for t in self.tapDict])
+        self.duration = tap_feats.tapFt_duration(
+            self.tapDict, self.fs)
+        self.freq = round(1 / self.duration.mean(), 1)
+        self.maxVelUp = tap_feats.tapFt_maxVeloUpwards(
+            self.tapDict, self.accSig, self.fs)
+        self.dirChange = tap_feats.tapFt_dirChanges(
+            self.tapDict, self.accSig,)
+        self.RMS = tap_feats.tapFt_RMS(
+            self.tapDict, self.accSig,)
         
-        except TypeError:  # without pre-detected taps

@@ -19,6 +19,17 @@ class accData:
     """
     Store On/Off-Acc trace per patient in 1 class
     uses .txt files, one file per on- / off-state.
+
+    Input:
+        - orig_fs (int): original sample freq (Hz)
+        - wanted_fs (int): sample freq to resample to (Hz)
+        - OnFile / OffFile (str): directory of .txt-file
+            containing tri-axial acc-data
+        - ...
+    
+    Returns:
+        - class containing preprocessed tri-axial
+            acc signal in attributes .On and .Off
     """
     # give at initiation
     orig_fs: int
@@ -29,6 +40,8 @@ class accData:
     to_resample: bool = False
     to_check_magnOrder: bool = True
     to_check_polarity: bool = True
+    to_remove_outlier: bool = True
+    verbose: bool = True
 
     def __post_init__(self,):
         if self.orig_fs != self.wanted_fs:
@@ -48,14 +61,15 @@ class accData:
                     (getattr(self, state).shape[0] // (
                         self.orig_fs // self.wanted_fs)),
                 ))
-
         for state in ['On', 'Off']:
-            processed_arr = preprocess.run_preproc_acc(
+            processed_arr, main_ax_i = preprocess.run_preproc_acc(
                 dat_arr=getattr(self, state),
                 fs=self.wanted_fs,
                 to_detrend=self.to_detrend,
                 to_check_magnOrder=self.to_check_magnOrder,
                 to_check_polarity=self.to_check_polarity,
+                to_remove_outlier=self.to_remove_outlier,
+                verbose=self.verbose
             )
             setattr(self, state, processed_arr)
 
@@ -64,6 +78,11 @@ class accData:
 def create_sub_side_lists(
     accFiles_dir,
 ):
+    """
+    Function to retrieve automatically available
+    updrs tapping traces.
+    PM: adjust in case of new data structure.
+    """
     sub_folders = os.listdir(accFiles_dir)
     acc_sel = ['Sub' in f for f in sub_folders]
     subs = list(compress(sub_folders, acc_sel))
@@ -92,3 +111,7 @@ def create_sub_side_lists(
     return sub_sides, sub_side_files
 
 
+# ### PM: Matlab files -> backup matlab reading script
+# matfiles = [f for f in os.listdir(dlFolder) if f[-3:] == 'mat']
+# acc = scipy.io.loadmat(os.path.join())
+# acc = acc.T
