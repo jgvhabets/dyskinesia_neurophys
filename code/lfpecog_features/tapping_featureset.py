@@ -4,6 +4,9 @@ Functions to define tapping features
 # Import general packages and functions
 import numpy as np
 
+# Import own functions
+from lfpecog_features.tapping_preprocess import find_main_axis
+
 
 def signalvectormagn(acc_arr):
     """
@@ -27,13 +30,146 @@ def signalvectormagn(acc_arr):
 
     return svm
 
-def tapFt_duration(tapDict, fs):
-    out = np.zeros(len(tapDict))
-    for n, tap in enumerate(tapDict):
-        l = (tap[-1] - tap[0]) / fs
-        out[n] = l
+
+def calc_RMS(acc_signal):
+    """
+    Calculate RMS over preselected uniaxial
+    acc-signal (can be uni-axis or svm)
+    """
+    S = np.square(acc_signal)
+    MS = S.mean()
+    RMS = np.sqrt(MS)
+
+    return RMS
+
+
+def tap_RMS(tapDict, triax_arr, ax, select: str='tap',
+    impact_window: float=.25, fs: int=0):
+    """
+    Calculates RMS of full acc-signal per tap.
+
+    Input:
+        - tapDict (dict result of tap-detect - 
+            continuous tap)
+        - triax_arr (array)
+        - select (str): if full -> return RMS per
+            full tap; if impact -> return RMS
+            around impact
+        - impact_window (float): in seconds, total
+            window around impact to calculate RMS
+        - fs (int): sample frequency, default is
+            zero to require input if impact is given
     
-    return out
+    Returns:
+        - RMS_uniax (arr)
+        - RMS_triax (arr)
+    """
+    select_options = ['run', 'tap', 'impact']
+    assert select in select_options, ('select '
+        'select variable incorrect for tap_RMS()')
+
+    ax = triax_arr[ax]
+    svm = signalvectormagn(triax_arr)
+
+    if select == 'run':
+        RMS_uniax = calc_RMS(ax)
+        RMS_triax = calc_RMS(svm)
+
+        return RMS_uniax, RMS_triax
+    
+    else:
+        RMS_uniax = np.zeros(len(tapDict))
+        RMS_triax = np.zeros(len(tapDict))
+
+        for n, tap in enumerate(tapDict):
+            tap = tap.astype(int)  # np.nan as int is -999999...
+
+            if select == 'tap':
+                sel1 = int(tap[0])
+                sel2 = int(tap[-1])
+
+            elif select == 'impact':
+                sel1 = int(tap[-2] - int(fs * impact_window / 2))
+                sel2 = int(tap[-2] + int(fs * impact_window / 2))
+
+            if np.logical_or(sel1 == np.nan, sel2 == np.nan):
+                print('tap skipped, missing indices')
+                continue
+            
+            tap_ax = ax[sel1:sel2]
+            tap_svm = svm[sel1:sel2]
+            
+            RMS_uniax[n] = calc_RMS(tap_ax)
+            RMS_triax[n] = calc_RMS(tap_svm)
+        
+        return RMS_uniax, RMS_triax
+
+
+def upTap_velocity(tapDict, triax_arr, ax):
+    """
+    Calculates velocity approximation via
+    area under the curve of acc-signal within
+    upwards part of a tap.
+
+    Input:
+        - tapDict
+        - triax_arr
+        - ax (int): main tap axis index
+    
+    Returns:
+        - upVelo_uniax (arr)
+        - upVelo_triax (arr)
+    """
+    ax = triax_arr[ax]
+    svm = signalvectormagn(triax_arr)
+
+    upVelo_uniax = velo_AUC_calc(tapDict, ax)
+    upVelo_triax = velo_AUC_calc(tapDict, svm)
+    
+    return upVelo_uniax, upVelo_triax
+
+import matplotlib.pyplot as plt
+
+def velo_AUC_calc(tapDict, accSig,):
+    """
+    Calculates max velocity during finger-raising
+    based on the AUC from the first big pos peak
+    in one tap until the acceleration drops below 0
+
+    Input:
+        - tapDict (dict): containing lists with 6-
+            timepoints per tap
+        - accSig (array): uniax acc-array (one ax or svm)
+    
+    Returns:
+        - out (array): one value or nan per tap in tapDict
+    """
+    out = []  #np.zeros(len(tapDict))
+
+    for n, tap in enumerate(tapDict):
+        if ~np.isnan(tap[1]):  # crossing 0 has to be known
+            # take acc-signal [start : fastest point] of rise
+            line = accSig[int(tap[0]):int(tap[1])]
+            areas = []
+            for s, y in enumerate(line[1:]):
+                areas.append(np.mean([y, line[s]]))
+            if sum(areas) == 0:
+                print('\nSUM 0',n, line[:30], tap[0], tap[1])
+            out.append(sum(areas))
+    # print('out', out)
+    
+    return np.array(out)
+
+
+
+
+# def tapFt_duration(tapDict, fs):
+#     out = np.zeros(len(tapDict))
+#     for n, tap in enumerate(tapDict):
+#         l = (tap[-1] - tap[0]) / fs
+#         out[n] = l
+    
+#     return out
 
 
 def tapFt_dirChanges(tapDict, accSig,):
@@ -61,52 +197,7 @@ def tapFt_dirChanges(tapDict, accSig,):
     return out
 
 
-def tapFt_RMS(tapDict, accSig,):
-    """
-    Calculates RMS of acc-signal within
-    each tap.
-    """
-    out = np.zeros(len(tapDict))
 
-    for n, tap in enumerate(tapDict):
-        tapSig = accSig[tap[0]:tap[-1]]
-        S = np.square(tapSig)
-        MS = S.mean()
-        RMS = np.sqrt(MS)
-        out[n] = RMS
-        
-    return out
-
-
-def tapFt_maxVeloUpwards(tapDict, accSig, fs):
-    """
-    Calculates max velocity during finger-raising
-    based on the AUC from the first big pos peak
-    in one tap until the acceleration drops below 0
-
-    Input:
-        - tapDict (dict)
-        - accSig (array)
-        - fs (int)
-    
-    Returns:
-        - out (array): one value or nan per tap in tapDict
-    """
-    out = np.zeros(len(tapDict))
-
-    for n, tap in enumerate(tapDict):
-        if tap[1] is not np.nan:  # crossing 0 has to be known
-            # take acc-signal [start : fastest point] of rise
-            line = accSig[tap[0]:tap[1]]
-            areas = []
-            for s, y in enumerate(line[1:]):
-                areas.append(np.mean([y, line[s]]))
-            out[n] = abs(sum(areas))
-
-        else:  # if crossing-0 point unknown
-            out[n] = np.nan
-    
-    return out
 
 
 

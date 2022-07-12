@@ -13,6 +13,7 @@ def find_impacts(uni_arr, fs):
     where the finger (or hand) lands on the
     thumb (or the leg) after moving down,
     also the 'closing moment'.
+    For NOW (07.07.22) work with v2!
 
     PM: *** include differet treshold values for good and
     bad tappers; or check for numbers of peaks
@@ -23,6 +24,12 @@ def find_impacts(uni_arr, fs):
         - ax_arr: 1d-array of the acc-axis
             which recorded most variation /
             has the largest amplitude range.
+        - fs (int): sample freq in Hz
+    
+    Returns:
+        - pos1: impact-positions of method v1
+        - impacts: impact-positions of method v2
+        (USE METHOD v2 FOR NOW)
     """
     thresh = np.nanmax(uni_arr) * .2
     arr_diff = np.diff(uni_arr)
@@ -41,7 +48,6 @@ def find_impacts(uni_arr, fs):
     pos_peaks = find_peaks(
         uni_arr,
         height=(thresh, np.nanmax(uni_arr)),
-        # distance=fs * .1,
     )[0]
 
     # select peaks with surrounding pos- or neg-DIFF-peak
@@ -50,17 +56,28 @@ def find_impacts(uni_arr, fs):
         any(arr_diff[i - 3:i + 3] > df_thresh)
     ) for i in pos_peaks]
     impacts = pos_peaks[impact_pos]
-    # excl too wide peaks
-    impact_widths = peak_widths(
-        uni_arr, impacts, rel_height=0.5)[0]
-    sel = impact_widths < (fs / 40)  # 25 / 40
-    impacts = impacts[sel]
+    
+    # impacts = delete_too_wide_peaks(
+    #     acc_ax=uni_arr, peak_pos=impacts,
+    #     max_width=fs / 40
+    # )
     impacts = delete_too_close_peaks(
         acc_ax=uni_arr, peak_pos=impacts,
-        min_distance=fs / 5
+        min_distance=fs / 10
     )
 
     return pos1, impacts
+
+
+def delete_too_wide_peaks(
+    acc_ax, peak_pos, max_width
+):
+    impact_widths = peak_widths(
+        acc_ax, peak_pos, rel_height=0.5)[0]
+    sel = impact_widths < max_width
+    peak_pos = peak_pos[sel]
+
+    return peak_pos
 
 
 def delete_too_close_peaks(

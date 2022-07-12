@@ -8,7 +8,9 @@ import os
 import numpy as np
 from dataclasses import dataclass, field
 from scipy.signal import resample
+from scipy.io import loadmat
 from itertools import compress
+import h5py
 
 # Import own functions
 import lfpecog_features.tapping_preprocess as preprocess
@@ -111,7 +113,13 @@ def create_sub_side_lists(
     return sub_sides, sub_side_files
 
 
-# ### PM: Matlab files -> backup matlab reading script
-# matfiles = [f for f in os.listdir(dlFolder) if f[-3:] == 'mat']
-# acc = scipy.io.loadmat(os.path.join())
-# acc = acc.T
+def matlab_import(filepath: str):
+    """
+    """
+    
+    try:  # try first (Matlab v until 7.3)
+        acc = loadmat(filepath)
+    except NotImplementedError:  # for Matlab > v7.3
+        acc = h5py.File(filepath, 'a')
+    
+    return acc

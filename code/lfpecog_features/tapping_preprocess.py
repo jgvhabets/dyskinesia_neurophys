@@ -4,6 +4,8 @@
 import numpy as np
 from scipy.signal import find_peaks, butter, filtfilt
 
+# Import own functions
+from lfpecog_features.tapping_impact_finder import find_impacts
 
 def run_preproc_acc(
     dat_arr,
@@ -16,7 +18,16 @@ def run_preproc_acc(
 ):
     """
     Preprocess accelerometer according to defined steps
+
+    Input:
+        - 
     """
+    # if len(dat_arr.shape) == 1:
+    #     temp = np.zeros((1, dat_arr.shape[0]))
+    #     temp[0, :] = dat_arr
+    #     dat_arr = temp
+
+    # print('start preprocess')
     main_ax_index = find_main_axis(dat_arr)
 
     if to_check_magnOrder: dat_arr = check_order_magnitude(
@@ -29,6 +40,8 @@ def run_preproc_acc(
 
     if to_remove_outlier: dat_arr = remove_outlier(
         dat_arr, main_ax_index, fs, verbose)
+    
+    # print('end preprocess')
 
     return dat_arr, main_ax_index
 
@@ -43,8 +56,16 @@ def find_main_axis(dat_arr):
         - main_ax_index (int): [0, 1, or 2], axis
             with most tapping activity detected
     """
-    maxs = np.max(dat_arr, axis=1)
-    mins = abs(np.min(dat_arr, axis=1))
+    if len(dat_arr.shape) == 2:
+        maxs = np.max(dat_arr, axis=1)
+        mins = abs(np.min(dat_arr, axis=1))
+
+    elif len(dat_arr.shape) == 1:
+        maxs = np.max(dat_arr, )
+        mins = abs(np.min(dat_arr,))
+    else:
+        return print('Check shape data array inserted')
+
     main_ax_index = np.argmax(maxs + mins)
 
     return main_ax_index
@@ -117,6 +138,9 @@ def check_order_magnitude(dat_arr, main_ax_index):
     return dat_arr
 
 
+
+import matplotlib.pyplot as plt
+
 def check_polarity(
     dat_arr, main_ax_index: int, fs: int, verbose):
     """
@@ -124,11 +148,20 @@ def check_polarity(
     Correct is defined as when upwards movement is
     recorded as positive acceleration.
     """
+    
     main_ax = dat_arr[main_ax_index]
-    impacts = find_peaks(
-        np.diff(main_ax),
-        height=np.percentile(main_ax, 99)
-    )[0]
+
+    # plt.figure(figsize=(24,12))
+    # plt.plot(dat_arr.T, alpha=.5)
+    # plt.plot(np.diff(main_ax))
+    # plt.axhline(np.percentile(main_ax, 99))
+    # plt.show()
+    _, impacts = find_impacts(main_ax, fs)
+    # impacts = find_peaks(
+    #     np.diff(main_ax),
+    #     height=np.percentile(main_ax, 99)
+    # )[0]
+    assert len(impacts) > 0, 'No impacts-peaks detected'
 
     count = 0    
     for pos in impacts:

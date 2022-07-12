@@ -351,146 +351,77 @@ def continTapDetector(
         'cutoff_time': .25,
     }
 
-    # find relevant positive peaks
+    _, impacts = find_impacts(sig, fs)  # use v2 for now
+
     posPeaks = find_peaks(
         sig,
         height=(posThr, np.nanmax(sig)),
-        distance=fs * .05,  # settings[task]['peak_dist']
+        distance=fs * .05,
     )[0]
-    _, impacts = find_impacts(sig, fs)  # use v2 for now
 
     for i in impacts:
         idel = np.where(posPeaks == i)
         posPeaks = np.delete(posPeaks, idel)
 
-    smallNeg = find_peaks(
-        -1 * sig,  # convert pos/neg for negative peaks
-        height=(-.5e-7, abs(np.nanmin(sig)) * .5),
+    negPeak = find_peaks(
+        -1 * sig,
+        height=-.5e-7,
         distance=fs * peaksettings['peak_dist'] * .5,
         prominence=abs(np.nanmin(sig)) * .05,
-        # wlen=40,
     )[0]
-
-    # largeNeg = find_peaks(
-    #     -1 * sig,
-    #     height=abs(np.nanmin(sig)) * .4,
-    #     # first value is min, second is max
-    #     distance=fs * peaksettings['peak_dist'],
-    #     # prominence=np.min(yEpoch) * .1,
-    #     # wlen=40,
-    # )[0]
-    # # remove impacts from large neg
 
     # Lists to store collected indices and timestamps
     tapi = []  # list to store indices of tap
-    movei = []  # list to store indices of other move
-    resti = []  # list to store indices of rest
-    resttemp = []  # temp-list to collect rest-indices [1st, Last]
-    starttemp = [np.nan] * 6  # for during detection process
-    # [startUP, fastestUp, stopUP, 
-    #  startDown, fastestDown, stopDown]
-    tempi = starttemp.copy()  # to start process
+    empty_timelist = np.array([np.nan] * 7)
+    # [startUP, fastestUp, stopUP, startDown, fastestDown, impact, stopDown]
+    tempi = empty_timelist.copy()
     state = 'lowRest'
+    post_impact_blank = int(fs / 1000 * 15)  # 10 msec
+    blank_count = 0
 
     # Sample-wise movement detection        
     for n, y in enumerate(sig[:-1]):
 
-        if state == 'otherMov':
-            # PM LEAVE OUT OTHER-MOV-STATE
-            if n in impacts:  # during other Move: end Tap
-                tempi[-1] = n  # finish and store index list
-                if (tempi[-1] - tempi[0]) > fs * .1:
-                    movei.append(tempi)  # save if long enough
-                state='lowRest'
-                tempi = starttemp.copy()  # after end: start lowRest
+        if n in impacts:
+            state = 'impact'
+            tempi[5] = n
+        
+        elif state == 'impact':
+            if blank_count < post_impact_blank:
+                blank_count += 1
                 continue
-
-            try:
-                next10 = sum(
-                    [negThr < Y < posThr for Y in sig[range(
-                        n, n + int(fs * .2)
-                    )]]
-                )
-                if next10 > (fs * .2) * .8:
-                    # End 'other move' if 8 / 10 next samples are inactive
-                    tempi[-1] = n  # END of OTHER MOVE
-                    if (tempi[-1] - tempi[0]) > fs * .1:
-                        movei.append(tempi)
-                    tempi = starttemp.copy()  # after end: start lowRest
-                    state = 'lowRest'
-            except IndexError:  # prevent indexerror out of range for next10
-                # print('end of timeseries')
-                continue
+            
+            else:
+                if sigdf[n] > 0:
+                    blank_count = 0
+                    tempi[6] = n
+                    tapi.append(np.array(tempi))
+                    tempi = empty_timelist.copy()
+                    state='lowRest'
+                    
 
         elif state == 'lowRest':
             if np.logical_and(
-                y > posThr,  # if value is over pos-threshold
-                sigdf[n] > np.percentile(sigdf, 75)  # AND diff is over Thr
-                # any([Y in posPeaks for Y in range(n, n + int(fs * .2))])  # USED IN PAUSED
-            ):
-                if resttemp:  # close and store active rest period
-                    resttemp.append(n)  # Add second and last rest-ind
-                    if (resttemp[1] - resttemp[0]) > fs:  # if rest > 1 sec
-                        resti.append(resttemp)  # add finished rest-indices
-                    resttemp = []  # reset resttemp list
-                
+                y > posThr,
+                sigdf[n] > np.percentile(sigdf, 75)
+            ):                
                 state='upAcc1'
-                tempi[0] = n  # START TIME Tap-UP
-                # print('save start UP', n)
-
-            # elif np.logical_or(
-            #         np.logical_or(n in posPeaks, n in smallNeg[0]),
-            #         ~ (negThr < y < posThr)
-            # ):
-
-            #     if resttemp:  # close and store active rest period
-            #         resttemp.append(n)  # Add second and last rest-ind
-            #         if (resttemp[1] - resttemp[0]) > fs:  # if rest > 1 sec
-            #             resti.append(resttemp)  # add finished rest-indices
-            #         resttemp = []  # reset resttemp list
-                # state = 'otherMov'
-                # tempi.append(n)  # START TIME Othermovement
-            
-            elif n in impacts:  # during lowRest, endPeak found
-                resttemp.append(n)  # Add second and last rest-ind
-                if (resttemp[1] - resttemp[0]) > fs:  # if rest > 1 sec
-                    resti.append(resttemp)  # add finished rest-indices
-                resttemp = []  # reset resttemp list
-                state='lowRest'
-                tempi = starttemp.copy()  # after end: start lowRest
-                continue
-
-            else:  # lowRest stays lowRest
-                if not resttemp:  # if rest-temp list is empty
-                    resttemp.append(n)  # start of rest period
+                tempi[0] = n  # START OF NEW TAP, FIRST INDEX
                 
         elif state == 'upAcc1':
             if n in posPeaks:
                 state='upAcc2'
-                # acc getting less, veloc still increasing
-                # print('acc-peakUP detected', n)
-
-            elif n in impacts:
-                state = 'downDec2'
-                # emergency out if endPeak is found
 
         elif state == 'upAcc2':
             if y < 0:  # crossing zero-line, start of decelleration
                 tempi[1] = n  # save n as FASTEST MOMENT UP
                 state='upDec1'
-                # print('fastest point UP', n)
-
-            elif n in impacts:
-                state = 'downDec2'
-                # emergency out if endPeak is found
 
         elif state=='upDec1':
-            if n in smallNeg:
+            if n in posPeaks:  # later peak found -> back to up-accel
+                state='upAcc2'
+            elif n in negPeak:
                 state='upDec2'
-
-            elif n in impacts:
-                state = 'downDec2'
-                # emergency out if endPeak is found
 
         elif state == 'upDec2':
             if np.logical_or(y > 0, sigdf[n] < 0):
@@ -499,90 +430,26 @@ def continTapDetector(
                 state='highRest'  # end of UP-decell
                 tempi[2]= n  # END OF UP !!!
 
-            elif n in impacts:
-                state = 'downDec2'
-                # emergency out if impact is found
-
         elif state == 'highRest':
             if np.logical_and(
                 y < negThr,
-                sigdf[n] < 0  #np.percentile(sigdf, 25)
-                # from highRest: LOWERING starts when acc
-                # gets below negative-threshold AND when
-                # differential is negative
+                sigdf[n] < 0
             ):
                 state='downAcc1'
-                tempi[3] = n  # START OF LOWERING
-                # print('LOWERING START', n)
-            
-            elif n in impacts:
-                state = 'downDec2'
-                # emergency out if endPeak is found
+                tempi[3] = n  # START OF LOWERING            
 
-        # elif state == 'downAcc1':
-        #     if n in largeNeg[0]:
-        #         state='downAcc2'
-        #     elif n - tempi[2] > (fs * peaksettings[task]['cutoff_time']):
-        #         # if down-move takes > defined cutoff time
-        #         state = 'otherMov'  # reset to start-state
-        #         movei.append(tempi)  # newly added
-        #         tempi = []  # newly added
-
-        # elif state == 'downAcc2':
         elif state == 'downAcc1':
             if np.logical_and(
                 y > 0,
                 sigdf[n] > 0
             ):
-            # if acceleration gets positive again and keeps
-            # one increasing (sigdf) downwards acceleration
-            # is finished -> ADD FASTEST DOWNW MOMENT
                 state='downDec1'
-                tempi[4] = n
-                # print('fastest DOWN @', n)
-            elif n in impacts:
-                state = 'downDec2'
-                # emergency out if endPeak is found
+                tempi[4] = n  # fastest down movement
 
-
-            # elif n - tempi[2] > (fs * peaksettings[task]['cutoff_time']):
-            #     # if down-move takes > defined cutoff time
-            #     state = 'otherMov'  # reset to start-state
-            #     movei.append(tempi)  # newly added
-            #     tempi = []  # newly added
-
-        elif state == 'downDec1':
-            if n in impacts:  # --> AT START?
-                state = 'downDec2'
-
-        elif state=='downDec2':
-            # if np.logical_or(
-            #     y < 0,
-            #     sigdf[n] < 0
-            # ):  # after large pos-peak, around impact
-            if y < 0:
-            # artefectual peaks
-                state='lowRest'
-                tempi[5] = n
-                # store current indices
-                tapi.append(tempi)
-                tempi = starttemp.copy()  # restart w/ 6*nan
     
-    # drop first tap due to starting time
-    tapi = tapi[1:]
-    # convert detected indices-lists into timestamps
-    tapTimes = []  # list to store timeStamps of tap
-    # moveTimes = []  # alternative list for movements
-    # restTimes = []  # list to sore rest-timestamps
-    for tap in tapi: tapTimes.append(
-        [timeStamps[I] for I in tap if I is not np.nan]
-    )
-    # for tap in movei: moveTimes.append(timeStamps[tap])
-    # for tap in resti: restTimes.append(timeStamps[tap])
+    tapi = tapi[1:]  # drop first tap due to starting time
 
-    ## TODO return all 6-digit taps in array (ntaps, 6)
-
-    return tapi, tapTimes, impacts
+    return tapi, impacts
 
 
 def saveAllEphysRestblocks(
