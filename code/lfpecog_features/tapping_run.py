@@ -7,7 +7,8 @@ from itertools import compress
 from typing import Any
 
 # Import own functions
-from lfpecog_features.tapping_time_detect import continTapDetector
+from lfpecog_features.tapping_time_detect import continTapDetector, pausedTapDetector
+from lfpecog_features.tapping_preprocess import run_preproc_acc, find_main_axis
 
 
 def run_updrs_tapping(
@@ -132,16 +133,6 @@ def runTapDetection(
                 restDict = mergeBilatDict(restDict, fs)
             
             return restDict, tapDict, moveDict
-
-
-        # elif task == 'cont':
-        #     print('start continuous tapping detection')
-        #     tapInd, tapTimes, endPeaks = continTapDetector(
-        #         fs=fs, x=axes[0, :], y=axes[1, :], z=axes[2, :],
-        #         side=s,
-        #     )
-
-        #     return tapInd, tapTimes, endPeaks
 
 
 
