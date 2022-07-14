@@ -11,6 +11,7 @@ from scipy.signal import resample
 from scipy.io import loadmat
 from itertools import compress
 import h5py
+from pandas import read_csv
 
 # Import own functions
 import lfpecog_features.tapping_preprocess as preprocess
@@ -77,9 +78,7 @@ class accData:
 
 
 
-def create_sub_side_lists(
-    accFiles_dir,
-):
+def find_run_IDs(accFiles_dir):
     """
     Function to retrieve automatically available
     updrs tapping traces.
@@ -96,7 +95,7 @@ def create_sub_side_lists(
 
     for sub, sub_dir in zip(subs, sub_dirs):
         sub_files = os.listdir(sub_dir)
-
+        ### TODO: ADD POSSIBILITT OF 3 MONTHS FOLLOW UP
         for S in ['L', 'R']:
             if f'{sub}_12mfu_M0_{S}Hand.txt' in sub_files:
                 sub_sides.append(f'{sub}_{S}')
@@ -123,3 +122,51 @@ def matlab_import(filepath: str):
         acc = h5py.File(filepath, 'a')
     
     return acc
+
+
+def tap3x10_updrs_scores(
+    file_dir, file_name
+):
+    """
+    Imports and categories updrs subscores
+
+    Inputs:
+        - filedir: directory of file
+        - filename: name of file
+        - acc_runids: subjects-side-state
+            included in accelerometer import
+            and block extraction
+    """
+    scoreTable = read_csv(
+        os.path.join(file_dir, file_name)
+    )
+    IDs = [sub[3:6] for sub in scoreTable['PerceptID']]
+    IDs = list(set(IDs))
+
+    block_scores = {}
+    run_IDs = []
+
+    for id in IDs:
+        for side in ['L', 'R']:
+            for med in ['Off', 'On']:
+                run_IDs.append(f'{id}_{side}_{med}')
+
+    for run_id in run_IDs:
+        block_scores[run_id] = {'stimOn': [], 'stimOff': []}
+        strings = run_id.split(sep='_')
+        sub = strings[0]
+        side = strings[1]
+        med = strings[2]
+
+        for row in range(scoreTable.shape[0]):
+
+            if sub[1:3] in scoreTable['PerceptID'].iloc[row][:6]:
+                if scoreTable['Hand'].iloc[row] == side:
+                    if scoreTable['Block_N'].iloc[row] in [1, 2, 3]:
+                        block_scores[run_id]['stimOn'].append(
+                            scoreTable[f'Med{med}_StimOn'].iloc[row])
+                        block_scores[run_id]['stimOff'].append(
+                            scoreTable[f'Med{med}_StimOff'].iloc[row])
+    
+    return block_scores
+

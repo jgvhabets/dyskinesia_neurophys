@@ -84,10 +84,9 @@ class tapFeatures:
         if type(self.updrsSubScore) == str or np.str_:
             self.updrsSubScore = float(self.updrsSubScore)
 
-        # # in progress
-        # self.nGoodTaps = sum(
-        #     [np.nan not in t for t in self.tapDict])
-        
+        ## CONSIDER TO ADD MEAN-STDDEV-COEFVAR-RANGE-TREND-etc
+        ## of Tap-Features to Class
+
         # hesitations
         # # self.dirChange = tap_feats.tapFt_dirChanges(
         # #     self.tapDict, self.triax_arr,)

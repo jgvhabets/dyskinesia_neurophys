@@ -7,7 +7,6 @@ from itertools import compress
 from typing import Any
 
 # Import own functions
-from lfpecog_features.tapping_preprocess import run_preproc_acc, find_main_axis
 from lfpecog_features.tapping_time_detect import continTapDetector
 
 

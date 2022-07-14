@@ -5,23 +5,39 @@ Function to detect continuous tapping blocks
 
 # Import public packages and functions
 import numpy as np
+import matplotlib.pyplot as plt
+from os.path import join
 
 # Import own functions
 from lfpecog_features.tapping_featureset import signalvectormagn
+from lfpecog_features.tapping_preprocess import find_main_axis
 
 def find_active_blocks(
     acc_arr, fs, buff=5, buff_thr=.1, blocks_p_sec=8,
-    act_wins_for_block = 2, verbose = True
+    act_wins_for_block=2, to_plot=True, verbose=True,
+    figsave_dir: str='', figsave_name: str='',
 ):
     """
-    Function detects tapping blocks in triaxial acc
-    array. Is based on blocks with enough activity above
-    standard deviation of the recording. Doesn't
-    select on block length.
+    Detects tapping blocks in triaxial acc array.
+    First determines which windows are above a threshold,
+    this threshold is based on the std-dev (default .5 SD).
+    The creates longer blocks, every block contains
+    several windows, and based on the part of active
+    windows, a block is made active.
+    Then merges active-blocks too close to each other (to 
+    merge two blocks from the same tapping movement), and
+    removes active blocks too small (small non-tap movements).
+
     Input:
         - acc_arr: tri-axial acc-array
         - fs (int): sample frequency
-        - ...
+        - buff_thr (float): part of window that has
+            to increase the (> std-dev) threshold to
+            be set active
+        - blocks_p_sec (int): divide one second by n blocks
+        - act_wins_for_block: number of windows that have to
+            be active to set a block as active
+    
     Returns:
         - acc_blocks (list): list containing one
             2d array with triaxial acc-data per block
@@ -31,7 +47,7 @@ def find_active_blocks(
             sampled indices)
     """
     sig = signalvectormagn(acc_arr)
-    thresh = np.nanstd(sig)
+    thresh = np.nanstd(sig) * .5
 
     winl = int(fs / blocks_p_sec)
     # activity per window (acc > std.dev)
@@ -57,23 +73,30 @@ def find_active_blocks(
             else:
                 continue
 
-    for rep in range(4):
+    for rep in range(8):
         block_indices = merge_close_blocks(
             block_indices=block_indices,
             min_distance=blocks_p_sec * 2,
             verbose=verbose
         )
-    
-    # PM later: removing too short blocks/ in analysis
 
     block_indices = convert_win_ind_2_sample_ind(
         block_indices=block_indices, fs=fs, winl=winl,
     )
+
+    block_indices = remove_short_blocks(
+        block_indices=block_indices, fs=fs, min_length=2.5,
+    )
+
     acc_blocks = convert_sample_ind_2_acc_arrays(
         acc_arr, block_indices
     )
 
     if verbose: report_detected_blocks(block_indices, fs)
+    if to_plot: plot_blocks(
+        acc_arr, block_indices, fs, 
+        figsave_dir, figsave_name,
+    )
 
     return acc_blocks, block_indices
 
@@ -82,6 +105,9 @@ def merge_close_blocks(
     block_indices, min_distance, verbose
 ):
     """
+    Merges blocks with a too small distance to
+    each other. Blocks are still expreseed in windows,
+    not yet in samples.
     """
     new_block_indices = {'start': [], 'end': []}
 
@@ -124,6 +150,40 @@ def merge_close_blocks(
                 block_indices['end'][win]
             )
     if verbose: print(f'Blocks merged: {mergecount}')
+
+    return new_block_indices
+
+
+def remove_short_blocks(
+    block_indices: dict, fs: int, min_length: float,
+):
+    """
+    Removes blocks which are shorter then defined
+    seconds
+    
+    Inputs:
+        - block_indices (dict): current block-indices
+            in array sample frequency samples
+        - fs (int): sampling freq
+        - min_length (float): minimal block duration
+            in seconds
+    
+    Returns:
+        - block_indices (dict): selected block indices
+    """
+    new_block_indices = {'start': [], 'end': []}
+    min_samples = min_length * fs
+
+    for start, end in zip(
+        block_indices['start'], block_indices['end']
+    ):
+        if (end - start) < min_samples:
+            continue
+        
+        else:
+            new_block_indices['start'].append(start)
+            new_block_indices['end'].append(end)
+    
     return new_block_indices
 
 
@@ -175,6 +235,56 @@ def report_detected_blocks(block_indices, fs):
     print(f'# {len(block_lengths)} tapping blocks detec'
             f'ted, lengths (in sec): {block_lengths}')
 
+
+def plot_blocks(
+    acc_arr, block_indices, fs, 
+    figsave_dir, figsave_name,
+):
+    """
+    Plots overview of selected blocks and main axes
+    """
+    mainax = find_main_axis(acc_arr)
+    otheraxes = [0, 1, 2]
+    otheraxes.remove(mainax)
+
+    fig, ax = plt.subplots(1, 1, figsize=(24,12))
+    ax.plot(
+        acc_arr[mainax],
+        label=f'Main Axis ({mainax})',
+        alpha=.8,
+    )
+    for axis in otheraxes:
+        ax.plot(
+            acc_arr[axis],
+            label=f'Axis ({axis})',
+            alpha=.4,
+        )
+
+    for pos1, pos2 in zip(
+        block_indices['start'], block_indices['end']
+    ):
+        ax.fill_betweenx(
+            y=np.arange(5.5,6.1,.5),
+            x1=pos1, x2=pos2,
+            color='red', alpha=.3,
+            label='detected tapping blocks')
+        ax.set_xlabel(f'Samples ({fs} Hz)', fontsize=16)
+        ax.set_ylabel('Acceleration (in g in m/s/s)', fontsize=16)
+        ax.set_title(figsave_name, size=20)
+
+
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    plt.legend(
+        by_label.values(), by_label.keys(),
+        frameon=False, fontsize=16,
+        ncol=4, loc='lower center'
+    )
+    plt.savefig(
+        join(figsave_dir, figsave_name),
+        dpi=150, facecolor='w',
+    )
+    plt.close()
 
 
 """
