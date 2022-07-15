@@ -11,6 +11,9 @@ from scipy.stats import linregress, variation
 from itertools import compress
 from os.path import join
 
+# Import own fucntions
+from lfpecog_features.tapping_feat_calc import aggregate_arr_fts
+
 
 def combineFeatsPerScore(
     ftDict: dict, fts_include, merge_method: str,
@@ -62,64 +65,24 @@ def combineFeatsPerScore(
 
                 if tempscore.size == 0: continue
 
-                elif merge_method == 'allin1':
+                if merge_method == 'allin1':
                     if np.isnan(tempscore).any():
                         tempscore[~np.isnan(tempscore)]
                     ft_per_score[s].extend(tempscore)  # all in one big list
 
-                elif merge_method == 'mean':
+                else:
                     ft_per_score[s].append(
-                        np.nanmean(tempscore)
-                    )
-
-                elif merge_method == 'stddev':
-                    tempscore = normalize_var_fts(tempscore)
-                    ft_per_score[s].append(
-                        np.nanstd(tempscore)
-                    )
-
-                elif merge_method == 'sum':
-                    ft_per_score[s].append(
-                        np.sum(tempscore)
-                    )
-
-                elif merge_method == 'coefVar':
-                    tempscore = normalize_var_fts(tempscore)
-                    ft_per_score[s].append(
-                        variation(tempscore)
-                    )
-
-                elif merge_method == 'trend_slope':
-                    try:
-                        linreg = linregress(
-                            np.arange(tempscore.shape[0]), tempscore
+                        aggregate_arr_fts(
+                            method=merge_method,
+                            arr=tempscore
                         )
-                        slope, R = linreg[0], linreg[2]
-                        ft_per_score[s].append(slope)
-                    except ValueError:
-                        continue
-
-                elif merge_method == 'trend_R':
-                    try:
-                        linreg = linregress(
-                            np.arange(tempscore.shape[0]), tempscore
-                        )
-                        slope, R = linreg[0], linreg[2]
-                        ft_per_score[s].append(R)
-                    except ValueError:
-                        continue
+                    )
 
         feat_dict_out[ft_sel] = ft_per_score
 
     return feat_dict_out
 
 
-def normalize_var_fts(ft_list):
-    ft_list = np.array(ft_list)
-    ft_max = np.percentile(ft_list, 99)
-    ft_out = ft_list / ft_max
-
-    return list(ft_out)
 
 def clean_list_of_lists(dirty_lists):
     """
