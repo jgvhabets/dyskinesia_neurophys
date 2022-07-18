@@ -39,21 +39,6 @@ class tapFeatures:
     impacts: Any
     tapDict: dict = field(default_factory=dict)
     updrsSubScore: Any = False
-    # nTaps: int = field(default_factory=int)
-    # tap_durations: Any = None
-    # freq1: float = field(default_factory=float)
-    # freq2: float = field(default_factory=float)
-    # RMS_ax: Any = None
-    # RMS_svm: Any = None
-    # upVelo_ax: Any = None
-    # upVelo_svm: Any = None
-
-    
-    # nGoodTaps: int = field(default_factory=int)
-    
-    # maxVelUp: Any = None  #float = field(default_factory=float)
-    # dirChange: Any = None
-    
     
     def __post_init__(self,):
         ax = find_main_axis(self.triax_arr)
@@ -84,14 +69,14 @@ class tapFeatures:
         if type(self.updrsSubScore) == str or np.str_:
             self.updrsSubScore = float(self.updrsSubScore)
 
-        ## CONSIDER TO ADD MEAN-STDDEV-COEFVAR-RANGE-TREND-etc
-        ## of Tap-Features to Class
+        self.dirChange_run = tap_feats.smallSlopeChanges(
+            self.triax_arr, resolution='run',
+        )
+        
+        self.dirChange_taps = tap_feats.smallSlopeChanges(
+            self.triax_arr, resolution='taps', tapDict=self.tapDict,
+        )
 
-        # hesitations
-        # # self.dirChange = tap_feats.tapFt_dirChanges(
-        # #     self.tapDict, self.triax_arr,)
-        
-        
         # clear up space
         self.triax_arr = 'cleaned up'
         

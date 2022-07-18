@@ -128,7 +128,9 @@ def upTap_velocity(tapDict, triax_arr, ax):
     
     return upVelo_uniax, upVelo_triax
 
+
 import matplotlib.pyplot as plt
+
 
 def velo_AUC_calc(tapDict, accSig,):
     """
@@ -147,6 +149,7 @@ def velo_AUC_calc(tapDict, accSig,):
     out = []  #np.zeros(len(tapDict))
 
     for n, tap in enumerate(tapDict):
+
         if ~np.isnan(tap[1]):  # crossing 0 has to be known
             # take acc-signal [start : fastest point] of rise
             line = accSig[int(tap[0]):int(tap[1])]
@@ -161,43 +164,71 @@ def velo_AUC_calc(tapDict, accSig,):
     return np.array(out)
 
 
+def smallSlopeChanges(
+    tempacc, resolution: str, n_hop: int=1,
+    tapDict = []
+):
+    """
+    Detects the number of small changes in
+    direction of acceleration.
+    Hypothesized is that best tappers, have
+    the smoothest acceleration-trace and
+    therefore lower numbers of small
+    slope changes
 
-
-# def tapFt_duration(tapDict, fs):
-#     out = np.zeros(len(tapDict))
-#     for n, tap in enumerate(tapDict):
-#         l = (tap[-1] - tap[0]) / fs
-#         out[n] = l
+    Inputs:
+        - acc (array): tri-axial acceleration
+            signal from e.g. 10-s tapping
+        - n_hop (int): the number of samples used
+            to determine the difference between
+            two points
     
-#     return out
-
-
-def tapFt_dirChanges(tapDict, accSig,):
+    Returns:
+        - count (int): number of times the
+            differential of all thee seperate
+            axes changed in direction.
     """
-    Calculates how often differential
-    of acc-signal crossed the zero-line
-    per tap.
-    Uses a smoothened line of np.diff
-    """
-    out = np.zeros(len(tapDict))
+    if resolution == 'run':
 
-    kernel_size = 10
-    kernel = np.ones(kernel_size) / kernel_size
-
-    for n, tap in enumerate(tapDict):
-        tapSig = accSig[tap[0]:tap[-1]]
-        dfSm = np.convolve(
-            np.diff(tapSig), kernel, mode='same')
         count = 0
-        for i, df in enumerate(dfSm[1:]):
-            if df * dfSm[i] < 0: count += 1
+        for ax in [0, 1, 2]:
 
-        out[n] = count
-        
-    return out
+            diftemp = np.diff(tempacc[ax])
+            for i in np.arange(diftemp.shape[0] - n_hop):
+                if -1 < diftemp[i + n_hop] * diftemp[i] < 0:
+                    count += 1
 
+    elif resolution == 'taps':
 
+        countlist = []
 
+        for tap in tapDict:
+
+            if np.logical_or(
+                np.isnan(tap[0]),
+                np.isnan(tap[-1])
+            ):
+                continue
+
+            elif len(tap) == 0:
+                continue
+            
+            else:
+                tap_acc = tempacc[:, int(tap[0]):int(tap[-1])]
+                count = 0
+
+                for ax in [0, 1, 2]:
+                    diftemp = np.diff(tap_acc[ax])
+
+                    for i in np.arange(diftemp.shape[0] - n_hop):
+                        if -1 < diftemp[i + n_hop] * diftemp[i] < 0:
+                            count += 1
+                
+                countlist.append(count)
+
+        count = np.array(countlist)
+
+    return count
 
 
 
