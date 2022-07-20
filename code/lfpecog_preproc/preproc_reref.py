@@ -59,7 +59,7 @@ def LeadLevels():
     return Leads
 
 
-@ dataclass
+@dataclass
 class Segm_Lead_Setup:
     """
     Class which stores levels and contacts of different
@@ -168,7 +168,8 @@ def reref_common_average(data, ch_names):
     return newdata, newnames
 
 
-def reref_segm_levels(data: array, lead: Any, reportfile: str):
+def reref_segm_levels(
+    data: array, lead: Any, reportfile=None):
     """
     Function to aggregate/sum all segmented electrode contacts
     which belong to same level. The function takes into
@@ -186,11 +187,13 @@ def reref_segm_levels(data: array, lead: Any, reportfile: str):
         - reref_data (array): rereferenced signals
         - names (list): list with corresponding ch-names
     """
+    if reportfile:
+        with open(reportfile, 'a') as f:
+            f.write(
+                f'\nRereferencing: {lead.name} ({lead.side}) '
+                'against mean of neighbouring level'
+            )
 
-    ### TODO: write functionality with 2d-array input
-    with open(reportfile, 'a') as f:
-        f.write(f'\nRereferencing: {lead.name} ({lead.side}) '
-                 'against mean of neighbouring level')
     print(f'\n Rereferencing {lead.name} ({lead.side})'
           f' against means of neighbouring levels')
 
@@ -202,6 +205,7 @@ def reref_segm_levels(data: array, lead: Any, reportfile: str):
         ))  # data array to store contact-means per level
         leveldata[:, 0, :] = data[:, 0, :]  # copy time row
         data=data[:, 1:, :]  # only contact-channels, drop time
+
     if len(data.shape) == 2:
         leveldata = np.empty((
             lead.n_levels + 1,
@@ -216,21 +220,25 @@ def reref_segm_levels(data: array, lead: Any, reportfile: str):
         # loops over levels of lead
         ch_stop += len(lead.levels_str[l])
         # starts at 0, incl numb of clean contacts per level
+
         if len(data.shape) == 3:    
             leveldata[:, l + 1, :] = np.nanmean(
                 data[:, ch_start:ch_stop, :], axis=1
             )  # row is l + 1 bcs of time in first row
+
         if len(data.shape) == 2:
             leveldata[l + 1, :] = np.nanmean(
                 data[ch_start:ch_stop, :], axis=0
             )  # row is l + 1 bcs of time in first row
-        # write in txt-file to check and document
-        with open(reportfile, 'a') as f:
-            f.write(  # documenting incl contacts per level
-                f'\nLevel {lead.side, l} '
-                f'contains rows {ch_start}:{ch_stop}'
-                f', or: {lead.levels_str[l]}'
-            )
+
+        if reportfile:
+            with open(reportfile, 'a') as f:
+                f.write(  # documenting incl contacts per level
+                    f'\nLevel {lead.side, l} '
+                    f'contains rows {ch_start}:{ch_stop}'
+                    f', or: {lead.levels_str[l]}'
+                )
+        
         ch_start = ch_stop  # updating start row
 
     rerefdata, names = reref_neighb_levels_diff(
@@ -367,7 +375,7 @@ def reref_segm_contacts(
 
 def rereferencing(
     data: dict, group: str, runInfo: Any, chs_clean: list,
-    reportfile:str, lfp_reref: str=None,
+    lfp_reref: str, reportfile: str=None, report=False,
 ):
     """
     Function to execute rereferencing of LFP and ECoG data.
@@ -390,34 +398,41 @@ def rereferencing(
         - names (list): strings of row names, 'times',
         all reref'd signal channels
     """
-    # existing report file is deleted in main-script
-    with open(reportfile, 'a') as f:
-        f.write('\n\n======= REREFERENCING OVERVIEW ======\n')
- 
-    if group == 'ecog':
+    if reportfile: report = True
+    if report:
         with open(reportfile, 'a') as f:
             f.write(
-                f'For {group}: Common Average Reref\n'
+        '\n\n======= REREFERENCING OVERVIEW ======\n'
             )
-        # print(f'\nFor {group}: Common Average Reref')
+ 
+    if group[:4] == 'ecog':
+        if report:
+            with open(reportfile, 'a') as f:
+                f.write(
+                    f'For {group}: Common Average Reref\n'
+                )
+        
         rerefdata, names = reref_common_average(
             data=data, ch_names=chs_clean
         )
 
     elif group[:3] == 'lfp':
         if 'time' in chs_clean: chs_clean.remove('time')
-        side = chs_clean[0][4]  # takes 'L' or 'R'
-        with open(reportfile, 'a') as f:
-            f.write(
-                f'For {group}: Rereferencing '
-                f'per separate {lfp_reref}.\n'
-            )
+        
+        side = chs_clean[0][4]
+        
+        if report:
+            with open(reportfile, 'a') as f:
+                f.write(
+                    f'For {group}: Rereferencing '
+                    f'per separate {lfp_reref}.\n'
+                )
 
         lead_type = runInfo.lead_type  # code for lead-type
         lead = Segm_Lead_Setup(lead_type, side, chs_clean)
         
         if lfp_reref == 'levels':
-            # averaging each level, subtracting neighbour
+
             rerefdata, names = reref_segm_levels(
                 data=data,
                 lead=lead,
@@ -425,7 +440,7 @@ def rereferencing(
             )
 
         elif lfp_reref == 'segments':
-            # using only own level mean to reref
+
             rerefdata, names = reref_segm_contacts(
                 data=data,
                 lead=lead,
@@ -439,24 +454,25 @@ def rereferencing(
         if len(rerefdata.shape) == 3:
             if not (np.isnan(rerefdata[:, ch, :]) == False).any():
                 ch_del.append(ch)
-        if len(rerefdata.shape) == 2:
+
+        elif len(rerefdata.shape) == 2:
             if not (np.isnan(rerefdata[ch, :]) == False).any():
                 ch_del.append(ch)
     
     rerefdata = np.delete(rerefdata, ch_del, axis=-2)
-    # very important to delete rows based on rownumber
-    # in once, to prevent chancing row nrs during deletion!
-    with open(reportfile, 'a') as f:
-        f.write(
-            f'\n\n Auto Cleaning:\n In {group}: row(s) {ch_del} ('
-            f'{[names[c] for c in ch_del]}) only contained NaNs and'
-            ' were deleted\nRemaining number of rows (incl time) is'
-            f' {rerefdata.shape[-2]}. If 1: group will be removed!'
-        ) 
+    # delete rows in once, to prevent changing row nrs during deletion
     if ch_del:
         names_del = [names[c] for c in ch_del]
         for name in names_del: names.remove(name)
 
+    if report:
+        with open(reportfile, 'a') as f:
+            f.write(
+                f'\n\n Auto Cleaning:\n In {group}: row(s) {ch_del} ('
+                f'{[names[c] for c in ch_del]}) only contained NaNs and'
+                ' were deleted\nRemaining number of rows (incl time) is'
+                f' {rerefdata.shape[-2]}. If 1: group will be removed!'
+            )
 
     return rerefdata, names
 

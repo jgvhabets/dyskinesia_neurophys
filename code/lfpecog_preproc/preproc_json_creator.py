@@ -1,4 +1,6 @@
 '''
+CONSIDER NECESSITY IN UPADTED WORKFLOW
+
 *** PM: Change in notebook to make including different
 runs from dir-lists easier. ***
 
@@ -30,12 +32,13 @@ import os
 import json
 
 # Define json-files to create + if fig's should be plotted
-create_settings = False
+create_settings = True
 create_runinfo = True
 plot_figures = True
 lfp_reref_method = 'levels'  # 'levels' or 'segments'
 
 if __name__ == '__main__':
+
     if create_settings:
         '''
         MANUAL INPUT FOR PREPROCESS-SETTINGS:
@@ -47,16 +50,14 @@ if __name__ == '__main__':
         lfp_settings = [1024, 4, (1, 120), 10, 2, 4000, 800, sett_version]
         ecog_settings = [1024, 4, (1, 120), 10, 2, 4000, 800, sett_version]
     
-
-        # rest of code
-        proj_path = os.getcwd()  # projectpath
+        proj_path = os.getcwd()
         data_path = os.path.join(proj_path, 'data')
         json_dir = os.path.join(
             data_path, 'preprocess', 'preprocess_jsons'
         )
-        print(f'\nCheck if project_path is correct: {proj_path}\n')
+        print(f'\nJSONs saved to directory: {json_dir}\n')
         
-        dict_settings = {  # dict to write into json
+        dict_to_write = {
             'lfp': lfp_settings,
             'ecog': ecog_settings,
             'plot_figs': plot_figures,
@@ -64,13 +65,16 @@ if __name__ == '__main__':
         }
 
         f = os.path.join(json_dir, f'settings_{sett_version}.json')
-        if os.path.isfile(f):
-            print(f'\n### WARNING ###\nSettings-JSON {sett_version} does '
-                  'already exist, create new name for current version\n')
-        if not os.path.isfile(f):
-            with open(f, 'w') as jsonfile:
-                json.dump(dict_settings, jsonfile, indent=4)
-    
+        
+        assert ~os.path.isfile(f), print(
+            f'\n### WARNING ###\nSettings-JSON {sett_version} does '
+            'already exist, create new name for current version\n'
+        )
+        
+        with open(f, 'w') as jsonfile:
+            json.dump(dict_to_write, jsonfile, indent=4)
+
+
     if create_runinfo:
         '''
         MANUAL INPUT FOR RUNINFO-SETTINGS:
