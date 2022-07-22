@@ -10,11 +10,15 @@ https://www.jneurosci.org/content/39/22/4299
 
 # Import packages and functions
 from array import array
-import os
+from itertools import compress
 from collections import namedtuple
 from dataclasses import dataclass
 from typing import Any
 import numpy as np
+
+# Import own functions
+from tapping_feat_calc import nan_array
+
 
 def LeadLevels():
     '''
@@ -34,27 +38,31 @@ def LeadLevels():
         'BS_VC_X MT_SS BS_VC'  # extent when necessary
     )
     Leads = LeadLevels(
+        
         {  # first: BS_VC_X Boston Sc Verc Cart X
-        0: [0, 1, 2],  # lowest/deepest in brain
-        1: [3, 4, 5],
-        2: [6, 7, 8],
-        3: [9, 10, 11],
-        4: [12, 13, 14],
-        5: [15, ]  # highest, closest to skull
+            0: [0, 1, 2],  # lowest/deepest in brain
+            1: [3, 4, 5],
+            2: [6, 7, 8],
+            3: [9, 10, 11],
+            4: [12, 13, 14],
+            5: [15, ]  # highest, closest to skull
         },
+        
         {  # second: MT_SS: MedTronic SenseSight
-        0: [0, ],  # lowest
-        1: [1, 2, 3],
-        2: [4, 5, 6],
-        3: [7, ]   # highest
+            0: [0, ],  # lowest
+            1: [1, 2, 3],
+            2: [4, 5, 6],
+            3: [7, ]   # highest
         },
+        
         {  # third: BS_VC: Boston Sc Vercise Cart
-        0: [0, ],  # lowest
-        1: [1, 2, 3],
-        2: [4, 5, 6],
-        3: [7, ]   # highest
+            0: [0, ],  # lowest
+            1: [1, 2, 3],
+            2: [4, 5, 6],
+            3: [7, ]   # highest
         },
-        )
+    
+    )
 
     return Leads
 
@@ -74,20 +82,16 @@ class Segm_Lead_Setup:
     code: str
     side: str
     chs_clean: list
-    name: str = None  # full description of lead-type
-    n_levels: int = None  # number of levels on lead
-    n_contacts: int = None  # number of total contacts
-    levels_str: dict = None  # dict with channel-names per level
-    levels_num: dict = None  # numerical lead-setup per level
-    level_rows: dict = None  # correspoding data array-rows
-    # in clean channels in level_str
     
     def __post_init__(self):
         Leads = LeadLevels()  # create Leads-tuple
-        fullnames = {'BS_VC_X': 'BS Vercise Cartesia X',
-                     'MT_SS': 'MT SenseSight',
-                     'BS_VC': 'BS Vercise Cartesia',
-                     }
+
+        fullnames = {
+            'BS_VC_X': 'BS Vercise Cartesia X',
+            'MT_SS': 'MT SenseSight',
+            'BS_VC': 'BS Vercise Cartesia',
+        }
+
         self.name = fullnames[self.code]
         self.levels_num = getattr(Leads, self.code)
         self.n_levels = len(self.levels_num)
@@ -96,9 +100,11 @@ class Segm_Lead_Setup:
         )  # sums the length of every level-list in the dict
 
         # lists of all contact-names per level (regardless clean)
-        contacts = [f'LFP_{self.side}_{n}_'
+        contacts = [f'LFP_{self.side}_{str(n).zfill(2)}_'
             for n in np.arange(1, self.n_contacts + 1)]
+
         self.levels_str = {}
+
         for l in self.levels_num:  # loops over keys (=levels)
             nums = self.levels_num[l]  # takes num-list
             # creates list per level with string-names
@@ -107,25 +113,33 @@ class Segm_Lead_Setup:
         # exclude channels not in clean-channel list
         combi_str = '\t'.join(self.chs_clean)  # all strings to one
         self.level_rows = {}
+
         startrow = 1  # row 0 is time
+        
         for l in self.levels_str:  # loops over levels
+        
             to_del = []  # channels to remove per level
             for c in self.levels_str[l]:
                 # if ch-name is not in clean-channel combi-str
                 if c not in combi_str:
                     to_del.append(c)
+
             for c in  to_del: self.levels_str[l].remove(c)
+
             # create dict's with rows of data
             self.level_rows[l] = list(np.arange(
                 startrow, startrow + len(self.levels_str[l])
             ))
             startrow += len(self.levels_str[l])
+
             assert (len(self.level_rows[l]) == 
                 len(self.levels_str[l])), 'Wrong level-dicts'
             # keeps only clean channels in these dict's
 
 
-def reref_common_average(data, ch_names):
+def reref_common_average(
+    data, group, ch_names, report='',
+):
     """
     Function to perform Common Average Rereferencing.
     Default in ECoG signal processing.
@@ -141,9 +155,15 @@ def reref_common_average(data, ch_names):
         signals re-referenced by extracting the mean over
         all signals for each channel
     """
-    print(f'\n ECoG Rereferencing: Common Average')
-    newdata = np.empty(data.shape)  # empty array with same shape
-    newnames = [n[:8] for n in ch_names]
+    newdata = nan_array(list(data.shape))  # was empty_like
+    newnames = [n[:9] for n in ch_names]
+    
+    if report:
+        report += (
+            f'\n\n\tCommon Average Reref ({group})\n'
+            f'\nRaw-Names: {ch_names}\n\n'
+            f'Names after Rereferencing: {newnames}'
+        )
 
     if len(data.shape) == 3:
         newdata[:, 0, :] = data[:, 0, :]  # copy time rows
@@ -165,11 +185,13 @@ def reref_common_average(data, ch_names):
             newdata[ch + 1, :] = data[ch, :] - ref_mean
 
 
-    return newdata, newnames
+    return newdata, newnames, report
 
 
 def reref_segm_levels(
-    data: array, lead: Any, reportfile=None):
+    data: array, lead: Any, 
+    timerowNames, report='',
+):
     """
     Function to aggregate/sum all segmented electrode contacts
     which belong to same level. The function takes into
@@ -180,6 +202,7 @@ def reref_segm_levels(
         - data (array): 3d or 2d data array
         - lead (Class): class with info of segmented contacts
         per level
+        - timerowNames: list with 1 or 2 time col-names
         - report_file  (str -> path): file incl directory where rereferencing
         notes are written to
 
@@ -187,69 +210,87 @@ def reref_segm_levels(
         - reref_data (array): rereferenced signals
         - names (list): list with corresponding ch-names
     """
-    if reportfile:
-        with open(reportfile, 'a') as f:
-            f.write(
-                f'\nRereferencing: {lead.name} ({lead.side}) '
-                'against mean of neighbouring level'
-            )
+    if report:
 
-    print(f'\n Rereferencing {lead.name} ({lead.side})'
+        report += (
+            f'\nRereferencing: {lead.name} ({lead.side}) '
+            'per total level minus neighbouring level'
+        )
+
+    print(f'\n Rereferencing SEGM {lead.name} ({lead.side})'
           f' against means of neighbouring levels')
 
+    n_timerows = len(timerowNames)
+
     if len(data.shape) == 3:
-        leveldata = np.empty((
+
+        leveldata = nan_array(dim=[
             data.shape[0],
-            lead.n_levels + 1,
+            lead.n_levels + n_timerows,
             data.shape[2]
-        ))  # data array to store contact-means per level
-        leveldata[:, 0, :] = data[:, 0, :]  # copy time row
-        data=data[:, 1:, :]  # only contact-channels, drop time
+        ])
+        leveldata[:, :n_timerows, :] = data[:, :n_timerows, :]
+        only_data=data[:, n_timerows:, :]
 
     if len(data.shape) == 2:
-        leveldata = np.empty((
-            lead.n_levels + 1,
-            data.shape[1]
-        ))  # data array to store contact-means per level
-        leveldata[0, :] = data[0, :]  # copy time row
-        data=data[1:, :]  # only contact-channels, drop time
 
+        leveldata = nan_array(dim=[
+            lead.n_levels + n_timerows,
+            data.shape[1]
+        ])
+        leveldata[:n_timerows, :] = data[:n_timerows, :]
+        only_data=data[n_timerows:, :]
+    
     ch_start = 0
     ch_stop = 0
     for l in np.arange(lead.n_levels):
-        # loops over levels of lead
+
+        print(lead.levels_str[l])
+        
         ch_stop += len(lead.levels_str[l])
         # starts at 0, incl numb of clean contacts per level
 
-        if len(data.shape) == 3:    
-            leveldata[:, l + 1, :] = np.nanmean(
-                data[:, ch_start:ch_stop, :], axis=1
-            )  # row is l + 1 bcs of time in first row
+        if len(only_data.shape) == 3:    
+            
+            leveldata[:, l + n_timerows, :] = np.nanmean(
+                only_data[:, ch_start:ch_stop, :], axis=1
+            )
 
-        if len(data.shape) == 2:
-            leveldata[l + 1, :] = np.nanmean(
-                data[ch_start:ch_stop, :], axis=0
-            )  # row is l + 1 bcs of time in first row
+        if len(only_data.shape) == 2:
 
-        if reportfile:
-            with open(reportfile, 'a') as f:
-                f.write(  # documenting incl contacts per level
-                    f'\nLevel {lead.side, l} '
-                    f'contains rows {ch_start}:{ch_stop}'
-                    f', or: {lead.levels_str[l]}'
-                )
+            leveldata[l + n_timerows, :] = np.nanmean(
+                only_data[ch_start:ch_stop, :], axis=0
+            )
+
+        if report:
+            report += (  # documenting incl contacts per level
+                f'\nLevel {lead.side, l} '
+                f'contains row indices {ch_start}:{ch_stop}'
+                f', with corr contacts: {lead.levels_str[l]}'
+            )
+
+        print(  # documenting incl contacts per level
+            f'\nLevel {lead.side, l} '
+            f'contains row indices {ch_start}:{ch_stop}'
+            f', with corr contacts: {lead.levels_str[l]}'
+        )
         
         ch_start = ch_stop  # updating start row
 
-    rerefdata, names = reref_neighb_levels_diff(
+    rerefdata, names = reref_neighb_levels_subtract(
         leveldata=leveldata, side=lead.side,
+        timerowNames=timerowNames,
     )
 
-    return rerefdata, names
+    if report:
+        report += f'\n\tNew resulting names: {names}'
+
+    return rerefdata, names, report
 
 
-def reref_neighb_levels_diff(
-    leveldata: array, side: str):
+def reref_neighb_levels_subtract(
+    leveldata: array, side: str, timerowNames: list,
+):
     """
     Function to calculate differences between neighbouring
     eletrode levels. These can come from unsegmented
@@ -260,6 +301,7 @@ def reref_neighb_levels_diff(
         - level (array): 3d array containing [windows,
         time- and level-rows, window_lenght]
         - side (str): L or R for recorded hemisphere
+        - timerowNames: list with 1 or 2 time col-names
 
     Returns:
         - newdata (array): rereferenced signals. These
@@ -269,30 +311,43 @@ def reref_neighb_levels_diff(
         to the array: 'times', followed by the reref'd
         level-diffs, e.g. 0_1, 3_4
     """
-    sig_names = ['time', ]
+    sig_names = timerowNames
+
     if len(leveldata.shape) == 3:
-        newdata = np.empty((
+
+        newdata = nan_array(dim=[
             leveldata.shape[0],
             leveldata.shape[1] - 1,
             leveldata.shape[2],
-        ))
-        newdata[:, 0, :] = leveldata[:, 0, :]  # copy times
-        # subtract the level above one level from every level 
-        newdata[:, 1:, :] = np.subtract(
-            leveldata[:, 1:-1, :], leveldata[:, 2:, :]
+        ])
+        newdata[
+            :, :len(timerowNames), :] = leveldata[
+                :, :len(timerowNames), :
+        ]  # copy time rows
+        
+        newdata[  # subtract neighbour-level for all levels w/ neighbour 
+            :, len(timerowNames):, :
+        ] = np.subtract(
+            leveldata[:, len(timerowNames):-1, :],
+            leveldata[:, len(timerowNames) + 1:, :]
         )
+    
     if len(leveldata.shape) == 2:
-        newdata = np.empty((
+
+        newdata = nan_array(dim=[
             leveldata.shape[0] - 1,
             leveldata.shape[1]
-        ))
-        newdata[0, :] = leveldata[0, :]  # copy times
+        ])
+        newdata[0, len(timerowNames)] = leveldata[0, len(timerowNames)]  # copy times
         # subtract the level above one level from every level 
-        newdata[1:, :] = np.subtract(
-            leveldata[1:-1, :], leveldata[2:, :]
+        newdata[len(timerowNames):, :] = np.subtract(
+            leveldata[len(timerowNames):-1, :],
+            leveldata[len(timerowNames) + 1:, :]
         )
+
     # adding signal names (Channel N minus N + 1)
     for level in np.arange(newdata.shape[-2] - 1):
+
         # shape[-2] gives row number for 2d and 3d arrays
         sig_names.append(f'LFP_{side}_{level}_{level + 1}')
 
@@ -300,16 +355,19 @@ def reref_neighb_levels_diff(
 
 
 def reref_segm_contacts(
-    data: array, lead: Any, reportfile: str
+    data: array, lead: Any, timerowNames,
+    report: str='',
 ):
     """
     Function for local spatial specific rereferencing
     of segmented-lead contacts.
 
     Arguments:
-        - data (array): 3d data array
+        - data (array): 3d or 2d data array with data
+            from one group (lfp R or L)
         - lead: class with info of segmented contacts
         per level
+        - timerowNames: list with 1 or 2 time col-names
         - report_file (str -> path): file incl directory where rereferencing
         notes are written to
 
@@ -317,39 +375,59 @@ def reref_segm_contacts(
         - reref_data (array): rereferenced signals
         - names (list): list with corresponding ch-names
     """
-    with open(reportfile, 'a') as f:
-        f.write(f'\nRereferencing: {lead.name} ({lead.side}) '
-                ' against other contacts of same level')
-    print(f'\n Rereferencing {lead.name} ({lead.side})'
-          f' against other contacts of same level')
+    if report:
+        report += (
+            f'\nRereferencing: {lead.name} ({lead.side}) '
+            'per segmented contact (segment 1 minus '
+            'averaged other segm-contacts of same level'
+        )
+
+    print(f'\n Rereferencing SEGM {lead.name} ({lead.side})'
+          f' per SEGM-CONTACT against mean of own level')
+
     # every contact gets it rerferenced output
-    reref_data = np.empty_like((data))
+    reref_data = nan_array(list(data.shape))  # np.empty_like((data))
+
     if len(data.shape) == 3:
         reref_data[:, 0, :] = data[:, 0, :]  # copy time row
+
     if len(data.shape) == 2:
         reref_data[0, :] = data[0, :]  # copy time row
-    names = ['time', ]
+
+    rerefnames = timerowNames
+
     for l in lead.level_rows:  # loop over level
         chs = lead.level_rows[l]  # row numbers of channels
+
         if len(chs) > 1:  # if avail neighb channel on level
+
             for n, c in enumerate(chs):  # loop over contacts
+
                 refs = chs.copy()  # channels to use as ref
                 refs.remove(c)  # remove ch of interest itself
+
                 # take mean of other channel-rows as reference
                 print(f'Row REFS {refs}, SHAPE {data.shape}')
+
                 if len(data.shape) == 3:
                     ref = np.nanmean(data[:, refs, :], axis=1)
                     reref_data[:, c, :] = data[:, c, :] -  ref
-                if len(data.shape) == 2:
+
+                elif len(data.shape) == 2:
                     ref = np.nanmean(data[refs, :], axis=0)
                     reref_data[c, :] = data[c, :] -  ref
-                names.append(lead.levels_str[l][n])
+
+                rerefnames.append(lead.levels_str[l][n])
                 # done, only test + put lfp_reref in filename!!
-                with open(reportfile, 'a') as f:
-                    f.write(f'\n(level {l}) contact-row {c} is '
-                            f'rereferenced against rows {refs}')
+                
+                if report:
+                    report += (
+                        f'\n(level {l}) contact-row {c} is '
+                        f'rereferenced against rows {refs}'
+                    )
 
         elif len(chs) == 1:  # if not ring or 1 ch available
+
             try:  # reref against a neighbouring level
                 refs = lead.level_rows[l + 1]  # reref: sup. level
             except KeyError:  # highest contact has no [l + 1]
@@ -360,29 +438,34 @@ def reref_segm_contacts(
             if len(data.shape) == 2:
                 ref = np.nanmean(data[refs, :])
                 reref_data[chs, :] = data[chs, :] -  ref
-            names.append(lead.levels_str[l][0])
-            with open(reportfile, 'a') as f:
-                f.write(f'\n(level {l}) Contact {lead.levels_str[l]}'
-                        f' is rereferenced against {refs}')
+            
+            rerefnames.append(lead.levels_str[l][0])
+            
+            if report:
+                report += (
+                    f'\n(level {l}) Contact {lead.levels_str[l]}'
+                    f' is rereferenced against {refs}'
+                )
 
         else:
-            with open(reportfile, 'a') as f:
-                f.write(f'\n(level {l}) has no valid channels'
-                        f' {lead.levels_str[l]}')
+            if report:
+                report += (
+                    f'\n(level {l}) has no valid channels'
+                    f' {lead.levels_str[l]}'
+                )
 
-    return reref_data, names
+    return reref_data, rerefnames, report
 
 
-def rereferencing(
-    data: dict, group: str, runInfo: Any, chs_clean: list,
-    lfp_reref: str, reportfile: str=None, report=False,
+def main_rereferencing(
+    dataDict: dict, chNameDict, runInfo: Any,
+    lfp_reref: str, reportPath: str='',
 ):
     """
     Function to execute rereferencing of LFP and ECoG data.
     
     Arguments:
-        - data: 2d or 3d-array, containing one group
-        - group: signal group inserted (LFP-L/R, ECoG)
+        - data: 2d or 3d-array, containing dict w/ groups
         - runInfo: class containing runInfolead_type:
         abbreviation for lead given in
         data class RunInfo (e.g. BSX, MTSS)
@@ -398,83 +481,110 @@ def rereferencing(
         - names (list): strings of row names, 'times',
         all reref'd signal channels
     """
-    if reportfile: report = True
-    if report:
-        with open(reportfile, 'a') as f:
-            f.write(
+    report = (
         '\n\n======= REREFERENCING OVERVIEW ======\n'
-            )
- 
-    if group[:4] == 'ecog':
-        if report:
-            with open(reportfile, 'a') as f:
-                f.write(
-                    f'For {group}: Common Average Reref\n'
-                )
+    )
+
+    rerefData = {}
+    rerefNames = {}
+
+    for group in dataDict.keys():
+
+        if group[:3] not in ['lfp', 'eco']:
+            report += f'\n Skip REREFERENCING for {group}'
+            continue
+    
+        else:
+            report += f'\n START {group} REREFERENCING'
         
-        rerefdata, names = reref_common_average(
-            data=data, ch_names=chs_clean
+        timerow_sel = ['time' in name for name in chNameDict[group]]
+        timerowNames = list(compress(chNameDict[group], timerow_sel))
+
+        if group[:4] == 'ecog':
+            
+            rerefData[group], rerefNames[group], report = reref_common_average(
+                data=dataDict[group], ch_names=chNameDict[group],
+                group=group, report=report,
+            )
+
+        elif group[:3] == 'lfp':
+
+            if 'time' in chNameDict[group]:   ### CHECK AND CHANGE
+                chNameDict[group].remove('time')
+            
+            if group[4:] == 'left': side = 'L'  #chNameDict[group][0][4]
+            if group[4:] == 'right': side = 'R'
+
+            lead_type = runInfo.lead_type  # code for lead-type
+            lead = Segm_Lead_Setup(lead_type, side, chNameDict[group])
+            
+            if lfp_reref == 'levels': reref_function = reref_segm_levels
+            elif lfp_reref == 'segments': reref_function = reref_segm_contacts
+
+            rerefData[group], rerefNames[group], report = reref_function(
+                data=dataDict[group],
+                lead=lead,
+                timerowNames=timerowNames,
+                report=report,
+            )
+            print(f'\tFor group {group}: NEW CHANNEL_NAMES: {rerefNames[group]}')
+
+        rerefData[group], rerefNames[group], report = removeNaNchannels(
+            rerefData[group], rerefNames[group],
+            group, report,
         )
 
-    elif group[:3] == 'lfp':
-        if 'time' in chs_clean: chs_clean.remove('time')
-        
-        side = chs_clean[0][4]
-        
-        if report:
-            with open(reportfile, 'a') as f:
-                f.write(
-                    f'For {group}: Rereferencing '
-                    f'per separate {lfp_reref}.\n'
-                )
+    if reportPath:
 
-        lead_type = runInfo.lead_type  # code for lead-type
-        lead = Segm_Lead_Setup(lead_type, side, chs_clean)
-        
-        if lfp_reref == 'levels':
+        with open(reportPath, 'a') as f:
 
-            rerefdata, names = reref_segm_levels(
-                data=data,
-                lead=lead,
-                reportfile=reportfile,
-            )
+            f.write(report)
+            f.close()
 
-        elif lfp_reref == 'segments':
 
-            rerefdata, names = reref_segm_contacts(
-                data=data,
-                lead=lead,
-                reportfile=reportfile,
-            )
+    return rerefData, rerefNames
 
-    # Quality check, delete only nan-channels
+
+
+def removeNaNchannels(
+    data, chnames, groupname, report
+):
+    """
+    Quality check, delete only nan-channels
+    (channels which only contain NaNs)
+
+    Checks group data, not dictionary with groups
+    """
+    # 
     ch_del = []
-    for ch in np.arange(1, rerefdata.shape[-2]):
-        # check whether ALL values in channel are NaN
-        if len(rerefdata.shape) == 3:
-            if not (np.isnan(rerefdata[:, ch, :]) == False).any():
+    for ch in np.arange(1, data.shape[-2]):
+
+        if len(data.shape) == 3:
+            if not (np.isnan(
+                data[:, ch, :]
+            ) == False).any():
                 ch_del.append(ch)
 
-        elif len(rerefdata.shape) == 2:
-            if not (np.isnan(rerefdata[ch, :]) == False).any():
+        elif len(data.shape) == 2:
+            if not (np.isnan(
+                data[ch, :]
+            ) == False).any():
                 ch_del.append(ch)
     
-    rerefdata = np.delete(rerefdata, ch_del, axis=-2)
-    # delete rows in once, to prevent changing row nrs during deletion
+    data = np.delete(data, ch_del, axis=-2)
+
     if ch_del:
-        names_del = [names[c] for c in ch_del]
-        for name in names_del: names.remove(name)
+        names_del = [chnames[c] for c in ch_del]
+        for name in names_del: chnames.remove(name)
 
-    if report:
-        with open(reportfile, 'a') as f:
-            f.write(
-                f'\n\n Auto Cleaning:\n In {group}: row(s) {ch_del} ('
-                f'{[names[c] for c in ch_del]}) only contained NaNs and'
-                ' were deleted\nRemaining number of rows (incl time) is'
-                f' {rerefdata.shape[-2]}. If 1: group will be removed!'
-            )
+        if report:
 
-    return rerefdata, names
-
-
-
+            report += (
+                f'\n\n Auto Cleaning:\n In {groupname}: row(s) {ch_del} ('
+                f'{names_del}) only contained NaNs'
+                ' and were deleted\nRemaining number'
+                f' of rows (incl time) is {data.shape[-2]}'
+                '. If 1: group will be removed!'
+            )[0]
+    
+    return data, chnames, report

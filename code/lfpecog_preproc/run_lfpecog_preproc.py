@@ -13,6 +13,10 @@ acceleration).
 the 'settings_xxx' JSON-file.
 - In subject-specific runInfo, recordings to exclude
     can be defined.
+- Report-file (.txt) is created when report_file is
+    true in mainSettings-json. If true, .txt is
+    generated in dataMng.RunInfo Class and 
+    edited during the whole preprocessing process.
 
 Instructions to run and keep Git-Sync to repo:
 - set work dir: cd /.../dyskinesia_neurophys/
@@ -30,8 +34,11 @@ if __name__ == '__main__':
     from os import getcwd
     import sys
     import json
-    import numpy as np
-    from pandas import read_csv
+
+    proj_path = getcwd()  # should be /../dyskinesia_neurophys
+
+    ft_path = join(proj_path, 'code/lfpecog_features')
+    sys.path.append(ft_path)
 
     # Import own functions
     import preproc_data_management as dataMng
@@ -41,12 +48,13 @@ if __name__ == '__main__':
     import preproc_reref as reref
     import preproc_get_mne_data as loadData
 
-    
+
+    # open argument (json file) defined in command (line)
     with open(sys.argv[1], 'r') as json_data:
     
         mainSettings = json.load(json_data)  # gets dir
 
-    proj_path = getcwd()  # should be /../dyskinesia_neurophys
+    
     
     for sub in mainSettings['subs_include'][:3]:
 
@@ -54,7 +62,12 @@ if __name__ == '__main__':
             sub, proj_path,
         )
 
-        for run in sub_runs.values():
+        for run in list(sub_runs.values())[:1]:
+        
+            if 'dopa' not in run['acq'].lower():
+                print(f'\n\tRun {run} SKIPPED, NO "DOPA" IN NAME')
+                continue
+
             print(f'\nSTART PREPROCESSING SUB {sub} Run: {run}\n')
 
             runInfo = dataMng.RunInfo(
@@ -70,97 +83,51 @@ if __name__ == '__main__':
 
             dataDict, chNameDict = loadData.get_data_and_channels(
                 rawRun, runInfo
-            )  # data array and channel dicts are stored per data-group
+            )
 
             dataDict, chNameDict = loadData.remove_flatlines_empties(
                 data=dataDict,
                 chNames=chNameDict,
                 fs=rawRun.bids.info['sfreq'],
+                reportPath=runInfo.reportTxt_path,
             )
 
-            ### TODO: INCLUDE PREPROCESSING REPORT .TXT
-            # per Run (title SubRunVersion# date?)
-
-            # # start with deleting existing report-file (if appl)
-            # reportfile = os.path.join(
-            #     runInfo.data_path, f'reref_report_{groups}.txt')
-            # if reportfile in os.listdir(
-            #         runInfo.data_path):
-            #     with open(reportfile, 'w') as f:
-            #         # pass  # only overwrites, doesn't fill
-            #         f.write('Empty groups removed after flatline'
-            #                 f'check: {del_group}')
-
-            # Start rereferencing per group
-            for group in dataDict:
-                
-                if np.logical_or(
-                    group[:4] == 'lfp_',
-                    group[:4] == 'ecog'
-                ):
-
-                    dataDict[group],
-                    chNameDict[group] = reref.rereferencing(
-                        data=dataDict[group],
-                        group=group,
-                        runInfo=runInfo,
-                        lfp_reref=mainSettings['lfp_reref'],
-                        chs_clean=chNameDict[group],
-                        # reportfile=reportfile,
-                    )
+            dataDict, chNameDict = reref.main_rereferencing(
+                dataDict=dataDict,
+                chNameDict=chNameDict,
+                runInfo=runInfo,
+                lfp_reref=mainSettings['lfp_reref'],
+                reportPath=runInfo.reportTxt_path,
+            )
 
             dataDict, chNameDict = loadData.delete_empty_groups(
                 dataDict, chNameDict
             )
 
-            ### CONSIDER AUTOMATIC DICT VS ARRAY DETECTION IN
-            ## PREPROCESSING FUNCTIONS TO GENERALIZE FUNCTIONS
             # BandPass-Filtering
-            for group in groups:
-                data[group] = fltrs.bp_filter(
-                    data=data[group],
-                    sfreq=getattr(settings, group).Fs_orig,
-                    l_freq=getattr(settings, group).bandpass_f[0],
-                    h_freq=getattr(settings, group).bandpass_f[1],
-                    method='iir',
-                )
+            dataDict = fltrs.filters_for_dict(
+                dataDict, mainSettings, 'bandpass'
+            )
 
-
-            # Notch-Filters
-            for group in groups:
-                print(f'Start Notch-Filter GROUP: {group}')
-                data[group] = fltrs.notch_filter(
-                    data=data[group],
-                    ch_names=ch_names[group],
-                    group=group,
-                    transBW=getattr(settings, group).transBW,
-                    notchW=getattr(settings, group).notchW,
-                    method='fir',
-                    save=runInfo.fig_path,
-                    verbose=False,
-                    RunInfo=runInfo,
-                )
-
+            # Notch-Filtering
+            dataDict = fltrs.filters_for_dict(
+                dataDict, mainSettings, 'notch'
+            )
 
             # Resampling
-            for group in groups:
-                data[group] = resample.resample(
-                    data=data[group],
-                    Fs_orig=getattr(settings, group).Fs_orig,
-                    Fs_new = getattr(settings, group).Fs_resample,
-                )
-
-
+            dataDict = resample.resample_for_dict(
+                dataDict, mainSettings
+            )
+        
+            print(f'\n\n\t{sub}:\t{run["task"]} - {run["acq"]} FILTERING + RESAMPLING FINISHED')
+            
         # # Artefact Removal
-            # for group in groups:
-            #     data[group], ch_names[group] = artefacts.artefact_selection(
-            #         data=data[group],
-            #         group=group,
-            #         win_len=getattr(settings, group).win_len,
-            #         n_stds_cut=getattr(settings, group).artfct_sd_tresh,
-            #         save=runInfo.fig_path,
-            #         RunInfo=runInfo,
-            #     )
+            dataDict, chNameDict = artefacts.artefact_selection(
+                dataDict=dataDict,
+                namesDict=chNameDict,
+                settings=mainSettings,
+                runInfo=runInfo,
+            )
 
 
             # Saving Preprocessed Data

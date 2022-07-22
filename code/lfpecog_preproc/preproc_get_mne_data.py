@@ -14,6 +14,8 @@ def get_data_and_channels(
     rawRun, runInfo,
 ):
     """
+    Loading and importing (getting) of
+    data via MNE-functions
     """
     data_objs, data_arrays = {}, {}
     ch_names = {}
@@ -26,7 +28,9 @@ def get_data_and_channels(
         data_arrays[g] = np.vstack((ch_t, ch_arr))
     
         ch_names[g] = data_objs[g].info['ch_names']
+
         if g[:3] == 'acc': ch_names[g] = [n[:7] for n in ch_names[g]]
+        
         ch_names[g] = ['run_time', 'dopa_time'] + ch_names[g]
 
         print(f'\nCHANNEL NAMES: GROUP {g}: {ch_names[g]}'
@@ -36,7 +40,8 @@ def get_data_and_channels(
 
 
 def remove_flatlines_empties(
-    data: dict, chNames: dict, fs, thresh: float=.66,
+    data: dict, chNames: dict, fs,
+    thresh: float=.66, reportPath='',
 ):
     """
     Removes single channels with more than
@@ -57,6 +62,8 @@ def remove_flatlines_empties(
         - data: cleaned data dict
         - chNames: claned channelNames dict
     """
+    if reportPath: report = ''
+
     for g in data:
         flat_chs = []
         
@@ -78,17 +85,29 @@ def remove_flatlines_empties(
             for c in del_names: chNames[g].remove(c)
             np.delete(data[g], flat_chs, axis=0)
             # delete rows (on rownumber) in once, to prevent changing row nrs during deletion!
-            print(f'\nFrom {g}, channels: {del_names} removed (FLATLINE)')
+            
+            report = report + f'\nRemoved from {g}, FLATLINE channels: {del_names}'
 
             ### TODO: INCLUDE VISUALISATION OF REMOVED CHANNELS !!!
     
-    data, chNames = delete_empty_groups(data, chNames)
+    print(f'\n\tREPORT UPDATE: {report}')
+
+    if reportPath:
+
+        with open(reportPath, 'a') as f:
+
+            f.write(report)
+            f.close()
+
+    data, chNames = delete_empty_groups(
+        data, chNames, reportPath
+    )
 
     return data, chNames
 
 
 def delete_empty_groups(
-    dataDict: dict, chNameDict: dict
+    dataDict: dict, chNameDict: dict, reportPath='',
 ):
     """
     """
@@ -103,7 +122,13 @@ def delete_empty_groups(
 
         del(dataDict[group], chNameDict[group])
 
-    print(f'\Empty Group(s) removed: {empty_groups}')
+    report = f'Empty Group(s) removed: {empty_groups}'
+    if reportPath:
+
+        with open(reportPath, 'a') as f:
+
+            f.write(report)
+            f.close()
 
 
     return dataDict, chNameDict

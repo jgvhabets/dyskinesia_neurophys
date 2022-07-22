@@ -10,10 +10,10 @@ save, and read data Objects as input and output in the preprocessing.
 from array import array
 from os.path import join, exists
 from os import makedirs
+import datetime
 import numpy as np
 from pandas import read_csv
 from dataclasses import dataclass
-from collections import namedtuple
 from typing import Any
 import mne_bids
 import csv
@@ -34,14 +34,21 @@ def get_sub_runs(
     sub_runs = {}
         
     with open(join(proj_path, sub_file)) as f:
+
         try:
             sub_json = json.load(f, )  # list of runinfo-dicts
+
         except json.decoder.JSONDecodeError:
-            print('\n json.decoder.JSONDecodeError ERROR')
+            print(
+                '\n\t json.decoder.JSONDecodeError ERROR'
+                f' while reading {sub_file}'
+            )
             print(
                 'If JSON-file looks correct, try writing '
                 'a Python-Dict with json.dump, and retry'
                 )
+    
+    assert sub_json, print('\n JSON FILE COULDNOT BE LOADED')
 
     scans_df = read_csv(
         join(
@@ -68,7 +75,9 @@ def get_sub_runs(
             'run': splits[4][4:],
             'acq_time': scans_df['acq_time'][i],
             'dopaIn_time': sub_json["dopa_intake_time"],
+            'tasks_excl': sub_json["tasks_exclude"],
             'data_include': sub_json["data_include"],
+            'lead_type': sub_json["lead_type"],
             'raw_path': sub_json["raw_path"]
         }
     
@@ -94,6 +103,7 @@ class RunInfo:
             datatype='ieeg',
             root=self.runDict["raw_path"],
         )
+
         self.data_groups = self.runDict["data_include"]
 
         self.store_str = (
@@ -104,14 +114,14 @@ class RunInfo:
         self.fig_path = join(
             self.project_path,
             'figures',
-            f'preprocessed/sub-{self.runDict["sub"]}',
+            f'preprocessing/sub-{self.runDict["sub"]}',
             self.mainSettings["settingsVersion"],
         )
         
         self.data_path = join(
             self.project_path,
             'data',
-            f'preprocessed/sub-{self.runDict["sub"]}',
+            f'preprocessed_data/sub-{self.runDict["sub"]}',
             self.mainSettings["settingsVersion"],
         )
         
@@ -120,23 +130,44 @@ class RunInfo:
             if not exists(folder):
                 
                 makedirs(folder)
-         
-        lead_type_dict = {  # PM extract from xlsl
-            '002': 'BS_VC',  # Boston Cartesia Vercise
-            '004': 'BS_VC',
-            '005': 'MT_SS',  # Medtronic SenSight
-            '008': 'BS_VC_X',  # Boston Cartesia Vercise X
-            '009': 'MT_SS',
-            '011': 'MT_SS',
-            '012': 'MT_SS',
-            '013': 'MT_SS',
-            '014': 'MT_SS',
-        }
-        assert self.runDict["sub"] in lead_type_dict.keys(), print(
-            f'No Lead-type is defined for subject {self.runDict["sub"]}'
-            ' Please add to preproc_data_manegement.py'
-        )
-        self.lead_type = lead_type_dict[self.runDict["sub"]]
+
+        if self.mainSettings['report_file']:
+
+            report_folder = join(
+                self.project_path, 'data',
+                f'preproc_reports/sub-{self.runDict["sub"]}'
+            )
+            if not exists(report_folder):
+                
+                makedirs(report_folder)
+
+            now = datetime.datetime.now()
+            now = now.strftime("%Y%m%d_%H%M")
+            report_fname =  (
+                f'preprocReport_{self.runDict["sub"]}_'
+                f'{self.runDict["task"]}{self.runDict["acq"][-6:]}_'
+                f'_{self.mainSettings["settingsVersion"]}'
+                f'_{now}.txt'
+            )
+            self.reportTxt_path = join(
+                report_folder, report_fname, 
+            )
+            with open(self.reportTxt_path, 'w') as f:
+
+                print(f'\n\tWRITING TXT FOR {self.runDict["sub"]}')
+                f.write(
+                    '##### PREPROCESSING REPORT #####\n\n'
+                    f'\tSub-{self.runDict["sub"]}\n\t'
+                    f'Task: {self.runDict["task"]}\n\t'
+                    f'Acquisition: {self.runDict["acq"]}\n\t'
+                    f'Settings-Version: {self.mainSettings["settingsVersion"]}'
+                    f'\n\n\tTasks excl: {self.runDict["tasks_excl"]}'
+                    f'\n\tData incl: {self.runDict["data_include"]}'   
+                )
+                f.close()
+
+
+        self.lead_type = self.runDict["lead_type"]
 
 
 @dataclass(init=True, repr=True,)
@@ -152,23 +183,35 @@ class defineMneRunData:
             self.bids = mne_bids.read_raw_bids(
                 self.runInfo.bidspath, verbose='WARNING'
             )
-            print('\n\n------------ BIDS DATA INFO ------------\n'
-                  f'The raw-bids-object contains {len(self.bids.ch_names)} channels with '
-                  f'{self.bids.n_times} datapoints and sample freq ',
-                  str(self.bids.info['sfreq']),'Hz')
-            print('Bad channels are:',self.bids.info['bads'],'\n')
+            report = (
+                '\n\n------------ BIDS DATA INFO ------------\n'
+                f'The raw-bids-object contains {len(self.bids.ch_names)} channels with '
+                f'{self.bids.n_times} datapoints and sample freq '
+                f'{self.bids.info["sfreq"]} Hz\n'
+                f'Bad channels are: {self.bids.info["bads"]}\n'
+            )
+            print(report)
 
             # select ECOG vs DBS channels (bad channels are dropped!)
-            for ecog_g in self.runInfo.data_groups:
-                if ecog_g[:4] == 'ecog':
-                    setattr(
-                        self,
-                        ecog_g,
-                        self.bids.copy().pick_types(
-                            ecog=True, exclude='bads'
+            if any([
+                'ecog' in g for g in self.runInfo.data_groups
+            ]):
+
+                for group in self.runInfo.data_groups:
+                    
+                    if group[:4] == 'ecog':
+                        ecog_group = group
+                        setattr(
+                            self,
+                            ecog_group,
+                            self.bids.copy().pick_types(
+                                ecog=True, exclude='bads'
+                            )
                         )
-                    )
-                    ecogBool = True
+                        ecogBool = True
+            
+            else:
+                ecogBool = False
             
             self.lfp = self.bids.copy().pick_types(dbs=True, exclude='bads')
             lfp_chs_L = [c for c in self.lfp.ch_names if c[4]=='L' ]
@@ -182,14 +225,34 @@ class defineMneRunData:
 
             try:
                 self.acc = self.bids.copy().pick_types(misc=True, exclude='bads')
-                acc_chs_L = [c for c in self.acc.ch_names if c[4]=='L' ]
-                acc_chs_R = [c for c in self.acc.ch_names if c[4]=='R' ]
 
-                if 'acc_left' in self.runInfo.data_groups:
-                    self.acc_left = self.acc.copy().drop_channels(acc_chs_R)
+                try:
+                    acc_chs_L = [c for c in self.acc.ch_names if c[4]=='L' ]
+                    acc_chs_R = [c for c in self.acc.ch_names if c[4]=='R' ]
+                    
+                    if 'acc_left' in self.runInfo.data_groups:
+                        self.acc_left = self.acc.copy().drop_channels(acc_chs_R)
 
-                if 'acc_right' in self.runInfo.data_groups:
-                    self.acc_right = self.acc.copy().drop_channels(acc_chs_L)
+                    if 'acc_right' in self.runInfo.data_groups:
+                        self.acc_right = self.acc.copy().drop_channels(acc_chs_L)
+
+                except IndexError:
+
+                    if set(['X', 'Y', 'Z']).issubset(self.acc.ch_names):
+
+                        acc_unkwn = [c for c in self.acc.ch_names if len(c) == 1]
+
+                        if any([c for c in self.acc.ch_names if 'ACC_L' in c]):
+
+                            acc_l = [c for c in self.acc.ch_names if len(c) > 1]
+                            self.acc_left = self.acc.copy().drop_channels(acc_unkwn)
+                            self.acc_right = self.acc.copy().drop_channels(acc_l)
+                        
+                        elif any([c for c in self.acc.ch_names if 'ACC_R' in c]):
+
+                            acc_r = [c for c in self.acc.ch_names if len(c) > 1]
+                            self.acc_left = self.acc.copy().drop_channels(acc_r)
+                            self.acc_right = self.acc.copy().drop_channels(acc_unkwn)
 
             except ValueError:
                 print('\n### WARNING: No ACC-channels available ###\n')
@@ -201,22 +264,40 @@ class defineMneRunData:
                 except ValueError:
                     print('\n### WARNING: No EMG-channels available ###\n')
 
-            if 'eeg' in self.runInfo.data_groups:
+            if 'ecg' in self.runInfo.data_groups:
                 try:
                     self.ecg = self.bids.copy().pick_types(ecg=True, exclude='bads')
                 except ValueError:
                     print('\n### WARNING: No ECG-channels available ###\n')
 
-            print('BIDS contains:\n:')
-            if ecogBool: print(f'{len(getattr(self, ecog_g).ch_names)} ECOG channels,\n')
-            if self.lfp: print(f'{len(self.lfp.ch_names)} DBS channels:'
-                               f' ({len(self.lfp_left.ch_names)} left, '
-                               f'{len(self.lfp_right.ch_names)} right),\n')
+            report = report + '\nBIDS channels contains:\n\t'
+            
+            if ecogBool:
+                report = report + f'{len(getattr(self, ecog_group).ch_names)} ECOG channels,'
+            
+            if self.lfp:
+                report = report + (
+                f'\n\t{len(self.lfp.ch_names)} DBS channels:'
+                f' ({len(self.lfp_left.ch_names)} left, '
+                f'{len(self.lfp_right.ch_names)} right),\n'
+            )
+            
             if 'emg' in self.runInfo.data_groups:
-                print(f'\n{len(self.emg.ch_names)} EMG channels,\n')
-            if 'eeg' in self.runInfo.data_groups:
-                if self.ecg: print(f'\n{len(self.ecg.ch_names)} ECG channel(s),\n')
-            if self.acc: print(f'\n{len(self.acc.ch_names)} Accelerometry channels.\n\n')
+                report = report + f'\t{len(self.emg.ch_names)} EMG channels,\n'
+            
+            if 'ecg' in self.runInfo.data_groups:
+                if self.ecg:
+                    report = report + f'\t{len(self.ecg.ch_names)} ECG channel(s),\n'
+            
+            if self.acc:
+                report = report + f'\t{len(self.acc.ch_names)} Accelerometry channels.\n\n'
+            
+            print(report)
+            if self.runInfo.reportTxt_path:
+                with open(self.runInfo.reportTxt_path, 'a') as f:
+
+                    f.write(report)
+                    f.close()
 
 
 
@@ -242,7 +323,7 @@ def save_arrays(
         f'{runInfo.store_str}_{runInfo.preproc_sett}_'
         f'{group.upper()}_PREPROC_data.npy'
     )
-    np.save(os.path.join(runInfo.data_path, f_name), data)
+    np.save(join(runInfo.data_path, f_name), data)
     # save list of channel-names as txt-file
     f_name = (
         f'{runInfo.store_str}_{runInfo.preproc_sett}_'

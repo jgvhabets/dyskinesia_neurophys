@@ -4,6 +4,34 @@ import numpy as np
 from scipy.signal import resample_poly
 import mne
 
+
+def resample_for_dict(
+    dataDict, settings
+):
+    """
+    Run resample() for data dictionaries
+    """
+    for group in dataDict.keys():
+
+        if group[:3] == 'acc':
+            dtype = 'acc'
+
+        elif group[:3] in ['lfp', 'eco']:
+            dtype = 'ephys'
+
+        else:
+            print(f'/tGROUP {group} NOT RESAMPLED BEC'
+            'AUSE NO RESAMPLE FREQ WAS GIVEN (json)')
+            continue
+    
+        dataDict[group] = resample(
+            data=dataDict[group],
+            Fs_orig=settings[dtype]['orig_Fs'],
+            Fs_new=settings[dtype]['resample_Fs'],
+        )
+
+    return dataDict
+
 def resample(
     data: array, Fs_orig: int, Fs_new: int
 ):

@@ -6,9 +6,47 @@ import mne
 import matplotlib.pyplot as plt
 
 
+def filters_for_dict(
+    dataDict, settings, filtertype
+):
+    """
+    Use bp_filter() and notch_filter()
+    for dictionaries containing several
+    groups of data (ephys/acc/...)
+    """
+    for group in dataDict.keys():
+
+        if group[:3] == 'acc': dtype = 'acc'
+
+        elif group[:3] in ['lfp', 'eco']: dtype = 'ephys'
+        
+        if filtertype == 'bandpass':
+            
+            dataDict[group] = bp_filter(
+                data=dataDict[group],
+                Fs=settings[dtype]['orig_Fs'],
+                l_freq=settings[dtype]['bandpass'][0],
+                h_freq=settings[dtype]['bandpass'][1],
+                method='iir',
+            )
+
+        elif filtertype == 'notch':
+
+            dataDict[group] = notch_filter(
+                data=dataDict[group],
+                Fs=settings[dtype]['orig_Fs'],
+                transBW=settings[dtype]['transitionWidth'],
+                notchW=settings[dtype]['notchWidth'],
+                method='fir',
+                verbose=False,
+            )
+
+
+    return dataDict
+
 def bp_filter(
     data: array,
-    sfreq: int,
+    Fs: int,
     l_freq: int,
     h_freq: int,
     method='fir',
@@ -22,7 +60,7 @@ def bp_filter(
         - data (array): 3d or 2d array with data,
             3d: [windows, rows, time points]
             2d: [rows, time points]
-        - sfreq (int): sampling freq
+        - Fs (int): sampling freq
         - l_freq (int): lower freq of bandpass
         - h_freq (int): higher freq of bandpass
         - method: method of filter to use (fir / iir)
@@ -39,7 +77,7 @@ def bp_filter(
             try:
                 data_out[w, 1:, :] = mne.filter.filter_data(
                     data=data[w, 1:, :],
-                    sfreq=sfreq,
+                    sfreq=Fs,
                     l_freq=l_freq,
                     h_freq=h_freq,
                     method=method,
@@ -56,7 +94,7 @@ def bp_filter(
     if len (data.shape) == 2:
         data_out[1:, :] = mne.filter.filter_data(
             data=data[1:, :],
-            sfreq=sfreq,
+            sfreq=Fs,
             l_freq=l_freq,
             h_freq=h_freq,
             method=method,
@@ -69,16 +107,17 @@ def bp_filter(
 
 def notch_filter(
     data: array,
-    ch_names: list,  # clean incl channelnames per group
-    group: str,
+    # ch_names: list,  # clean incl channelnames per group
+    # group: str,
     transBW: int,  # circa 10 Hz
     notchW: int,  # not too small / steep
-    Fs: int = 4000,  # sample freq, default 4000 Hz
-    freqs: list = [50, 100, 150,],  # power line freqs EU  200, 250, 350, 400
+    Fs: int,  # sample freq, default 4000 Hz
     method='fir',
-    save=None,
+    fir_win='hamming',
+    fir_design='firwin',
     verbose='Warning',
-    RunInfo=None,
+    # RunInfo=None,
+    # save=None,
 ):
     '''
     Applies notch-filter to filter local peaks due to powerline
@@ -88,11 +127,12 @@ def notch_filter(
         - data (array): 3d array with data, first dimension
         are windows, second dim are rows, third dim are
         the data points over time within one window
-        - ch_names (list): channel-names
-        - group (str): name of inserted group
+        # - ch_names (list): channel-names
+        # - group (str): name of inserted group
         - transBW (int): transition bandwidth, circa 10 Hz
         - notchW (int): notch width, not too steep
-        - save (str): if pre and post-filter figures should be saved,
+        - Fs
+        # - save (str): if pre and post-filter figures should be saved,
             directory should be given here
         - verbose (str): amount of documentation printed.
     
@@ -100,6 +140,8 @@ def notch_filter(
         - data_out: filtered data array.
     '''
     data_out = data.copy()
+
+
     ### PLOTTING FOR NOW UNTOGGLED
     # if save:
     #     # select range of win's to plot
@@ -122,6 +164,9 @@ def notch_filter(
     #     axes[0, 0].set_title('PSD (dB/Hz) BEFORE Notch Filter')
 
     # apply notch filter
+
+    freqs = np.arange(50, int(Fs / 4), 50)
+
     if len(data.shape) == 3:
         for w in np.arange(data.shape[0]):
             data_out[w, 1:, :] = mne.filter.notch_filter(
@@ -130,9 +175,9 @@ def notch_filter(
                 freqs=freqs,
                 trans_bandwidth=transBW,
                 notch_widths=notchW,
-                method='fir',
-                fir_window='hamming',
-                fir_design='firwin',
+                method=method,
+                fir_window=fir_win,
+                fir_design=fir_design,
                 verbose=verbose,
             )
 
@@ -143,9 +188,9 @@ def notch_filter(
             freqs=freqs,
             trans_bandwidth=transBW,
             notch_widths=notchW,
-            method='fir',
-            fir_window='hamming',
-            fir_design='firwin',
+            method=method,
+            fir_window=fir_win,
+            fir_design=fir_design,
             verbose=verbose,
         )
 

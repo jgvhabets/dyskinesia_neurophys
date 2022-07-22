@@ -3,15 +3,13 @@ import os
 from typing import Any
 import numpy as np
 import matplotlib.pyplot as plt
-
+from itertools import compress
 
 def artefact_selection(
-    data: Any,
-    group: str,
-    win_len: int=1024,
-    n_stds_cut: float=2.5,
-    save=None,
-    RunInfo=None,
+    dataDict: dict,
+    namesDict: dict,
+    settings:dict,
+    runInfo=Any,
 ):
     '''
     *** IDEA: change function to check the difference between mean-window[N]
@@ -21,7 +19,7 @@ def artefact_selection(
     selection.
     Blocks-values are converted to NaNs when an outlier (value
     exceeds thresholds of n_std_cut times std dev of full recording).
-    Also oocnnverted to NaN's if more than 25% of block is 0.
+    Also converted to NaN's if more than 25% of block is 0.
     
     Arguments:
         - data (2d array): BIDS-Object of group
@@ -36,23 +34,37 @@ def artefact_selection(
         - sel_bids (array): array with all channels in which artefacts
         are replaced by np.nan's.
     '''
-    print(f'START ARTEFACT REMOVAL: {group}')
-    ch_nms = data_bids.ch_names
-    fs = data_bids.info['sfreq']  # Sampl freq in Hertz
-    (ch_arr, ch_t) = data_bids.get_data(return_times=True)
-    # visual check by plotting before selection
-    if save:
-        fig, axes = plt.subplots(len(ch_arr), 2, figsize=(16, 16))
-        for n, c in enumerate(np.arange(len(ch_arr))):
-            axes[c, 0].plot(ch_t, ch_arr[c, :])
-            axes[c, 0].set_ylabel(ch_nms[n], rotation=90)
-        axes[0, 0].set_title('Raw signal BEFORE artefact deletion')
+    for group in dataDict.keys():
+        print(f'\n\n\tSTART ARTEFACT REMOVAL: {group}\n')
+
+        if group[:3] not in ['lfp', 'eco']:
+            print(f'artefact removal skipped for {group}')
+            continue
+    
+    # # visual check by plotting before selection
+    # if save:
+    #     fig, axes = plt.subplots(len(ch_arr), 2, figsize=(16, 16))
+    #     for n, c in enumerate(np.arange(len(ch_arr))):
+    #         axes[c, 0].plot(ch_t, ch_arr[c, :])
+    #         axes[c, 0].set_ylabel(ch_nms[n], rotation=90)
+    #     axes[0, 0].set_title('Raw signal BEFORE artefact deletion')
+
+        Fs = settings['ephys']['resample_Fs']
 
     # Artefact removal part
-    win_n = int((win_len * fs) // 1000)  # number samples in one window
-    n_wins = int(ch_arr.shape[1] // win_n)  # num of windows to split in
-    # new array to store data without artefact, ch + 1 is for time
-    new_arr = np.zeros((n_wins, len(ch_nms) + 1, win_n), dtype=float)
+        n_wins = int(dataDict[group].shape[-1] // Fs)  # 1 sec windows
+
+        timerow_sel = ['time' in name for name in namesDict[group]]
+        timerowNames = list(compress(namesDict[group], timerow_sel))
+    
+        art_data_arr = np.zeros((
+            n_wins,
+            len(namesDict[group] - len(timerowNames)),
+            Fs
+        ), dtype=float)
+    
+    ### TODO: WORK FURTHER.......
+    
     n_nan = {}  # number of blocks corrected to nan
     # first reorganize data
     for w in np.arange(new_arr.shape[0]):  # loop over new window's
