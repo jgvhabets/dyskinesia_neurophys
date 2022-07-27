@@ -40,18 +40,10 @@ def artefact_selection(
         if group[:3] not in ['lfp', 'eco']:
             print(f'artefact removal skipped for {group}')
             continue
-    
-    # # visual check by plotting before selection
-    # if save:
-    #     fig, axes = plt.subplots(len(ch_arr), 2, figsize=(16, 16))
-    #     for n, c in enumerate(np.arange(len(ch_arr))):
-    #         axes[c, 0].plot(ch_t, ch_arr[c, :])
-    #         axes[c, 0].set_ylabel(ch_nms[n], rotation=90)
-    #     axes[0, 0].set_title('Raw signal BEFORE artefact deletion')
 
         Fs = settings['ephys']['resample_Fs']
 
-    # Artefact removal part
+        # Artefact removal part
         n_wins = int(dataDict[group].shape[-1] // Fs)  # 1 sec windows
 
         timerow_sel = ['time' in name for name in namesDict[group]]
@@ -65,31 +57,31 @@ def artefact_selection(
     
     ### TODO: WORK FURTHER.......
     
-    n_nan = {}  # number of blocks corrected to nan
-    # first reorganize data
-    for w in np.arange(new_arr.shape[0]):  # loop over new window's
-        # first row of windows is time
-        new_arr[w, 0, :] = ch_t[w * win_n:w * win_n + win_n]
-        # other rows filled with channels
-        new_arr[w, 1:, :] = ch_arr[:, w * win_n:w * win_n + win_n]
-    # correct to nan for artefacts per channel
-    cuts = {}  # to store thresholds per channel
-    for c in np.arange(ch_arr.shape[0]):  # loop over ch-rows
-        # cut-off's are X std dev above and below channel-mean
-        cuts[c] = (np.mean(ch_arr[c]) - (n_stds_cut * np.std(ch_arr[c])),
-                np.mean(ch_arr[c]) + (n_stds_cut * np.std(ch_arr[c])))
-        n_nan[c] = 0
-        for w in np.arange(new_arr.shape[0]):  # loop over windows
-            if (new_arr[w, c + 1, :] < cuts[c][0]).any():
-                new_arr[w, c + 1, :] = [np.nan] * win_n
-                n_nan[c] = n_nan[c] + 1
-            elif (new_arr[w, c + 1, :] > cuts[c][1]).any():
-                new_arr[w, c + 1, :] = [np.nan] * win_n
-                n_nan[c] = n_nan[c] + 1
-            elif (new_arr[w, c + 1, :] == 0).sum() > (.25 * win_n):
-                # more than 25% exactly 0
-                new_arr[w, c + 1, :] = [np.nan] * win_n
-                n_nan[c] = n_nan[c] + 1
+        n_nan = {}  # number of blocks corrected to nan
+        # first reorganize data
+        for w in np.arange(new_arr.shape[0]):  # loop over new window's
+            # first row of windows is time
+            new_arr[w, 0, :] = ch_t[w * win_n:w * win_n + win_n]
+            # other rows filled with channels
+            new_arr[w, 1:, :] = ch_arr[:, w * win_n:w * win_n + win_n]
+        # correct to nan for artefacts per channel
+        cuts = {}  # to store thresholds per channel
+        for c in np.arange(ch_arr.shape[0]):  # loop over ch-rows
+            # cut-off's are X std dev above and below channel-mean
+            cuts[c] = (np.mean(ch_arr[c]) - (n_stds_cut * np.std(ch_arr[c])),
+                    np.mean(ch_arr[c]) + (n_stds_cut * np.std(ch_arr[c])))
+            n_nan[c] = 0
+            for w in np.arange(new_arr.shape[0]):  # loop over windows
+                if (new_arr[w, c + 1, :] < cuts[c][0]).any():
+                    new_arr[w, c + 1, :] = [np.nan] * win_n
+                    n_nan[c] = n_nan[c] + 1
+                elif (new_arr[w, c + 1, :] > cuts[c][1]).any():
+                    new_arr[w, c + 1, :] = [np.nan] * win_n
+                    n_nan[c] = n_nan[c] + 1
+                elif (new_arr[w, c + 1, :] == 0).sum() > (.25 * win_n):
+                    # more than 25% exactly 0
+                    new_arr[w, c + 1, :] = [np.nan] * win_n
+                    n_nan[c] = n_nan[c] + 1
 
     # visual check by plotting after selection
     if save:

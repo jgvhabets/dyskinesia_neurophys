@@ -138,7 +138,7 @@ class Segm_Lead_Setup:
 
 
 def reref_common_average(
-    data, group, ch_names, report='',
+    data, group, ch_names, timeRows, report='',
 ):
     """
     Function to perform Common Average Rereferencing.
@@ -148,7 +148,7 @@ def reref_common_average(
         - data (array): 3d array containing time- and signal-
         rows
         - ch_names (list): strings of clean channel names,
-        incl 'times', excl removed channels
+        incl time-row-names, excl removed channels
     
     Returns:
         - newdata (array): identical shape array as input,
@@ -162,10 +162,11 @@ def reref_common_average(
         report += (
             f'\n\n\tCommon Average Reref ({group})\n'
             f'\nRaw-Names: {ch_names}\n\n'
-            f'Names after Rereferencing: {newnames}'
+            f'Names after Rereferencing: {newnames}\n'
         )
 
     if len(data.shape) == 3:
+### FIX timeRows
         newdata[:, 0, :] = data[:, 0, :]  # copy time rows
         for w in np.arange(data.shape[0]):  # loop over windows
             refdata = data[w, 1:, :].copy()
@@ -176,13 +177,15 @@ def reref_common_average(
                 newdata[w, ch + 1, :] = data[w, ch, :] - ref_mean
         
     elif len(data.shape) == 2:
-        newdata[0, :] = data[0, :]  # copy time row
-        refdata = data[1:, :].copy()
-        for ch in np.arange(refdata.shape[0]):  # chann to reref
+
+        newdata[:len(timeRows), :] = data[:len(timeRows), :]  # copy time row
+        refdata = data[len(timeRows):, :].copy()
+
+        for ch in np.arange(refdata.shape[0]):
             # take window average of all other channels
-            refchs = np.delete(refdata.copy(), ch, axis=0)
-            ref_mean = np.nanmean(refchs, axis=0)
-            newdata[ch + 1, :] = data[ch, :] - ref_mean
+            ref_chs = np.delete(refdata.copy(), ch, axis=0)
+            ref_mean = np.nanmean(ref_chs, axis=0)
+            newdata[ch + len(timeRows), :] = refdata[ch, :] - ref_mean
 
 
     return newdata, newnames, report
@@ -217,10 +220,11 @@ def reref_segm_levels(
             'per total level minus neighbouring level'
         )
 
-    print(f'\n Rereferencing SEGM {lead.name} ({lead.side})'
+    print(f'\nRereferencing SEGM {lead.name} ({lead.side})'
           f' against means of neighbouring levels')
 
     n_timerows = len(timerowNames)
+    print(timerowNames)
 
     if len(data.shape) == 3:
 
@@ -238,27 +242,39 @@ def reref_segm_levels(
             lead.n_levels + n_timerows,
             data.shape[1]
         ])
+
         leveldata[:n_timerows, :] = data[:n_timerows, :]
         only_data=data[n_timerows:, :]
-    
-    ch_start = 0
-    ch_stop = 0
-    for l in np.arange(lead.n_levels):
 
-        print(lead.levels_str[l])
+    ch_start, ch_stop = 0, 0
+    present_levels = []
+    n_empty_levels = 0
+    row_tofill = n_timerows
+
+    for l in np.arange(lead.n_levels):
         
         ch_stop += len(lead.levels_str[l])
         # starts at 0, incl numb of clean contacts per level
 
+        if len(lead.levels_str[l]) == 0:
+            print(f'{l} EMPTY LEVEL')
+            n_empty_levels += 1
+            if len(leveldata.shape) == 2:
+                leveldata = np.delete(leveldata, -1, 0)  # delete last row
+
+            if report:
+                report += f'\nLevel {lead.side, l} is empty'
+            continue
+
         if len(only_data.shape) == 3:    
             
-            leveldata[:, l + n_timerows, :] = np.nanmean(
+            leveldata[:, row_tofill, :] = np.nanmean(
                 only_data[:, ch_start:ch_stop, :], axis=1
             )
 
         if len(only_data.shape) == 2:
 
-            leveldata[l + n_timerows, :] = np.nanmean(
+            leveldata[row_tofill, :] = np.nanmean(
                 only_data[ch_start:ch_stop, :], axis=0
             )
 
@@ -276,20 +292,41 @@ def reref_segm_levels(
         )
         
         ch_start = ch_stop  # updating start row
+        row_tofill += 1
+        present_levels.append(l)
 
+    # print(f'leveldata shape: {leveldata.shape}, # present-levels {len(present_levels)}'
+    #     f', # empty-levels: {n_empty_levels}')
+    print(f'Present levels: {present_levels}, shape leveldata: {leveldata.shape}')
+    print(leveldata[:, :3])
+    # if n_empty_levels > 0:
+    #     leveldata = leveldata[:-n_empty_levels, :]
+    #     print('after empty level removal')
+    #     print(leveldata[:, :3])
+    
+    assert (len(present_levels) + n_timerows
+        == leveldata.shape[-2]), print(
+        '# of present levels is not equal to # of '
+        f'rows in leveldata-array'
+    )
+    
     rerefdata, names = reref_neighb_levels_subtract(
-        leveldata=leveldata, side=lead.side,
-        timerowNames=timerowNames,
+        leveldata=leveldata, present_levels=present_levels,
+        side=lead.side, timerowNames=timerowNames,
+    )
+    assert rerefdata.shape[-2] == len(names), print(
+        'Rereferenced #-ROWs in ARRAY NOT EQUAL to #-NAMES'
     )
 
     if report:
-        report += f'\n\tNew resulting names: {names}'
+        report += f'\n\n\tNew resulting names: {names}\n'
 
     return rerefdata, names, report
 
 
 def reref_neighb_levels_subtract(
-    leveldata: array, side: str, timerowNames: list,
+    leveldata: array, present_levels: list, side: str,
+    timerowNames: list,
 ):
     """
     Function to calculate differences between neighbouring
@@ -298,18 +335,20 @@ def reref_neighb_levels_subtract(
     reref_summing_levels() function.
     
     Arguments:
-        - level (array): 3d array containing [windows,
-        time- and level-rows, window_lenght]
+        - level (array): 2d or 3d array containing
+            [(windows), times- and levels-rows, samples]
+        - present_levels (list): list with present level-
+            numbers
         - side (str): L or R for recorded hemisphere
         - timerowNames: list with 1 or 2 time col-names
 
     Returns:
         - newdata (array): rereferenced signals. These
-        will contain 1 row less because the differences
-        between rows are used
+            will contain 1 row less because the
+            differences between rows are used
         - sig_names (list): contains corresponnding names
-        to the array: 'times', followed by the reref'd
-        level-diffs, e.g. 0_1, 3_4
+            to the array: 'times', followed by the
+            reref'd level-diffs, e.g. 0_1, 3_4
     """
     sig_names = timerowNames
 
@@ -319,7 +358,8 @@ def reref_neighb_levels_subtract(
             leveldata.shape[0],
             leveldata.shape[1] - 1,
             leveldata.shape[2],
-        ])
+        ])  # create nan array to fill
+
         newdata[
             :, :len(timerowNames), :] = leveldata[
                 :, :len(timerowNames), :
@@ -337,19 +377,21 @@ def reref_neighb_levels_subtract(
         newdata = nan_array(dim=[
             leveldata.shape[0] - 1,
             leveldata.shape[1]
-        ])
-        newdata[0, len(timerowNames)] = leveldata[0, len(timerowNames)]  # copy times
-        # subtract the level above one level from every level 
+        ])  # create nan array to fill
+
+        newdata[
+            :len(timerowNames), :] = leveldata[
+            :len(timerowNames), :
+        ]  # copy times
+
         newdata[len(timerowNames):, :] = np.subtract(
             leveldata[len(timerowNames):-1, :],
             leveldata[len(timerowNames) + 1:, :]
-        )
+        )  # subtract the level above one level from every level
 
-    # adding signal names (Channel N minus N + 1)
-    for level in np.arange(newdata.shape[-2] - 1):
+    for i, level in enumerate(present_levels[:-1]):
 
-        # shape[-2] gives row number for 2d and 3d arrays
-        sig_names.append(f'LFP_{side}_{level}_{level + 1}')
+        sig_names.append(f'LFP_{side}_{level}_{present_levels[i + 1]}')
 
     return newdata, sig_names
 
@@ -407,8 +449,6 @@ def reref_segm_contacts(
                 refs.remove(c)  # remove ch of interest itself
 
                 # take mean of other channel-rows as reference
-                print(f'Row REFS {refs}, SHAPE {data.shape}')
-
                 if len(data.shape) == 3:
                     ref = np.nanmean(data[:, refs, :], axis=1)
                     reref_data[:, c, :] = data[:, c, :] -  ref
@@ -432,6 +472,7 @@ def reref_segm_contacts(
                 refs = lead.level_rows[l + 1]  # reref: sup. level
             except KeyError:  # highest contact has no [l + 1]
                 refs = lead.level_rows[l - 1]  # take lower level
+
             if len(data.shape) == 3:
                 ref = np.nanmean(data[:, refs, :])
                 reref_data[:, chs, :] = data[:, chs, :] -  ref
@@ -467,19 +508,21 @@ def main_rereferencing(
     Arguments:
         - data: 2d or 3d-array, containing dict w/ groups
         - runInfo: class containing runInfolead_type:
-        abbreviation for lead given in
-        data class RunInfo (e.g. BSX, MTSS)
+            abbreviation for lead given in
+            data class RunInfo (e.g. BSX, MTSS)
         - chs_clean = list with clean channels after
-        artefact removal
+            artefact removal
         - lfp_reref: indicates string-name of reref-
-        method: taking together one level, or rerefer-
-        encing single segmented contacts
+            method: taking together one level, or re-
+            referencing single segmented contacts
     
     Returns:
         - datareref: 3d array of rereferenced data of
-        inserted signal group
-        - names (list): strings of row names, 'times',
-        all reref'd signal channels
+            inserted signal group. 'time' is time since
+            start recording (in sec), 'dopa_time' is
+            time relative to L-Dopa intake (in sec)
+        - names (list): strings of row names, 'time',
+            'dopa_time' and all reref'd signal channels
     """
     report = (
         '\n\n======= REREFERENCING OVERVIEW ======\n'
@@ -491,11 +534,16 @@ def main_rereferencing(
     for group in dataDict.keys():
 
         if group[:3] not in ['lfp', 'eco']:
-            report += f'\n Skip REREFERENCING for {group}'
+            
+            report += f'\n Skip REREFERENCING for {group}\n'
+
+            rerefData[group] = dataDict[group]
+            rerefNames[group] = chNameDict[group]
+
             continue
     
         else:
-            report += f'\n START {group} REREFERENCING'
+            report += f'\n START REREFERENCING for {group.upper()}'
         
         timerow_sel = ['time' in name for name in chNameDict[group]]
         timerowNames = list(compress(chNameDict[group], timerow_sel))
@@ -504,18 +552,15 @@ def main_rereferencing(
             
             rerefData[group], rerefNames[group], report = reref_common_average(
                 data=dataDict[group], ch_names=chNameDict[group],
-                group=group, report=report,
+                group=group, report=report, timeRows=timerowNames,
             )
 
         elif group[:3] == 'lfp':
-
-            if 'time' in chNameDict[group]:   ### CHECK AND CHANGE
-                chNameDict[group].remove('time')
             
-            if group[4:] == 'left': side = 'L'  #chNameDict[group][0][4]
+            if group[4:] == 'left': side = 'L'
             if group[4:] == 'right': side = 'R'
 
-            lead_type = runInfo.lead_type  # code for lead-type
+            lead_type = runInfo.lead_type
             lead = Segm_Lead_Setup(lead_type, side, chNameDict[group])
             
             if lfp_reref == 'levels': reref_function = reref_segm_levels
@@ -527,7 +572,6 @@ def main_rereferencing(
                 timerowNames=timerowNames,
                 report=report,
             )
-            print(f'\tFor group {group}: NEW CHANNEL_NAMES: {rerefNames[group]}')
 
         rerefData[group], rerefNames[group], report = removeNaNchannels(
             rerefData[group], rerefNames[group],

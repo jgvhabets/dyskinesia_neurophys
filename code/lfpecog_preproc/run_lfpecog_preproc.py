@@ -47,6 +47,7 @@ if __name__ == '__main__':
     import preproc_resample as resample
     import preproc_reref as reref
     import preproc_get_mne_data as loadData
+    import preproc_plotting as plotting
 
 
     # open argument (json file) defined in command (line)
@@ -56,13 +57,13 @@ if __name__ == '__main__':
 
     
     
-    for sub in mainSettings['subs_include'][:3]:
+    for sub in mainSettings['subs_include']:
 
         sub_runs = dataMng.get_sub_runs(
             sub, proj_path,
         )
 
-        for run in list(sub_runs.values())[:1]:
+        for run in list(sub_runs.values())[1:2]:
         
             if 'dopa' not in run['acq'].lower():
                 print(f'\n\tRun {run} SKIPPED, NO "DOPA" IN NAME')
@@ -75,14 +76,16 @@ if __name__ == '__main__':
                 runDict=run,
                 project_path=proj_path,
             )
-
+            
             rawRun = dataMng.defineMneRunData(
                 runInfo=runInfo,
                 subSettings=run,
             )
 
             dataDict, chNameDict = loadData.get_data_and_channels(
-                rawRun, runInfo
+                rawRun=rawRun, runInfo=runInfo,
+                Fs=mainSettings['ephys']['orig_Fs'],
+                to_plot=mainSettings['report_plots'],
             )
 
             dataDict, chNameDict = loadData.remove_flatlines_empties(
@@ -106,37 +109,47 @@ if __name__ == '__main__':
 
             # BandPass-Filtering
             dataDict = fltrs.filters_for_dict(
-                dataDict, mainSettings, 'bandpass'
+                dataDict, chNameDict, mainSettings,
+                'bandpass',
             )
 
             # Notch-Filtering
             dataDict = fltrs.filters_for_dict(
-                dataDict, mainSettings, 'notch'
+                dataDict, chNameDict, mainSettings,
+                'notch'
             )
 
             # Resampling
-            dataDict = resample.resample_for_dict(
-                dataDict, mainSettings
+            dataDict, Fs_dict = resample.resample_for_dict(
+                dataDict, chNameDict, mainSettings
             )
         
-            print(f'\n\n\t{sub}:\t{run["task"]} - {run["acq"]} FILTERING + RESAMPLING FINISHED')
-            
-        # # Artefact Removal
-            dataDict, chNameDict = artefacts.artefact_selection(
-                dataDict=dataDict,
-                namesDict=chNameDict,
-                settings=mainSettings,
-                runInfo=runInfo,
-            )
+            if mainSettings['report_plots']:
 
-
-            # Saving Preprocessed Data
-            for group in groups:
-                dataMng.save_arrays(
-                    data=data[group],
-                    names=ch_names[group],
-                    group=group,
+                plotting.dict_plotting(
+                    dataDict=dataDict,
+                    Fs_dict=Fs_dict,
+                    chNameDict=chNameDict,
                     runInfo=runInfo,
-                    lfp_reref=json_settings['lfp_reref'],
+                    moment='post-preprocess',
                 )
-                print(f'Preprocessed data saved for {group}!')
+
+            # # Artefact Removal
+            # dataDict, chNameDict = artefacts.artefact_selection(
+            #     dataDict=dataDict,
+            #     namesDict=chNameDict,
+            #     settings=mainSettings,
+            #     runInfo=runInfo,
+            # )
+
+
+            # # Saving Preprocessed Data
+            # for group in groups:
+            #     dataMng.save_arrays(
+            #         data=data[group],
+            #         names=ch_names[group],
+            #         group=group,
+            #         runInfo=runInfo,
+            #         lfp_reref=json_settings['lfp_reref'],
+            #     )
+            #     print(f'Preprocessed data saved for {group}!')

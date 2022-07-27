@@ -6,12 +6,18 @@ import mne
 
 
 def resample_for_dict(
-    dataDict, settings
+    dataDict, chNamesDict, settings
 ):
     """
     Run resample() for data dictionaries
     """
+    groups_Fs = {}
+
     for group in dataDict.keys():
+
+        n_timerows = sum([
+            'time' in n for n in chNamesDict[group]
+        ])
 
         if group[:3] == 'acc':
             dtype = 'acc'
@@ -26,14 +32,18 @@ def resample_for_dict(
     
         dataDict[group] = resample(
             data=dataDict[group],
+            n_timeRows=n_timerows,
             Fs_orig=settings[dtype]['orig_Fs'],
             Fs_new=settings[dtype]['resample_Fs'],
         )
 
-    return dataDict
+        groups_Fs[group] = settings[dtype]['resample_Fs']
+
+    return dataDict, groups_Fs
 
 def resample(
-    data: array, Fs_orig: int, Fs_new: int
+    data: array, n_timeRows:int,
+    Fs_orig: int, Fs_new: int
 ):
     """
     Function performs the downsampling of recorded
@@ -46,6 +56,8 @@ def resample(
         - data (array): 3d array with data, first dimension
         are windows, second dim are rows, third dim are
         the data points over time within one window
+        - n_timeRows (int): number of rows in array
+            containing time stamps based on names
         - Fs_origin (int): original sampling freq
         - Fs_new (int): desired sampling freq
 
@@ -54,34 +66,46 @@ def resample(
         data arrays as input data, however downsampled
         and therefore less datapoints per window
     """
-    down = int(Fs_orig / Fs_new)  # factor to down sample
+    down = Fs_orig / Fs_new  # factor to down sample
+
     if len(data.shape) == 3:
+
         newdata = np.zeros((
             data.shape[0],
             data.shape[1],
             int(data.shape[2] / down),
         ))
-        time = data[:, 0, :]  # time row over all windows
-        newtime = time[:, ::down][:, :newdata.shape[2]]
-        newdata[:, 0, :] = newtime  # alocate new times in new data array
-        newdata[:, 1:, :] = resample_poly(
-            data[:, 1:, :], up=1, down=down, axis=2
-        )[:, :, :newdata.shape[2]]  # fill signals rows with signals
-    
+
+        time = data[:, :n_timeRows, :]
+        newtime = time[:, :, ::down][:, :newdata.shape[2]]
+        newdata[:, :n_timeRows, :] = newtime
+
+        newdata[:, n_timeRows:, :] = resample_poly(
+            data[:, n_timeRows:, :], up=1, down=down, axis=2
+        )[:, :, :newdata.shape[2]]
+
+
     if len(data.shape) == 2:
+
         newdata = np.zeros((
             data.shape[0],
-            data.shape[1] // down,
+            int(data.shape[1] / down),
         ))
-        time = data[0, :]  # time row over all windows
-        newtime = time[::down][:newdata.shape[1]]
-        newdata[0, :] = newtime  # alocate new times in new data array
-        # newdata[1:, :] = resample_poly(
-        #     data[1:, :], up=1, down=down, axis=1
-        # )[:, :newdata.shape[1]]  # fill signals rows with signals
-        newdata[1:, :] = mne.filter.resample(
-            data[1:, :], up=1, down=down, axis=1
-        )[:, :newdata.shape[1]]  # fill signals rows with signals
+        newtime = np.zeros((n_timeRows, newdata.shape[-1]))
+
+        time = data[:n_timeRows, :]
+        newtime[0] = np.arange(
+            start=0, stop=time[0, -1], step=(1 / Fs_new)
+        )[:newdata.shape[-1]]
+        newtime[1] = np.arange(
+            start=time[1, 0], stop=time[1, -1], step=(1 / Fs_new)
+        )[:newdata.shape[-1]]
+
+        newdata[:n_timeRows, :] = newtime
+        
+        newdata[n_timeRows:, :] = mne.filter.resample(
+            data[n_timeRows:, :], up=1, down=down, axis=1
+        )[:, :newdata.shape[1]]
 
     return newdata
 

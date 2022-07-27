@@ -73,7 +73,7 @@ def get_sub_runs(
             'task': splits[2][5:],
             'acq': splits[3][4:],
             'run': splits[4][4:],
-            'acq_time': scans_df['acq_time'][i],
+            'acq_time': scans_df["acq_time"][i],
             'dopaIn_time': sub_json["dopa_intake_time"],
             'tasks_excl': sub_json["tasks_exclude"],
             'data_include': sub_json["data_include"],
@@ -105,6 +105,14 @@ class RunInfo:
         )
 
         self.data_groups = self.runDict["data_include"]
+
+        acq_time = datetime.datetime.fromisoformat(
+            self.runDict["acq_time"]
+        )
+        ldopa_intake_time = datetime.datetime.fromisoformat(
+            self.runDict["dopaIn_time"]
+        )
+        self.dopa_time_delta = acq_time - ldopa_intake_time
 
         self.store_str = (
             f'{self.runDict["sub"]}_{self.runDict["task"]}_'
@@ -162,7 +170,9 @@ class RunInfo:
                     f'Acquisition: {self.runDict["acq"]}\n\t'
                     f'Settings-Version: {self.mainSettings["settingsVersion"]}'
                     f'\n\n\tTasks excl: {self.runDict["tasks_excl"]}'
-                    f'\n\tData incl: {self.runDict["data_include"]}'   
+                    f'\n\tData incl: {self.runDict["data_include"]}'
+                    f'\n\n\tRecording time relative to L-DOPA (Madopar'
+                    f' LT intake): {self.dopa_time_delta} (hh:mm:ss)'  
                 )
                 f.close()
 
@@ -180,8 +190,9 @@ class defineMneRunData:
       def __post_init__(self, ):
       # read raw bids files into mne RawBrainVision object
       # doc mne.io.raw: https://mne.tools/stable/generated/mne.io.Raw.html
+
             self.bids = mne_bids.read_raw_bids(
-                self.runInfo.bidspath, verbose='WARNING'
+                self.runInfo.bidspath, verbose="Warning",
             )
             report = (
                 '\n\n------------ BIDS DATA INFO ------------\n'
@@ -190,7 +201,6 @@ class defineMneRunData:
                 f'{self.bids.info["sfreq"]} Hz\n'
                 f'Bad channels are: {self.bids.info["bads"]}\n'
             )
-            print(report)
 
             # select ECOG vs DBS channels (bad channels are dropped!)
             if any([
