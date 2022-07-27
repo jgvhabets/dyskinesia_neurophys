@@ -12,8 +12,13 @@ from os.path import join
 def aggregate_arr_fts(
     method, arr
 ):
+    """
+    Aggregate array-features (calculated
+    per tap in block) to one value per
+    block.
+    """
     assert method in [
-        'mean', 'stddev', 'sum',
+        'mean', 'median', 'stddev', 'sum',
         'coefVar', 'trend_slope', 'trend_R'
     ], f'Inserted method "{method}" is incorrect'
 
@@ -21,7 +26,9 @@ def aggregate_arr_fts(
 
         arr = arr[~np.isnan(arr)]
 
-        if arr.size == 0: return 0
+    if arr.size == 0:
+        print('artificial 0 added')  # TODO: fill unknwons with 0 or nan?
+        return 0  # was inside if statement
 
     if method == 'allin1':
 
@@ -33,6 +40,10 @@ def aggregate_arr_fts(
     elif method == 'mean':
         
         return np.nanmean(arr)
+    
+    elif method == 'median':
+        
+        return np.nanmedian(arr)
 
     elif method == 'stddev':
 

@@ -125,7 +125,8 @@ def matlab_import(filepath: str):
 
 
 def tap3x10_updrs_scores(
-    file_dir, file_name
+    file_dir:str, file_name:str,
+    incl_stimRange: bool,
 ):
     """
     Imports and categories updrs subscores
@@ -136,12 +137,25 @@ def tap3x10_updrs_scores(
         - acc_runids: subjects-side-state
             included in accelerometer import
             and block extraction
+        - incl_stimRange: set True if all stim-
+            amplitudes in protocol are included
+            in subscore file
     """
     scoreTable = read_csv(
         os.path.join(file_dir, file_name)
     )
     IDs = [sub[3:6] for sub in scoreTable['PerceptID']]
     IDs = list(set(IDs))
+
+    if incl_stimRange:
+
+        block_scores = find_stimRangeScores(
+            IDs, scoreTable,
+        )
+
+        print('Sub-scores for full stim-Ampltiude range extracted')
+
+        return block_scores
 
     block_scores = {}
     run_IDs = []
@@ -170,3 +184,65 @@ def tap3x10_updrs_scores(
     
     return block_scores
 
+
+def find_stimRangeScores(
+    IDs, scoreTable,
+):
+    """
+    
+    """
+    block_scores = {}
+    run_IDs = []
+    subs_incl = [
+        '007', '013', '014', '015'
+    ]
+    stimAmps = [
+        '0', '05', '1', '15', '2', '25', '3'
+    ]
+
+    for id in IDs:
+        if id not in subs_incl: continue
+
+        print(id)
+        for side in ['L', 'R']:
+            for med in ['Off', 'On']:
+                run_IDs.append(f'{id}_{side}_{med}')
+    
+    for run_id in run_IDs:
+        
+        block_scores[run_id] = {}
+        
+        for amp in stimAmps:
+            block_scores[run_id][f'{amp}mA'] = []
+        
+        strings = run_id.split(sep='_')
+        sub = strings[0]
+        side = strings[1]
+        med = strings[2]
+    
+        for row in range(scoreTable.shape[0]):
+
+            if sub not in scoreTable['PerceptID'].iloc[row][:6]:
+                continue
+
+            if scoreTable['Hand'].iloc[row] != side:
+                continue
+            
+            if scoreTable['Block_N'].iloc[row] not in [1, 2, 3]:
+                continue
+
+            for amp in stimAmps:
+
+                block_scores[run_id][f'{amp}mA'].append(
+                    scoreTable[f'Med{med}_{amp}mA'].iloc[row]
+                )
+
+        for amp in stimAmps:
+
+            if sum(np.isnan(
+                block_scores[run_id][f'{amp}mA']
+            )) == 3:
+
+                del(block_scores[run_id][f'{amp}mA'])
+    
+    return block_scores

@@ -41,7 +41,7 @@ def combineFeatsPerScore(
     """
     merge_method_list = [
         'allin1', 'mean', 'sum', 'stddev', 'coefVar',
-        'range', 'trend_slope', 'trend_R'
+        'range', 'trend_slope', 'trend_R', 'median',
     ]
     assert merge_method in merge_method_list, (
         f'merge_method: "{merge_method}" is not '
