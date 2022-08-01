@@ -2,14 +2,17 @@
 Function to plot preprocessing progress
 in channels versus time
 """
-from curses.ascii import FS
+from itertools import compress
 import numpy as np
-from os.path import join
 import matplotlib.pyplot as plt
+from os.path import join, exists
+from os import makedirs
+
+
 
 def plot_groupChannels(
     ch_names: list, groupData, groupName:str,
-    Fs, runInfo, moment:str
+    Fs, runInfo, moment: str, artf_data=None,
 ):
     moment_strings = {
         'raw': {
@@ -25,43 +28,85 @@ def plot_groupChannels(
             'fname': 'after_artfct_removal',
         }
     }
+
+    save_path = join(runInfo.fig_path, runInfo.store_str)
+    if not exists(save_path): makedirs(save_path)
+
+    timerow_sel = ['time' in name for name in ch_names]
+    timerowNames = list(compress(ch_names, timerow_sel))
+    nTimeRows = len(timerowNames)
+    x_ind = ch_names.index('dopa_time')
+
     fig, axes = plt.subplots(
-        len(ch_names) - 2, 1, figsize=(16, 24),
+        len(ch_names) - nTimeRows, 1, figsize=(16, 24),
         sharex=True,
     )
 
-    print(f'channel names in plotting {runInfo.store_str}: {ch_names}')
-    print(f'\tMOMENT {moment}; plot time rows: {groupData[:2, :5]}')
-    for n in range(len(ch_names) - 2):
+    for n in range(len(ch_names) - nTimeRows):
 
         axes[n].plot(
-            groupData[1, :],
-            groupData[n + 2, :]
+            groupData[x_ind, :],
+            groupData[n + nTimeRows, :]
         )
-        # axes[n].set_xticks(groupData)
+
+        if moment == 'post-artefact-removal':
+
+            y1, y2 = axes[n].get_ylim()
+            axes[n].fill_between(
+                x=groupData[x_ind, :],
+                y1=y1, y2=y2,
+                where=np.isnan(groupData[n + nTimeRows, :]),
+                color='red',
+                alpha=.4,
+                label='Artefact cleaned',
+            )
+
+            try:
+                artf_data.shape
+
+                axes[n].plot(
+                    artf_data[x_ind, :],
+                    artf_data[n + nTimeRows, :],
+                    color='k', alpha=.6,
+                    label=(
+                        'Removed as "artefact" (# StdDev cutoff: '
+                        f'{runInfo.mainSettings["ephys"]["artf_sd"]})'
+                    ),
+                )
+            except:
+                print('No artefact to plot next to clean data')
+            
+            axes[n].set_ylim(y1, y2)
+
         axes[n].set_ylabel(
-            ch_names[n + 2], fontsize=18, rotation=45,
+            ch_names[n + 2], fontsize=18, rotation=30,
         )
     
-    min_LDtime = groupData[1, :] / 60
+    axes[-1].legend(
+        bbox_to_anchor=[.1, -.15],
+        loc='upper left', frameon=False,
+        fontsize=20, ncol=2,
+    )
+
+    min_LDtime = groupData[x_ind, :] / 60
     axes[-1].set_xticks(np.linspace(
-        groupData[1, 0], groupData[1, -1], 5
+        groupData[x_ind, 0], groupData[x_ind, -1], 5
     ))
     axes[-1].set_xticklabels(np.around(np.linspace(
         min_LDtime[0], min_LDtime[-1], 5
     ), 1), fontsize=18)
     axes[-1].set_xlabel(
-        f'{ch_names[1]} (in minutes after LT)', fontsize=18,
+        f'{ch_names[x_ind]} (in minutes after LT)', fontsize=18,
     )
 
     fig.suptitle(
-        f'{moment_strings[moment]["title"]} ({runInfo.store_str})',
+        f'{moment_strings[moment]["title"]}\n({runInfo.store_str})',
         size=20, x=.5, y=.95, ha='center',
     )
 
     fname = f'{runInfo.store_str}_{groupName}_{moment_strings[moment]["fname"]}'
     plt.savefig(
-        join(runInfo.fig_path, fname),
+        join(save_path, fname),
         dpi=150, facecolor='w',
     )
     plt.close()

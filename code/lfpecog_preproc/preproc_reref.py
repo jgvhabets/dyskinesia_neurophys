@@ -295,14 +295,7 @@ def reref_segm_levels(
         row_tofill += 1
         present_levels.append(l)
 
-    # print(f'leveldata shape: {leveldata.shape}, # present-levels {len(present_levels)}'
-    #     f', # empty-levels: {n_empty_levels}')
     print(f'Present levels: {present_levels}, shape leveldata: {leveldata.shape}')
-    print(leveldata[:, :3])
-    # if n_empty_levels > 0:
-    #     leveldata = leveldata[:-n_empty_levels, :]
-    #     print('after empty level removal')
-    #     print(leveldata[:, :3])
     
     assert (len(present_levels) + n_timerows
         == leveldata.shape[-2]), print(

@@ -63,7 +63,7 @@ if __name__ == '__main__':
             sub, proj_path,
         )
 
-        for run in list(sub_runs.values())[1:2]:
+        for run in list(sub_runs.values())[3:5]:
         
             if 'dopa' not in run['acq'].lower():
                 print(f'\n\tRun {run} SKIPPED, NO "DOPA" IN NAME')
@@ -134,22 +134,19 @@ if __name__ == '__main__':
                     moment='post-preprocess',
                 )
 
-            # # Artefact Removal
-            # dataDict, chNameDict = artefacts.artefact_selection(
-            #     dataDict=dataDict,
-            #     namesDict=chNameDict,
-            #     settings=mainSettings,
-            #     runInfo=runInfo,
-            # )
+            # Artefact Removal
+            dataDict, chNameDict = artefacts.artf_removal_dict(
+                dataDict=dataDict,
+                namesDict=chNameDict,
+                runInfo=runInfo,
+            )
 
 
-            # # Saving Preprocessed Data
-            # for group in groups:
-            #     dataMng.save_arrays(
-            #         data=data[group],
-            #         names=ch_names[group],
-            #         group=group,
-            #         runInfo=runInfo,
-            #         lfp_reref=json_settings['lfp_reref'],
-            #     )
-            #     print(f'Preprocessed data saved for {group}!')
+            # Saving Preprocessed Data
+            dataMng.save_dict(
+                dataDict=dataDict,
+                namesDict=chNameDict,
+                runInfo=runInfo,
+            )
+            
+            print(f'\nFINISHED PREPROCESSING SUB {sub} Run: {run}\n')

@@ -116,7 +116,7 @@ class RunInfo:
 
         self.store_str = (
             f'{self.runDict["sub"]}_{self.runDict["task"]}_'
-            f'{self.runDict["acq"]}_{self.runDict["run"]}'
+            f'{self.runDict["acq"]}'
         )
         
         self.fig_path = join(
@@ -153,7 +153,7 @@ class RunInfo:
             now = now.strftime("%Y%m%d_%H%M")
             report_fname =  (
                 f'preprocReport_{self.runDict["sub"]}_'
-                f'{self.runDict["task"]}{self.runDict["acq"][-6:]}_'
+                f'{self.runDict["task"]}{self.runDict["acq"][-6:]}'
                 f'_{self.mainSettings["settingsVersion"]}'
                 f'_{now}.txt'
             )
@@ -311,37 +311,57 @@ class defineMneRunData:
 
 
 
-def save_arrays(
+def save_dict(
+    dataDict, namesDict, runInfo,
+):
+    """
+    Save preprocssed dictionaries containing
+    data arrays, per array
+    """
+    for group in dataDict.keys():
+
+        save_array(
+            data=dataDict[group],
+            names=namesDict[group],
+            group=group,
+            runInfo=runInfo,
+        )
+
+def save_array(
     data: array, names: list, group: str,
-    runInfo: Any, lfp_reref: str,
+    runInfo: Any,
 ):
     '''
-    Function to save preprocessed 3d-arrays as npy-files.
+    Function to save preprocessed np-arrays as npy-files.
 
     Arguments:
         - data (array): 3d-arrays with preprocessed data
-        - names (dict): containing channel-name lists
-        corresponding to data arrays
-        - group(str): group to save
+        - names (list): containing channel-name lists
+            corresponding to data arrays
+        - group (str): group name
         - runInfo (class): class containing info of spec-run
 
     Returns:
         - None
     '''
-    # define filename, save data-array per group (lfp L/R vs ecog)
+    # save data array as .npy
     f_name = (
-        f'{runInfo.store_str}_{runInfo.preproc_sett}_'
-        f'{group.upper()}_PREPROC_data.npy'
+        f'data_{runInfo.store_str}_'
+        f'{runInfo.mainSettings["settingsVersion"]}'
+        f'_{group}.npy'
     )
     np.save(join(runInfo.data_path, f_name), data)
-    # save list of channel-names as txt-file
+
+    # save list of channel-names as .csv
     f_name = (
-        f'{runInfo.store_str}_{runInfo.preproc_sett}_'
-        f'{group.upper()}_PREPROC_rownames.csv'
+        f'names_{runInfo.store_str}_'
+        f'{runInfo.mainSettings["settingsVersion"]}'
+        f'_{group}.csv'
     )
     with open(join(runInfo.data_path, f_name), 'w') as f:
-            write = csv.writer(f)
-            write.writerow(names)
+        write = csv.writer(f)
+        write.writerow(names)
+        f.close()
 
     return
 
