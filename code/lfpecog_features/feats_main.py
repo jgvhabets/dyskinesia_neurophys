@@ -38,9 +38,10 @@ class extractSpectralFts:
     COMPARE DESCRIPTIVELY AND MAKE Z-SCORED PLOTS?
         Z-SCORE AGAINST BASELINE SPECTRAL EPOCHS
     """
+    
+    ft_params: list #default factory
+    lowbeta: str #default factory
     runClass: Any=None
-    ft_params: list=#default factory
-    lowbeta: str=#default factory
     
     def __post_init__(self,):
         sub = self.runClass.sub

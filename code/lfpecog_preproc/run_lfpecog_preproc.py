@@ -21,7 +21,7 @@ the 'settings_xxx' JSON-file.
 Instructions to run and keep Git-Sync to repo:
 - set work dir: cd /.../dyskinesia_neurophys/
 - run file: python3 code/lfpecog_preproc/run_lfpecog_preproc.py
-    - add json as argument for sys: data/preprocess.../xxx.json
+    - add json as argument for sys: data/preprocess_jsons/xxx.json
 '''
 
 if __name__ == '__main__':
@@ -54,8 +54,6 @@ if __name__ == '__main__':
     with open(sys.argv[1], 'r') as json_data:
     
         mainSettings = json.load(json_data)  # gets dir
-
-    
     
     for sub in mainSettings['subs_include']:
 
@@ -63,7 +61,7 @@ if __name__ == '__main__':
             sub, proj_path,
         )
 
-        for run in list(sub_runs.values())[3:5]:
+        for run in list(sub_runs.values()):
         
             if 'dopa' not in run['acq'].lower():
                 print(f'\n\tRun {run} SKIPPED, NO "DOPA" IN NAME')
@@ -83,7 +81,8 @@ if __name__ == '__main__':
             )
 
             dataDict, chNameDict = loadData.get_data_and_channels(
-                rawRun=rawRun, runInfo=runInfo,
+                rawRun=rawRun,
+                runInfo=runInfo,
                 Fs=mainSettings['ephys']['orig_Fs'],
                 to_plot=mainSettings['report_plots'],
             )
@@ -146,7 +145,10 @@ if __name__ == '__main__':
             dataMng.save_dict(
                 dataDict=dataDict,
                 namesDict=chNameDict,
+                FsDict = Fs_dict,
                 runInfo=runInfo,
             )
             
             print(f'\nFINISHED PREPROCESSING SUB {sub} Run: {run}\n')
+
+            del(dataDict)

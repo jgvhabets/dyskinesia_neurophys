@@ -312,7 +312,7 @@ class defineMneRunData:
 
 
 def save_dict(
-    dataDict, namesDict, runInfo,
+    dataDict, namesDict, FsDict, runInfo,
 ):
     """
     Save preprocssed dictionaries containing
@@ -323,13 +323,14 @@ def save_dict(
         save_array(
             data=dataDict[group],
             names=namesDict[group],
+            Fs=FsDict[group],
             group=group,
             runInfo=runInfo,
         )
 
 def save_array(
     data: array, names: list, group: str,
-    runInfo: Any,
+    Fs, runInfo: Any,
 ):
     '''
     Function to save preprocessed np-arrays as npy-files.
@@ -348,7 +349,7 @@ def save_array(
     f_name = (
         f'data_{runInfo.store_str}_'
         f'{runInfo.mainSettings["settingsVersion"]}'
-        f'_{group}.npy'
+        f'_{group}_{Fs}Hz.npy'
     )
     np.save(join(runInfo.data_path, f_name), data)
 
