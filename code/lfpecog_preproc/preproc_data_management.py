@@ -162,7 +162,10 @@ class RunInfo:
             )
             with open(self.reportTxt_path, 'w') as f:
 
-                print(f'\n\tWRITING TXT FOR {self.runDict["sub"]}')
+                print(
+                    f'\n\tWRITING TXT FOR {self.store_str}'
+                    f'\n\t\ton path: {self.reportTxt_path}'    
+                )
                 f.write(
                     '##### PREPROCESSING REPORT #####\n\n'
                     f'\tSub-{self.runDict["sub"]}\n\t'
@@ -287,20 +290,30 @@ class defineMneRunData:
             
             if self.lfp:
                 report = report + (
-                f'\n\t{len(self.lfp.ch_names)} DBS channels:'
-                f' ({len(self.lfp_left.ch_names)} left, '
-                f'{len(self.lfp_right.ch_names)} right),\n'
-            )
+                    f'\n\t{len(self.lfp.ch_names)} DBS channels:'
+                )
+                try:
+                    report = report + (
+                        f' {len(self.lfp_left.ch_names)} left, '
+                    )
+                except AttributeError:
+                    pass
+                try:
+                    report = report + (
+                        f'{len(self.lfp_right.ch_names)} right'
+                    )
+                except AttributeError:
+                    pass
             
             if 'emg' in self.runInfo.data_groups:
-                report = report + f'\t{len(self.emg.ch_names)} EMG channels,\n'
+                report = report + f'\n\t{len(self.emg.ch_names)} EMG channels,\n'
             
             if 'ecg' in self.runInfo.data_groups:
                 if self.ecg:
-                    report = report + f'\t{len(self.ecg.ch_names)} ECG channel(s),\n'
+                    report = report + f'\n\t{len(self.ecg.ch_names)} ECG channel(s),\n'
             
             if self.acc:
-                report = report + f'\t{len(self.acc.ch_names)} Accelerometry channels.\n\n'
+                report = report + f'\n\t{len(self.acc.ch_names)} Accelerometry channels.\n\n'
             
             print(report)
             if self.runInfo.reportTxt_path:

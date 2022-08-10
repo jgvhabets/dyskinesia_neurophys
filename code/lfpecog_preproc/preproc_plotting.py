@@ -17,20 +17,26 @@ def plot_groupChannels(
     moment_strings = {
         'raw': {
             'title': f'Raw {groupName.upper()} signals ({Fs} Hz) BEFORE preprocessing',
-            'fname': 'after_raw_import'
+            'fname': 'post_raw_import'
         },
-        'post-preprocess': {
-            'title': f'{groupName.upper()} signals ({Fs} Hz) AFTER preprocessing',
-            'fname': 'after_preprocessing',
+        'pre-artefact-removal': {
+            'title': f'{groupName.upper()} signals ({Fs} Hz) BEFORE artefact removal',
+            'fname': 'pre_artfct_removal',
         },
         'post-artefact-removal': {
             'title': f'{groupName.upper()} signals ({Fs} Hz) AFTER artefact removal',
-            'fname': 'after_artfct_removal',
+            'fname': 'post_artfct_removal',
+        },
+        'post-reref': {
+            'title': f'{groupName.upper()} signals ({Fs} Hz) AFTER preprocessing',
+            'fname': 'post_rereferencing',
         }
     }
 
     save_path = join(runInfo.fig_path, runInfo.store_str)
-    if not exists(save_path): makedirs(save_path)
+    if not exists(save_path):
+        makedirs(save_path)
+        print(f'\n\n\t FIG SAVE PATH CREATED {save_path}\n\n')
 
     timerow_sel = ['time' in name for name in ch_names]
     timerowNames = list(compress(ch_names, timerow_sel))
@@ -105,6 +111,7 @@ def plot_groupChannels(
     )
 
     fname = f'{runInfo.store_str}_{groupName}_{moment_strings[moment]["fname"]}'
+    print(f'\n\n\tFIGURE TO BE SAVED: {fname}')
     plt.savefig(
         join(save_path, fname),
         dpi=150, facecolor='w',

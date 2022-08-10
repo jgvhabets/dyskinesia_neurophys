@@ -94,14 +94,6 @@ if __name__ == '__main__':
                 reportPath=runInfo.reportTxt_path,
             )
 
-            dataDict, chNameDict = reref.main_rereferencing(
-                dataDict=dataDict,
-                chNameDict=chNameDict,
-                runInfo=runInfo,
-                lfp_reref=mainSettings['lfp_reref'],
-                reportPath=runInfo.reportTxt_path,
-            )
-
             dataDict, chNameDict = loadData.delete_empty_groups(
                 dataDict, chNameDict
             )
@@ -124,13 +116,14 @@ if __name__ == '__main__':
             )
         
             if mainSettings['report_plots']:
+                print('\n\n MAIN SETTINGS TO PLOT POSITIVE')
 
                 plotting.dict_plotting(
                     dataDict=dataDict,
                     Fs_dict=Fs_dict,
                     chNameDict=chNameDict,
                     runInfo=runInfo,
-                    moment='post-preprocess',
+                    moment='pre-artefact-removal',
                 )
 
             # Artefact Removal
@@ -140,6 +133,23 @@ if __name__ == '__main__':
                 runInfo=runInfo,
             )
 
+            # Rereferencing with clean, corrected signals
+            dataDict, chNameDict = reref.main_rereferencing(
+                dataDict=dataDict,
+                chNameDict=chNameDict,
+                runInfo=runInfo,
+                lfp_reref=mainSettings['lfp_reref'],
+                reportPath=runInfo.reportTxt_path,
+            )
+
+            if mainSettings['report_plots']:
+                plotting.dict_plotting(
+                    dataDict=dataDict,
+                    Fs_dict=Fs_dict,
+                    chNameDict=chNameDict,
+                    runInfo=runInfo,
+                    moment='post-reref',
+                )
 
             # Saving Preprocessed Data
             dataMng.save_dict(

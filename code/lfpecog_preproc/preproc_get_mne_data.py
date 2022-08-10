@@ -124,8 +124,11 @@ def remove_flatlines_empties(
             del_names = []
             for f_c in flat_chs: del_names.append(chNames[g][f_c])
             for c in del_names: chNames[g].remove(c)
-            np.delete(data[g], flat_chs, axis=0)
+            print(f'DEL CHECK, shape pre: {data[g].shape}'
+                    f'\n\tchannels to remove: {flat_chs}')
+            data[g] = np.delete(data[g], flat_chs, axis=0)
             # delete rows (on rownumber) in once, to prevent changing row nrs during deletion!
+            print(f'DEL CHECK, shape post: {data[g].shape}')
             
             report = report + f'\nRemoved from {g}, FLATLINE channels: {del_names}'
     

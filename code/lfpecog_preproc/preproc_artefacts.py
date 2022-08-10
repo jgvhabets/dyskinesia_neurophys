@@ -87,6 +87,8 @@ def artf_removal_array(
     
     group_nans = {}
 
+    print(f'\n\nARTEFACT INDEX CHECK: all-names: {names}; data-shape: {data.shape}')
+
     for ch in np.arange(len(timerowNames), data.shape[0]):
 
         print(f'\nstart channel #{ch}: {names[ch]} (# {n_wins} win"s)')
@@ -148,47 +150,5 @@ def artf_removal_array(
             moment='post-artefact-removal',
             artf_data=artf_data,
         )
-            
-    # # visual check by plotting after selection
-    # if save:
-    #     for c in np.arange(len(ch_arr)):
-    #         plot_ch = []
-    #         for w in np.arange(new_arr.shape[0]):
-    #             plot_ch.extend(new_arr[w, c + 1, :])  # c + 1 to skip time
-    #         plot_t = ch_t[:len(plot_ch)]
-    #         axes[c, 1].plot(plot_t, plot_ch, color='blue')
-    #         # color shade isnan parts
-    #         ynan = np.isnan(plot_ch)
-    #         ynan = ynan * 2
-    #         axes[c, 1].fill_between(
-    #             x=plot_t,
-    #             y1=cuts[c][0],
-    #             y2=cuts[c][1],
-    #             color='red',
-    #             alpha=.3,
-    #             where=ynan > 1,
-    #         )
-    #         axes[c, 1].set_title(f'{n_nan[c]} windows deleted')
-    #     fig.suptitle(f'{RunInfo.store_str}: Artifact deletion (window'
-    #                 f'length: {win_len} msec, cutoff: {n_stds_cut}'
-    #                 f' std dev +/- channel mean)', size=14,
-    #                 color='gray', alpha=.3, x=.3, y=.99, )
-    #     fig.tight_layout(h_pad=.2)
-
-    #     if save != 'show':
-    #         try:
-    #             f_name = (f'{group}_artefact_removal_blocks_{win_len}_'
-    #                     f'cutoff_{n_stds_cut}_sd.jpg')
-    #             plt.savefig(os.path.join(save, f_name), dpi=150,
-    #                         facecolor='white')
-    #             plt.close()
-    #         except FileNotFoundError:
-    #             print(f'Directory {save} is not valid')
-    #     elif save == 'show':
-    #         plt.show()
-    #         plt.close()
-
-
-
 
     return clean_data, names
