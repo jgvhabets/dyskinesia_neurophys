@@ -37,6 +37,9 @@ def plot_groupChannels(
     if not exists(save_path):
         makedirs(save_path)
         print(f'\n\n\t FIG SAVE PATH CREATED {save_path}\n\n')
+    
+    else:
+        print(f'\n\n\t FIG SAVE PATH ALREADY EXISTED {save_path}\n\n')
 
     timerow_sel = ['time' in name for name in ch_names]
     timerowNames = list(compress(ch_names, timerow_sel))

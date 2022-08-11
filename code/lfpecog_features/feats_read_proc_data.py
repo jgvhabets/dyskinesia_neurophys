@@ -88,7 +88,7 @@ class dopaTimedDf:
             self.sub_path
         )
         self.data = df
-        self.fs = fs
+        self.fs = int(fs)
 
 
 def find_proc_data(

@@ -2,6 +2,9 @@
 Python main script which should be ran from
 command-line to create data arrays ordered
 by dopa-time of full subject recordings
+
+Currently not in Use, dopa-array functions
+are currenlty run from notebook
 """
 
 if __name__ == '__main__':
@@ -21,7 +24,7 @@ if __name__ == '__main__':
     sys.path.append(ft_path)  # enable import in sub-functions
 
     # Import own functions
-    import feats_read_data
+    import feats_read_proc_data as fts_read
    
     # open argument (json file) defined in command (line)
     with open(sys.argv[1], 'r') as json_data:
@@ -32,7 +35,7 @@ if __name__ == '__main__':
 
     for sub in settings['subs_include']:
 
-        dtypes, nameFiles, dataFiles, sub_path = feats_read_data.find_proc_data(
+        dtypes, nameFiles, dataFiles, sub_path = fts_read.find_proc_data(
             sub=sub,
             version=settings['data_version'],
             project_path=settings['project_path']
@@ -44,7 +47,7 @@ if __name__ == '__main__':
 
             if dType not in settings['data_include']: continue
 
-            dopa_array = feats_read_data.create_dopa_timed_array(
+            dopa_array = fts_read.create_dopa_timed_array(
                 dType, nameFiles, dataFiles, sub_path
             )            
             print(dopa_array)

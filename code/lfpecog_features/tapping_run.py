@@ -1,4 +1,4 @@
-'''Run Finger- and HandTap Detection functions'''
+'''Run UPDRS FingerTap Detection and Assessment functions'''
 
 # Import public packages and functions
 import numpy as np
@@ -7,7 +7,7 @@ from itertools import compress
 from typing import Any
 
 # Import own functions
-from lfpecog_features.tapping_time_detect import continTapDetector, pausedTapDetector
+from lfpecog_features.tapping_time_detect import updrsTapDetector
 from lfpecog_features.tapping_preprocess import run_preproc_acc, find_main_axis
 
 
@@ -55,7 +55,7 @@ def run_updrs_tapping(
     else:
         main_ax_i = find_main_axis(acc_arr)
         
-    tap_ind, impacts = continTapDetector(
+    tap_ind, impacts = updrsTapDetector(
         acc_triax=acc_arr, fs=fs, main_ax_i=main_ax_i
     )
 

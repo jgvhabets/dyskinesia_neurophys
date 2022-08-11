@@ -307,7 +307,7 @@ def pausedTapDetector(
 
         
 
-def continTapDetector(
+def updrsTapDetector(
     acc_triax, main_ax_i: int, fs: int,
 ):
     """
