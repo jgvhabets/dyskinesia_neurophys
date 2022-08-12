@@ -366,6 +366,8 @@ def save_array(
     )
     np.save(join(runInfo.data_path, f_name), data)
 
+    print(f'Data (npy) saved\n\t{f_name} @ {runInfo.data_path})')
+
     # save list of channel-names as .csv
     f_name = (
         f'names_{runInfo.store_str}_'
