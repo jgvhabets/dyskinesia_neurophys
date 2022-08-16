@@ -9,10 +9,15 @@ L-Dopa intake.
 # Import general packages and functions
 from dataclasses import dataclass
 import os
+from re import sub
 from typing import Any
 import json
 import numpy as np
 from scipy.signal import welch, cwt, morlet2
+
+# Import own functions
+from lfpecog_features.feats_read_proc_data import subjectData
+import lfpecog_features.feats_spectral_baseline as baseLine
 
 """
 Include in feature class:
@@ -25,31 +30,35 @@ Include in feature class:
 """
 
 @dataclass(init=True, repr=True,)
-class extractSpectralFts:
-    """ Create base data per level 
-    
-    CREATE FUNCTION TO EPOCH BASED ON TAPS/MOVES, INCL
-        REST EPOCHS (3 S PRE AND POST NON TAP/MOV)
-    
-    CREATE REUSABLE! FUNCTION FOR SPECTRAL BANDWIDTH
-
-    START WITH EASY STR.FORWARD BANDPOWERS
-
-    COMPARE DESCRIPTIVELY AND MAKE Z-SCORED PLOTS?
-        Z-SCORE AGAINST BASELINE SPECTRAL EPOCHS
+class dopaTimed_ftSpace:
     """
-    
-    ft_params: list #default factory
-    lowbeta: str #default factory
-    runClass: Any=None
+    Extract feature-set alligned to dopa-times.
+
+    Input:
+        - sub (str): subject-code
+        - incl_baseline (bool): set True to include
+            baseline values
+    """
+    sub: str
+    data_version: str
+    project_path: str
+    incl_baseline: bool = False
     
     def __post_init__(self,):
-        sub = self.runClass.sub
-        self.lowbeta += 'lowbeta'
-    
+        subData = subjectData(
+            sub=self.sub,
+            data_version=self.data_version,
+            project_path=self.project_path  
+        )
 
-    print(f'end of class, {lowbeta}')
-    
+        if self.incl_baseline:
+
+            blClass = baseLine.createBaseline(subData)
+            setattr(self, 'baseline', blClass)
+
+
+
+
 
 
 

@@ -22,6 +22,12 @@ class subjectData:
     Creates Class with all data of one subject,
     stored per datatype. Data is preprocessed and
     ordered by relative time to L-Dopa-intake.
+
+    Input:
+        - sub (str): subject code
+        - data_version (str): e.g. v2.2
+        - project_path (str): main project-directory
+            where data is stored 
     """
     sub: str
     data_version: str

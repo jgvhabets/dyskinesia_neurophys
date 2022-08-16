@@ -9,22 +9,41 @@ recording of the corresponding Session. Minutes from Rest
 recording are selected to contain no movement.
 '''
 # Import general packages and functions
+from dataclasses import dataclass
 import os
 from typing import Any
 import json
 import numpy as np
 from scipy.signal import welch, cwt, morlet2
 
-class EphyBaseLevel:
-    """ Create base data per level """
-    def __init__(
-        self,
-        runClass,
-        dtype,
-        level,
-        row,
-        base_ind
-    ):
+from lfpecog_features.feats_read_proc_data import subjectData
+import lfpecog_features.moveDetection_preprocess as movePrep
+
+@dataclass(init=True, repr=True,)
+class createBaseline:
+    """
+    
+    """
+    subData: class
+
+    def __post_init__(self,):
+        
+        acc_restThr = 1e-6
+
+        for dType in self.subData.dtypes:
+
+            if dType[:3] not in ['eco', 'lfp']:
+                continue
+                
+            df = getattr(self.subData, dType).data
+            fs = int(getattr(self.subData, dType).fs)
+            nperseg = fs // 2
+
+            
+
+            baseWindow = 
+            
+
         self.level = level
         self.rawsig = getattr(runClass, f'{dtype}_arr')[
             row, base_ind[0]:base_ind[1]
@@ -63,6 +82,53 @@ class EphyBaseLevel:
         return (
             f'{self.__class__.__name__} Class '
             f'for {self.level}')
+
+
+def find_base_window(
+    subData, dType, ephyCh_ind, nperseg,
+    acc_thr=1e-6, ):
+    """
+    Input:
+        - accDf: df as part of subjectData Class
+        - mov_thr: signal vector magn cut off for
+            movement
+    """
+    acc_keys = [
+        'ACC' in k for k in subData.acc_left.data.keys()
+    ]
+    if len(sum(acc_keys)) == 0:
+        acc_keys = [
+            k in ['X', 'Y', 'Z'] for k in accDf.keys()
+        ]
+
+    svm = {}
+    for side in ['left', 'right']:
+        
+        accDat = getattr(
+            subData, f'acc_{side}'
+        ).data[acc_keys].values
+        svm[side] = movePrep.signalvectormagn(accDat)
+    
+    ephyDat = getattr(subData, dType).data
+    ephyFs = getattr(subData, dType).fs
+
+    for iStart in np.arange(0, ephyFs * 60 * 5, nperseg):
+
+        if np.logical_and(  # both ACC detected no movement
+            any(svm['left'][iStart:iStart + nperseg
+                ] > acc_thr) == False,
+            any(svm['right'][iStart:iStart + nperseg
+                ] > acc_thr) == False
+        ):
+
+            if ephyDat[ephyCh_ind][iStart:iStart + nperseg]:
+                # if no nans in ephy
+
+
+
+
+    return seg_dopa_starts
+
 
 
 class EphyBaseData:

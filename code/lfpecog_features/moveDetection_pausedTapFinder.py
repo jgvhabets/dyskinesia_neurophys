@@ -64,6 +64,11 @@ def pausedTapDetector(
         ax_sel = [
             k for k in accDf.keys() if 'ACC' in k
         ]
+        if len(ax_sel) == 0:
+            ax_sel = [
+                k for k in accDf.keys() if k in ['X', 'Y', 'Z']
+            ]
+
         acc_arr = accDf[ax_sel].values
 
         # PM check for polarity with prep-function
@@ -162,6 +167,8 @@ def pausedTapDetector(
                                 tap_i_list.append([sigInds[t] for t in temp_tap])
                             except ValueError:
                                 continue  # skip where nan is left bcs of no border
+                            except IndexError:
+                                continue
                 
                 # exclude small Peaks close to Tapping-Peaks
                 maxgap = tap_move_distance * fs
