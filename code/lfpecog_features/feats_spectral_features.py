@@ -7,6 +7,8 @@ Containing:
 - bandpass filter
 - coherence
 - Phase Amplitude Coupling (tensorpac)
+
+PM: consider seperate .py-files per feature
 '''
 # Import general packages and functions
 import os
@@ -24,7 +26,7 @@ from tensorpac import Pac
 os.chdir(or_wd)  # set back work dir
 
 
-def bandpass(sig, freqs, fs, order=3, twice=False):
+def bandpass(sig, freqs, fs, order=3,):
     """
     Bandpass filtering using FIR window (based on scipy
     firwin bandpas filter documentation)
@@ -35,7 +37,6 @@ def bandpass(sig, freqs, fs, order=3, twice=False):
         - freqs: list or tuple with lower and upper freq
         - fs: sampling freq
         - order (int): n-order of filter
-        - twice (Boolean): perform filter twice (docu-
         mentation -> equal to filtfilt, no direct difference
         in test data
         
@@ -48,80 +49,59 @@ def bandpass(sig, freqs, fs, order=3, twice=False):
     high = freqs[1] / nyq
     b, a = signal.butter(order, [low, high], btype='band')
     filtsig = signal.lfilter(b, a, sig)
-    
-    # taps = signal.firwin(order, cutoff=freqs, fs=fs, pass_zero=False,)
-    # a = 1
-    # zi = signal.lfilter_zi(taps, a)
-    # filtsig, _ = signal.lfilter(taps, a, sig, zi=zi*sig[0])
-    # if twice:
-    #     filtsig, _ = signal.lfilter(taps, a, filtsig, zi=zi*filtsig[0])
 
     return filtsig
 
 
-def coherence(
-    sig1, sig2, fs, name1, name2,
-    nseg=256, imag=True, freq_bws={},
+def calc_coherence(
+    stn_sig, ecog_sig, fs: int, nperseg: int=None,
 ):
     """
     Coherence, calculated per bandwidth frequencies based on
     Qasim et al Neurobiol Dis 2016/ De Hemptinne 2015.
-    Imaginary coherence ignores signals with zero-time lag
-    and thereby reduces the probability of picking up
-    non-physiological correlations (based on Rolston &
-    Chang, Cereb Cortex 2018).
+    Imaginary coherence ignores signals with zero-time lag,
+    potentially caused by volume conduction theory (the coherent
+    signal is coming from an identical physiological source
+    instead of a parallel coherent-oscillating source).
+    Using the imag-coherence reduces the probability of high
+    coherence values due to non-physiological correlations
+    (based on Nolte ea, Clin Neurophy 2004; Hohlefeld ea,
+    Neuroscience 2015; Rolston & Chang, Cereb Cortex 2018).
+
+    PM1: Standardisation (detectability) are calculated outside
+    of this function.
+
+    PM2: imag-coherency assumption no phase shift is proven
+    for freq's below 100 Hz (Stinstra & Peters, 1998; referred
+    to in Nolte 2004).
 
     Input:
         - sig1-2: two arrays with signals to include
         - fs: sample frequency (should be same for sig1-2)
-        - name1-2: signal names to use in parameter name
         - nseg= length of welch window
-        - imag: include imaginary coherence or not
-        - freq_bws (dict with tuples): define freq bandwidth
-            to extract from. if not given, std freqs-battery
-            is extracted
 
     Returns:
-        - coh_values: list of (imaginary) coherence values
-        - coh_names: list of corresponding names
+        - f: array of frequencies corr to coherence-values
+        - icoh: array of imaginary coherence values
+        - coh: array of coherence values
     """
-    coh_values = []
-    coh_names = []
-    if not freq_bws:
-        # if not specified: std freq-bw-battery
-        freq_bws = {
-            'theta': (4, 8),
-            'alpha': (8, 13),
-            'beta': (13, 30),
-            'lowbeta': (13, 20),
-            'highbeta': (20, 30),
-            'bbgamma': (60, 400),
-            'lowgamma': (30, 60),
-            'midgamma': (60, 90),
-            'gamma': (30, 90),
-        }
-    f, Px = signal.welch(sig1, fs=fs, nperseg=nseg,)
-    _, Py = signal.welch(sig2, fs=fs, nperseg=nseg,)
-    _, Pxy = signal.csd(sig1, sig2, fs=fs, nperseg=nseg,)
+    if nperseg == None: nperseg = fs // 2
+    
+    # calculate power spectra (these power spectra are not stored)
+    f, S_stn = signal.welch(stn_sig, fs=fs, nperseg=nperseg,)
+    _, S_ecog = signal.welch(ecog_sig, fs=fs, nperseg=nperseg,)
+    _, S_csd = signal.csd(stn_sig, ecog_sig, fs=fs, nperseg=nperseg,)
 
-    coh = np.abs(Pxy) / np.sqrt(Px * Py)
-    icoh = Pxy.imag / (np.sqrt(Px * Py))
+    # calculate coherencies (Nolte ea 2004)
+    coherency = S_csd / np.sqrt(
+        np.multiply(S_stn, S_ecog)
+    )
+    # coherency -> (imag) coherence
+    coh = np.abs(coherency)
+    icoh = coherency.imag
 
-    for bwkey in freq_bws.keys():
-        # take mean of values within bandwidths
-        coh_names.append(f'Coh_{bwkey}_{name1}_{name2}')
-        bw = freq_bws[bwkey]  # take freq-ranges of bandwidth
-        coh_values.append(np.mean(
-            coh[[bw[0] < fi < bw[1] for fi in f]]
-        ))
+    return f, icoh, coh
 
-        if imag == True:  # if imaginary coh wanted, same for imag values
-            coh_names.append(f'iCoh_{bwkey}_{name1}_{name2}')
-            coh_values.append(np.mean(
-                icoh[[bw[0] < fi < bw[1] for fi in f]]
-            ))
-
-    return coh_values, coh_names
 
 
 def PAC_matrix(
@@ -134,6 +114,8 @@ def PAC_matrix(
     zscore=False,
 ):
     """
+    TODO: REVISE
+
     Calculating Phase Amplitude Coupling following the tensorpac package,
     based on methodology from De Hemptinne et al Nature Neuroscience 2015,
     and Qasim et al Neurobiol of Disease 2018.

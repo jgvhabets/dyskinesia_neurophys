@@ -7,7 +7,7 @@ Movement, Tap] and annotates the time relative to
 L-Dopa intake.
 '''
 # Import general packages and functions
-from dataclasses import dataclass
+from dataclasses import field, dataclass
 import os
 from re import sub
 from typing import Any
@@ -18,6 +18,8 @@ from scipy.signal import welch, cwt, morlet2
 # Import own functions
 from lfpecog_features.feats_read_proc_data import subjectData
 import lfpecog_features.feats_spectral_baseline as baseLine
+import lfpecog_features.feats_ftsExtr_Classes as ftClasses
+
 
 """
 Include in feature class:
@@ -40,89 +42,209 @@ class dopaTimed_ftSpace:
             baseline values
     """
     sub: str
-    data_version: str
-    project_path: str
-    incl_baseline: bool = False
+    window_len: int = 5
+    win_overlap: float = .5
+    subData: Any = None
+    subBaseline: Any = None
+    # excl_task: list = field(default_factory = ['Free'])
     
     def __post_init__(self,):
-        subData = subjectData(
-            sub=self.sub,
-            data_version=self.data_version,
-            project_path=self.project_path  
-        )
 
-        if self.incl_baseline:
+        if self.subData == None:
+            self.subData = subjectData(
+                sub=self.sub,
+                data_version=self.data_version,
+                project_path=self.project_path,
+            )
 
-            blClass = baseLine.createBaseline(subData)
-            setattr(self, 'baseline', blClass)
+        if self.subBaseline == None:
+            self.subBaseline = baseLine.createBaseline(
+                    subData=self.subData,
+                    nSec_blWins=self.window_len,
+                )
 
+        for dType in self.subData.dtypes:
 
-
-
-
-
-
-class EphyBaseData:
-    """Create data per ecog/ lfp-L / lfp-R"""
-    def __init__(self, runClass, runname, dtype):
-        self.dtype = dtype
-        base_ind_f = os.path.join(  # make sure projectpath is cwd
-            'data/analysis_derivatives/'
-            'base_spectral_run_indices.json'
-        )
-        with open(base_ind_f) as jsonfile:
-            base_ind = json.load(jsonfile)
-        sub = runClass.sub
-        ses = runClass.ses
-        base_ind = base_ind[sub][ses][dtype]
-
-        for row, level in enumerate(
-            getattr(runClass, f'{dtype}_names')
-        ):
-            # iterate all levels, skip first time-row
-            if np.logical_and(row == 0, level == 'time'):
-                continue
+            if dType[:3] not in ['eco', 'lfp']:
+                continue  # only include ephys-types
+                
             setattr(
                 self,
-                level,  # key of attr
-                EphyBaseLevel(
-                    runClass,
-                    dtype,
-                    level,
-                    row,
-                    base_ind
+                dType,
+                dType_ftExtraction(
+                    subData=self.subData,
+                    dType=dType,
+                    win_len=self.window_len,
+                    win_overlap=0,
+                    baseline=self.subBaseline,
                 )
             )
+
+
+
+@dataclass(init=True, repr=True,)
+class dType_ftExtraction:
+    """
+    Extract feature-set alligned to dopa-times from
+    all ephys-channels from one dType (LFP L/R, ECoG)
+
+    Input:
+        - sub (str): subject-code
+        - incl_baseline (bool): set True to include
+            baseline values
+    """
+    subData: Any
+    dType: str
+    win_len: Any
+    subData: Any
+    baseline: Any
+    win_overlap: float = .5
+
+
+    def __post_init__(self,):
+
+        df=getattr(self.subData, self.dType).data
+        fs=int(getattr(self.subData, self.dType).fs)
+
+        for ch_key in df.keys():
+
+            if not np.logical_or(
+                'LFP' in ch_key, 'ECOG' in ch_key
+            ): continue  # skip non-ephys channels
+
+            # create data array per window
+            win_arr, win_times = get_windows(
+                sigDf=df,
+                fs=fs,
+                ch=ch_key,
+                win_len=self.win_len,
+                overlap=self.win_overlap,
+            )
+
+            # calculate PSD per window
+            setattr(  # set all defined baseline values
+                self,  # as classes directly under their channelnames
+                ch_key,
+                ftClasses.getFeatures_singleChannel(
+                    win_arr,
+                    win_times,
+                    fs,
+                    self.win_overlap,
+                )
+            )
+
+            # Extract combi ECoG-LFP features
+            if not 'ecog' in self.dType.lower(): continue
+
+            # PM: transform into functions which finds combi ch and windows
+            ## e.g. ftClasses.getCombiWindows()
+            if 'R' in ch_key: side = 'right'
+            elif 'L' in ch_key: side = 'left'
+
+            lfpDf = getattr(
+                self.subData,
+                f'lfp_{side}'
+            ).data
+
+            for combi_ch in lfpDf.keys():
+
+                if 'lfp' not in combi_ch.lower(): continue  # skip non-ephys lfp-channels
+
+                # find available windows in stn-channel
+                (
+                    lfpWins,
+                    lfpTimes,
+                ) = get_windows(
+                    sigDf=lfpDf,
+                    ch=combi_ch,
+                    fs=fs,
+                    win_len=self.win_len,
+                    overlap=self.win_overlap,
+                )
+
+                # skip stn-channel if no windows available
+                if len(lfpTimes) == 0: continue
+                
+                try:  # assign ch-combi-specific baseline
+                    combiCh_baseline = getattr(
+                        self.baseline,
+                        f'{ch_key}_{combi_ch}'
+                    )
+                # if the ch-combi is not available
+                except AttributeError:  # fill to prevent
+                    combiCh_baseline = None
+
+                # set basal-ganglia-cortex baseline values
+                setattr(  # stored as classes with 'ecog-ch_stn-ch' name
+                    self,
+                    f'{ch_key}_{combi_ch}',
+                    ftClasses.getFeatures_BGCortex(
+                        ecogDat=win_arr,
+                        ecogTimes=win_times,
+                        ecogCh=ch_key,
+                        stnDat=lfpWins,
+                        stnTimes=lfpTimes,
+                        stnCh=combi_ch,
+                        fs=fs,
+                        overlap=self.win_overlap,
+                        extr_baseline=False,
+                        combiCh_baseline=combiCh_baseline,
+                    )
+                )
+
+
+
+def get_windows(
+    sigDf, fs, ch, win_len, overlap=.5,
+):
+    """
+    Select from one channel windows with size nWin * Fs,
+    exclude windows with nan's, and save corresponding
+    dopa-times to included windows.
+
+    Inputs:
+        - sigDg (dataframe)
+        - fs (int): sample freq
+        - ch (str): key name string
+        - win_len: length of window in seconds
+        - overlap (float): part of window used as overlap
+            between consecutive windows
     
-    def __repr__(self):
-        return (
-            f'{self.__class__.__name__} Class '
-            f'for {self.dtype}')
+    Returns:
+        - win_arr (arr): 2d array of n-windows x n-samples
+        - win_times (list): corresponding times of window
+            start dopa-times
+    """
+    sig = sigDf[ch].values
+    times = np.around(sigDf['dopa_time'], 5)
+    nWin = int(fs * win_len)  # n samples within a window
 
-
-class EphyBase():
-    '''Baseline creation for spectral analyses'''
-    def __init__(self, runClass, runname: str):
-
-        self.runClass = runClass.runs[runname]
-        self.runname = runname
-        self.ecog = EphyBaseData(
-            runClass=self.runClass,
-            runname=self.runname,
-            dtype='ecog',
-        )
-        self.lfp_left = EphyBaseData(
-            runClass=self.runClass,
-            runname=self.runname,
-            dtype='lfp_left',
-        )
-        self.lfp_right = EphyBaseData(
-            runClass=self.runClass,
-            runname=self.runname,
-            dtype='lfp_right',
-        )
+    if np.logical_or(
+        overlap == 0, overlap == None
+    ):  # if no overlap, move a full window-length further per window
+        nHop = nWin
     
-    def __repr__(self):
-        return (f'{self.__class__.__name__}: '
-            f'Main EphysBaseline Class')
+    else:
+        nHop = int(nWin * overlap)  # n samples used as overlap
+
+    win_list = []
+    win_times = []
+
+    for win_i0 in np.arange(0, len(sig) - nWin, nHop):
+
+        # skip window if data is not consecutive
+        if times[win_i0 + nWin] - times[win_i0] > win_len:
+
+            continue
+
+        winSig = sig[win_i0:win_i0 + nWin]
+        win_list.append(winSig)
+        win_times.append(times[win_i0])
+    
+    # convert list of lists into np array
+    win_arr = np.array(win_list)
+
+    return win_arr, win_times
+        
+
 

@@ -5,8 +5,8 @@ state detection
 
 # Import public packages
 import numpy as np
-import pandas as pd
-from scipy.stats import variation
+# import pandas as pd
+# from scipy.stats import variation
 
 # Import own functions
 
@@ -89,11 +89,13 @@ def signalvectormagn(acc_arr):
     if acc_arr.shape[0] != 3: acc_arr = acc_arr.T
     assert acc_arr.shape[0] == 3, ('Array must'
     'be tri-axial (x, y, z from accelerometer')
-  
+
+    acc_arr = acc_arr.astype(float)
+
     svm = np.sqrt(
-        acc_arr[0] ** 2 +
-        acc_arr[1] ** 2 +
-        acc_arr[2] ** 2
+        acc_arr[0, :] ** 2 +
+        acc_arr[1, :] ** 2 +
+        acc_arr[2, :] ** 2
     )
 
     return svm
