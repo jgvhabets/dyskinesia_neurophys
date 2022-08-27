@@ -31,6 +31,8 @@ class tapFeatures:
             resulting from continuous tapping detect function
         - updrsSubScore: UPDRS III Fingertapping subscore
             corresponding to acc signal, default False
+    
+    TODO: Add decrement scores: e.g. mean of first 10 taps / mean last 10 taps
         
 
     """
@@ -41,6 +43,10 @@ class tapFeatures:
     updrsSubScore: Any = False
     
     def __post_init__(self,):
+
+        if len(self.tapDict) == 0:  # no taps detected
+            return
+
         ax = find_main_axis(self.triax_arr)
         self.nTaps = len(self.impacts)
         self.freq = self.nTaps / (
