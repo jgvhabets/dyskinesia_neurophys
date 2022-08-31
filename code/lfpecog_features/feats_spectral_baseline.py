@@ -50,9 +50,10 @@ class createBaseline:
     incl_coh: bool = True
     n_bl_minutes: int = 5
     nSec_blWins: int = 5
+    nSec_Segm: float = .5
 
     def __post_init__(self,):
-        
+
         for dType in self.subData.dtypes:
 
             if dType[:3] not in ['eco', 'lfp']:
@@ -60,6 +61,7 @@ class createBaseline:
                 
             df = getattr(self.subData, dType).data
             fs = int(getattr(self.subData, dType).fs)
+            nperseg = int(fs * self.nSec_Segm)
 
             for ch_key in df.keys():
 
@@ -84,12 +86,13 @@ class createBaseline:
                     self,  # as classes directly under their channelnames
                     ch_key,
                     ftClasses.getFeatures_singleChannel(
-                        blWins,
-                        blTimes,
-                        fs,
-                        overlap,
+                        winData=blWins,
+                        winTimes=blTimes,
+                        fs=fs,
+                        nperseg=nperseg,
+                        overlap=overlap,
                         incl_psd=self.incl_psd,
-                        incl_wav=self.incl_wav
+                        incl_wav=self.incl_wav,
                     )
                 )
         
@@ -136,6 +139,7 @@ class createBaseline:
                                 stnCh=combi_ch,
                                 fs=fs,
                                 overlap=overlap,
+                                nperseg=nperseg,
                                 extr_baseline=True,
                             )
                         )
@@ -182,6 +186,7 @@ def find_baseline_windows(
     ephysFs = getattr(subData, dType).fs
     accFs = getattr(subData, 'acc_left').fs
     nperseg = ephysFs * nSec_per_win
+
     times = np.around(getattr(subData, dType).data['dopa_time'], 5)
     sig = getattr(subData, dType).data[ephysCh].values
 

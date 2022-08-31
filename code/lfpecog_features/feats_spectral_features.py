@@ -54,7 +54,7 @@ def bandpass(sig, freqs, fs, order=3,):
 
 
 def calc_coherence(
-    stn_sig, ecog_sig, fs: int, nperseg: int=None,
+    stn_sig, ecog_sig, fs: int, nperseg=None,
 ):
     """
     Coherence, calculated per bandwidth frequencies based on

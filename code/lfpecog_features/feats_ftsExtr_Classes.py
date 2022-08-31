@@ -39,6 +39,7 @@ class getFeatures_singleChannel:
     winData: Any
     winTimes: Any
     fs: int
+    nperseg: int
     overlap: Any
     incl_psd: bool = True
     incl_wav: bool = False
@@ -50,7 +51,7 @@ class getFeatures_singleChannel:
             self.psd_f, self.psd = welch(
                 self.winData,
                 fs=self.fs,
-                nperseg=self.fs // 2,
+                nperseg=self.nperseg,
             )
 
         if self.incl_wav:
@@ -130,11 +131,13 @@ class getFeatures_BGCortex:
     stnDat: Any
     stnTimes: Any
     fs: int
+    nperseg: int
     overlap: Any
     extr_baseline: bool = True
     combiCh_baseline: Any = None
     
     def __post_init__(self,):
+
         # ecogPs_list, stnPs_list, crossPs_list = [], [], []
         icoh_list, coh_list, coh_times = [], [], []
 
@@ -151,14 +154,16 @@ class getFeatures_BGCortex:
 
             stn_w = np.where(
                 np.around(self.stnTimes, 5) == np.around(ecog_t, 5)
-            )  # find stn window matching with ecog time
-            stn_w = stn_w[0]
+            )[0]  # find stn window matching with ecog time
+
+            if w < 5:
+                print(f'Coherence time check:\n\tECoG: {ecog_t} vs STN: {self.stnTimes[stn_w]}')
 
             freqs, icoh, coh = spec_feats.calc_coherence(
                 stn_sig=self.stnDat[stn_w, :],
                 ecog_sig=self.ecogDat[w, :],
                 fs=self.fs,
-                nperseg=self.fs // 2,
+                nperseg=self.nperseg,
             )
 
             icoh_list.append(icoh)

@@ -38,14 +38,22 @@ class dopaTimed_ftSpace:
 
     Input:
         - sub (str): subject-code
-        - incl_baseline (bool): set True to include
-            baseline values
+        - window_len (int): seconds of windows, segments
+            are half windows per default
+        - win_overlap (float): part of window that  
+            overlaps, default 0.5
+        - subData: subjectData Class with data
+        - subBaseline Class resulting from createBaseline()
+            if not given, no baseline subtraction is
+            performed
     """
     sub: str
     window_len: int = 5
     win_overlap: float = .5
+    nSec_Seg = .5
     subData: Any = None
     subBaseline: Any = None
+    n_bl_minutes: int = 5
     # excl_task: list = field(default_factory = ['Free'])
     
     def __post_init__(self,):
@@ -61,6 +69,8 @@ class dopaTimed_ftSpace:
             self.subBaseline = baseLine.createBaseline(
                     subData=self.subData,
                     nSec_blWins=self.window_len,
+                    nSec_Seg=self.nSec_Seg,
+                    n_bl_minutes=self.n_bl_minutes,
                 )
 
         for dType in self.subData.dtypes:
@@ -75,8 +85,9 @@ class dopaTimed_ftSpace:
                     subData=self.subData,
                     dType=dType,
                     win_len=self.window_len,
-                    win_overlap=0,
+                    win_overlap=self.win_overlap,
                     baseline=self.subBaseline,
+                    segSec=self.nSec_Seg,
                 )
             )
 
@@ -99,12 +110,14 @@ class dType_ftExtraction:
     subData: Any
     baseline: Any
     win_overlap: float = .5
+    segSec = .5
 
 
     def __post_init__(self,):
 
         df=getattr(self.subData, self.dType).data
         fs=int(getattr(self.subData, self.dType).fs)
+        nperseg=int(fs * self.segSec)
 
         for ch_key in df.keys():
 
@@ -126,10 +139,11 @@ class dType_ftExtraction:
                 self,  # as classes directly under their channelnames
                 ch_key,
                 ftClasses.getFeatures_singleChannel(
-                    win_arr,
-                    win_times,
-                    fs,
-                    self.win_overlap,
+                    winData=win_arr,
+                    winTimes=win_times,
+                    fs=fs,
+                    nperseg=nperseg,
+                    overlap=self.win_overlap,
                 )
             )
 
@@ -186,6 +200,7 @@ class dType_ftExtraction:
                         stnTimes=lfpTimes,
                         stnCh=combi_ch,
                         fs=fs,
+                        nperseg=nperseg,
                         overlap=self.win_overlap,
                         extr_baseline=False,
                         combiCh_baseline=combiCh_baseline,
@@ -201,6 +216,7 @@ def get_windows(
     Select from one channel windows with size nWin * Fs,
     exclude windows with nan's, and save corresponding
     dopa-times to included windows.
+    TODO:
 
     Inputs:
         - sigDg (dataframe)
