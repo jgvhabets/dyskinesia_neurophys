@@ -100,6 +100,11 @@ def calc_coherence(
     coh = np.abs(coherency)
     icoh = coherency.imag
 
+    # get rid of 3rd dimensionality
+    if len(coh.shape) == 3: coh = coh[:, 0, :]
+    if len(icoh.shape) == 3: icoh = icoh[:, 0, :]
+
+
     return f, icoh, coh
 
 

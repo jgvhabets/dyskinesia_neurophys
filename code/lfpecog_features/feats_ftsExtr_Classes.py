@@ -12,6 +12,7 @@ from scipy.signal import welch, cwt, morlet2
 
 # Import own functions
 import lfpecog_features.feats_spectral_features as spec_feats
+from lfpecog_features.feats_main import get_window_tasks
 
 
 @dataclass(init=True, repr=True,)
@@ -30,11 +31,15 @@ class getFeatures_singleChannel:
             between 0 and 1, or None
 
     Class output:
-        - psd (dict): f and psd from Welch PSD, nperseg
-            default as 0.5 seconds; psd as mean over time
+        - psd (nd-array): Welch-PSDs for every window
+            seperately. first axis corr to number of
+            windows, second axis corr to f-range
+        - psd_f (array): freq range of psd
         - wav (dict): wavelet containing time, freq, and psd
         - wavlog (dict): wavelet containing time, freq,
             and psd (log-transformed)
+        - win_tasks (list): recording task performed, corr
+            to start of window.
     """
     winData: Any
     winTimes: Any
@@ -43,6 +48,7 @@ class getFeatures_singleChannel:
     overlap: Any
     incl_psd: bool = True
     incl_wav: bool = False
+    win_tasks: Any = None
             
     def __post_init__(self,):
 
@@ -135,6 +141,7 @@ class getFeatures_BGCortex:
     overlap: Any
     extr_baseline: bool = True
     combiCh_baseline: Any = None
+    ecogTasks: Any = None
     
     def __post_init__(self,):
 
@@ -146,6 +153,7 @@ class getFeatures_BGCortex:
         for w, ecog_t in enumerate(self.ecogTimes):
 
             # check presence of window-time in both data sources
+            # time rounded on 5 decimals (seconds)
             if np.around(ecog_t, 5) not in np.around(
                 self.stnTimes, 5
             ): continue
@@ -156,8 +164,14 @@ class getFeatures_BGCortex:
                 np.around(self.stnTimes, 5) == np.around(ecog_t, 5)
             )[0]  # find stn window matching with ecog time
 
-            if w < 5:
-                print(f'Coherence time check:\n\tECoG: {ecog_t} vs STN: {self.stnTimes[stn_w]}')
+            if w < 2:  # only print small selection to check
+                
+                if self.stnTimes[int(stn_w)] != ecog_t:
+                    
+                    print(
+                        f'\nUnequal Coherence times: ECoG: {ecog_t}'
+                        f' vs STN: {self.stnTimes[int(stn_w)]}'
+                    )
 
             freqs, icoh, coh = spec_feats.calc_coherence(
                 stn_sig=self.stnDat[stn_w, :],
@@ -176,6 +190,14 @@ class getFeatures_BGCortex:
         self.icoh = np.array(icoh_list)
         self.coh = np.array(coh_list)
         self.coh_times = coh_times
+
+        if self.ecogTasks != None:
+            # only if given, e.g. not for baseline
+            self.coh_tasks = get_window_tasks(
+                coh_times,
+                self.ecogTimes,
+                self.ecogTasks
+            )
 
         # calculate standardized detectable coherencies (Nolte ea 2008)
         for c in ['coh', 'icoh']:

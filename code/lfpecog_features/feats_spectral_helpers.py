@@ -64,7 +64,9 @@ def select_bandwidths(
     or coherence outcomes
 
     Inputs:
-        - values: array with values
+        - values: array with values, can be one
+            or two-dimensional (containing)
+            different windows
         - freqs: corresponding array with frequecies
         - f_min (float): lower cut-off of
             frequencies to select
@@ -72,7 +74,15 @@ def select_bandwidths(
             frequencies to select
     """
     sel = [f_min < f < f_max for f in freqs]
-    values = values[sel]
+
     freqs = freqs[sel]
+
+    if len(values.shape) == 1:
+
+        values = values[sel]
+    
+    elif len(values.shape) == 2:
+
+        values = values[:, sel]
 
     return values, freqs

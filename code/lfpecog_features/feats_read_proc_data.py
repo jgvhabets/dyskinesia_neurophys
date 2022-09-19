@@ -13,7 +13,7 @@ from typing import Any
 import csv
 
 # Import own functions
-from tapping_feat_calc import nan_array
+from feats_helper_funcs import nan_array
 
 
 @dataclass(init=True, repr=True, )

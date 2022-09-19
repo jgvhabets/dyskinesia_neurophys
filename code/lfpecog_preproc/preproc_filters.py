@@ -68,6 +68,9 @@ def bp_filter(
         - data (array): 3d or 2d array with data,
             3d: [windows, rows, time points]
             2d: [rows, time points]
+        - n_timerows (int): number of rows containing
+            timestamps in data - should be skipped
+            while filtering
         - Fs (int): sampling freq
         - l_freq (int): lower freq of bandpass
         - h_freq (int): higher freq of bandpass

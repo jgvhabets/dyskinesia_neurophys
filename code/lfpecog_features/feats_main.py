@@ -57,8 +57,10 @@ class dopaTimed_ftSpace:
     # excl_task: list = field(default_factory = ['Free'])
     
     def __post_init__(self,):
+        ### TODO: include task and acc-labels
 
         if self.subData == None:
+
             self.subData = subjectData(
                 sub=self.sub,
                 data_version=self.data_version,
@@ -66,6 +68,7 @@ class dopaTimed_ftSpace:
             )
 
         if self.subBaseline == None:
+
             self.subBaseline = baseLine.createBaseline(
                     subData=self.subData,
                     nSec_blWins=self.window_len,
@@ -91,6 +94,10 @@ class dopaTimed_ftSpace:
                 )
             )
 
+            print(f'\t{dType} finished ({self.sub})')
+        
+        print(f'\n\tFinished {self.sub}\n')
+
 
 
 @dataclass(init=True, repr=True,)
@@ -107,17 +114,16 @@ class dType_ftExtraction:
     subData: Any
     dType: str
     win_len: Any
-    subData: Any
     baseline: Any
     win_overlap: float = .5
-    segSec = .5
+    segSec: float = .5
 
 
     def __post_init__(self,):
 
-        df=getattr(self.subData, self.dType).data
-        fs=int(getattr(self.subData, self.dType).fs)
-        nperseg=int(fs * self.segSec)
+        df = getattr(self.subData, self.dType).data
+        fs = int(getattr(self.subData, self.dType).fs)
+        nperseg = int(fs * self.segSec)
 
         for ch_key in df.keys():
 
@@ -134,6 +140,13 @@ class dType_ftExtraction:
                 overlap=self.win_overlap,
             )
 
+            # find corresponding tasks per window
+            win_tasks = get_window_tasks(
+                win_times,
+                df['dopa_time'].values,
+                df['task'].values
+            )
+
             # calculate PSD per window
             setattr(  # set all defined baseline values
                 self,  # as classes directly under their channelnames
@@ -144,6 +157,7 @@ class dType_ftExtraction:
                     fs=fs,
                     nperseg=nperseg,
                     overlap=self.win_overlap,
+                    # win_tasks=win_tasks,
                 )
             )
 
@@ -204,6 +218,7 @@ class dType_ftExtraction:
                         overlap=self.win_overlap,
                         extr_baseline=False,
                         combiCh_baseline=combiCh_baseline,
+                        ecogTasks=win_tasks,
                     )
                 )
 
@@ -216,7 +231,10 @@ def get_windows(
     Select from one channel windows with size nWin * Fs,
     exclude windows with nan's, and save corresponding
     dopa-times to included windows.
-    TODO:
+    TODO: include activity to select, and optionally
+        activity filter (-> use function part of baseline
+        as seperate function);
+        put all windowing functions in sep-.py-file
 
     Inputs:
         - sigDg (dataframe)
@@ -261,6 +279,41 @@ def get_windows(
     win_arr = np.array(win_list)
 
     return win_arr, win_times
-        
 
 
+def get_window_tasks(
+    win_times, times, tasks
+):
+    """
+    Find matching task for the window-
+    times, based on the total parallel
+    lists of dopa-times and tasks
+
+    Input:
+        - win_times: times of selected windows
+        - times: all dopa times of dataframe
+        - tasks: all tasks corresponding to
+            all dopa-times
+    
+    Returns:
+        - win_tasks (list): matching tasks to
+            win_times
+    """
+    try:  # convert Series to Array and decrease size
+        times = times.values[::60]
+        tasks = tasks.values[::60]
+
+    except:  # in case not given as pd.Series
+        times = times[::60]
+        tasks = tasks[::60]
+
+    win_tasks = []
+
+    for t in win_times:
+        # find time closest to t
+        i = np.argmin(abs(t - times))
+        # find corresponding task
+        tsk = tasks[i]
+        win_tasks.append(tsk)
+    
+    return win_tasks
