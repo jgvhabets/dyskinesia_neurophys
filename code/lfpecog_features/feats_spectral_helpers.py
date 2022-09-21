@@ -86,3 +86,32 @@ def select_bandwidths(
         values = values[:, sel]
 
     return values, freqs
+
+
+def relative_power(psd):
+    """
+    Convert original power spectral
+    density values in relative power.
+    Meaning that every PSD-freq shows
+    the part of the total PSD it
+    represents in this window
+    
+    Input:
+        - psd (array): original psd
+    
+    Return:
+        -relPsd (array): converted values
+            between 0 and 1
+    """
+    if len(psd.shape) == 1:
+        # if psd is one-dimensional
+        sumPsd = np.nansum(psd)
+        relPsd = psd / sumPsd
+
+    elif len(psd.shape) == 2:
+        # if psd is two-dimensional
+        sumsVector = np.nansum(psd, axis=1)  # sum for every row (psd-window)
+        relPsd = np.divide(psd.T, sumsVector).T
+
+
+    return relPsd

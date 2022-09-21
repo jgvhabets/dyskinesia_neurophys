@@ -14,7 +14,6 @@ def runTapDetection(
     """
     ** USE FOR PAUSED TAPPING - MOVEMENT STATE DETECTION **
 
-
     Function for execution of (bilateral) tap-epoch
     detection. Detects for each side epochs of rest vs tap
     vs other movement. Then combines two sides to epochs
@@ -22,9 +21,7 @@ def runTapDetection(
     left-nontap-movement, right-non-tap-movement.
 
     Input:
-        - fs (int): sampling frequency
-        - leftxyz/ rightxyz (list): list with x-y-z axes
-        arrays; axes not present have to be empty lists
+        - subdat: subData Class with data per patient
 
     Output:
         - restDict (dict): merged dictionary of bilateral

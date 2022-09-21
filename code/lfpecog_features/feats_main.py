@@ -32,7 +32,7 @@ Include in feature class:
 """
 
 @dataclass(init=True, repr=True,)
-class dopaTimed_ftSpace:
+class create_dopaTimed_ftSpace:
     """
     Extract feature-set alligned to dopa-times.
 
@@ -157,7 +157,7 @@ class dType_ftExtraction:
                     fs=fs,
                     nperseg=nperseg,
                     overlap=self.win_overlap,
-                    # win_tasks=win_tasks,
+                    win_tasks=win_tasks,
                 )
             )
 

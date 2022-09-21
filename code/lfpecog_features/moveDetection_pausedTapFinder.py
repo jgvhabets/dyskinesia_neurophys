@@ -44,16 +44,25 @@ def pausedTapDetector(
             peak-dopa-times or peak-dopa-indices of other
             movements
     """
+    # find present acc-sides
     acc_sides = [
         s for s in [
             'left', 'right'
         ] if f'acc_{s}' in vars(subdat).keys()
-    ]  # find present acc-sides
+    ]
 
-    out_lists = {}
+    assert len(acc_sides) == 2, print(
+        f'\n\t{len(acc_sides)} ACC sides found for sub '
+        f'{subdat.sub}, Class-keys: {vars(subdat).keys()}'
+    )
+
+    out_lists = {}  # store output
 
     for side in acc_sides:
-        print('start', side)
+        print(
+            'start movement detection sub '
+            f'{subdat.sub} {side} side'
+        )
 
         for v in ['t', 'i']:
             for m in ['tap', 'move']:
