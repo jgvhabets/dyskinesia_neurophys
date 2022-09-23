@@ -97,7 +97,9 @@ def relative_power(psd):
     represents in this window
     
     Input:
-        - psd (array): original psd
+        - psd (array): original psd, can
+            be uni-dimensional and two-
+            dimonesional
     
     Return:
         -relPsd (array): converted values
@@ -110,8 +112,8 @@ def relative_power(psd):
 
     elif len(psd.shape) == 2:
         # if psd is two-dimensional
-        sumsVector = np.nansum(psd, axis=1)  # sum for every row (psd-window)
-        relPsd = np.divide(psd.T, sumsVector).T
+        sumsVector = np.nansum(psd, axis=1)  # sum for every single-row (psd-window)
+        relPsd = np.divide(psd.T, sumsVector).T  # vector-wise division per row
 
 
     return relPsd

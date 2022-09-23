@@ -8,6 +8,7 @@ import os
 import pandas as pd
 from scipy.signal import find_peaks
 from scipy.stats import variation
+from scipy.ndimage import uniform_filter1d
 from datetime import datetime, timedelta
 from itertools import compress
 
@@ -31,7 +32,7 @@ def pausedTapDetector(
 
     Input:
         - subdat (Class): resulting from subjectData()
-        - tap_move_distance: # seconds which have to between
+        - tap_move_distance: n seconds which have to between
             tap and other movement; too close other movements
             get excluded
     
@@ -63,7 +64,7 @@ def pausedTapDetector(
             'start movement detection sub '
             f'{subdat.sub} {side} side'
         )
-
+        # empty lists to store final outputs
         for v in ['t', 'i']:
             for m in ['tap', 'move']:
                 out_lists[f'{side}_{m}_{v}'] = []
@@ -87,6 +88,7 @@ def pausedTapDetector(
         times = accDf['dopa_time'].values
         
         for task in ['tap', 'rest']:
+            # perform per task-block
             taskBlock_inds = movePrep.find_task_blocks(accDf, task)  # gives DF-indices
 
             tap_i_list, tap_t_list = [], []  # start new list per side (per sub)
@@ -104,409 +106,162 @@ def pausedTapDetector(
                 sigInds = np.arange(iB1, iB2)
                 sigTimes = times[iB1:iB2]
                 svm = movePrep.signalvectormagn(sig3ax)
+                smoothsvm = uniform_filter1d(
+                    svm, size=int(fs / 4)
+                )
 
                 # # Find peaks to help movement detection
-                # peaksettings = {
-                #     'peak_dist': .5,
-                #     'cutoff_time': 2,
-                # }
-
-                # smallPos = find_peaks(
-                #     sig,
-                #     height=(svm_thr, .5e-6),    #(np.max(sig) * .1, np.max(sig) * .6),  # first value is min, second is max
-                #     distance=fs,  # 1 s
-                #     # prominence=np.max(sig) * .1,
-                #     # wlen=fs * .5,
-                # )[0]
                 largePos = find_peaks(
                     sig,
-                    height=.5e-6,   #np.max(sig) * .5,
+                    height=5e-7,   #np.max(sig) * .5,
                     distance=fs,  # 1 s
                 )[0]
                 smallPeaks = find_peaks(
-                    svm,  # convert pos/neg for negative peaks
-                    height=svm_thr,    #(abs(np.min(sig)) * .1, abs(np.min(sig)) * .4),
+                    svm,
+                    height=2.5e-7,    #(abs(np.min(sig)) * .1, abs(np.min(sig)) * .4),
                     distance=fs,  # 10 ms
-                    # prominence=abs(np.min(sig)) * .05,
-                    # wlen=40,
                 )[0]
                 largeNeg = find_peaks(
-                    -1 * sig,
-                    height=.5e-6,   #abs(np.min(sig)) * .4,  # first value is min, second is max
+                    -1 * sig,  # convert pos/neg for negative peaks
+                    height=5e-7,   #abs(np.min(sig)) * .4,  # first value is min, second is max
                     distance=fs,  # 10 ms
-                    # prominence=np.min(yEpoch) * .1,
-                    # wlen=40,
                 )[0]
-
-                # hWin =   # tap is until half a second
                 
-                # define peak-timings
-                if np.logical_and(
-                    largePos != [], largeNeg != []
+                # define peak-timings of TAPS
+                if np.logical_or(
+                    largePos == [], largeNeg == []
                 ):
+                    # not both large Pos and Neg peaks present
+                    if largePos: otherLargePeaks = largePos
+                    elif largeNeg: otherLargePeaks = largeNeg
+                    else: otherLargePeaks = []
+
+                else:  # both large Pos and Neg present
+
+                    otherLargePeaks = []
 
                     for posP in largePos:
+                        # check distance to closest negative peak
+                        if min(abs(posP - largeNeg)) > (fs * .5):
+                            # large peak without close negative peak
+                            otherLargePeaks.append(posP)  # store for other movement
 
-                        if min(abs(posP - largeNeg)) < (fs * .5):
+                        else:  # negative peak close enough to be a TAP
                         
                             # only include tap (pos and neg-peak) if they are within 0.5 sec
                             negP = largeNeg[np.argmin(abs(posP - largeNeg))]
+                            # allocate two large peaks in tap-list
                             if posP > negP: temp_tap = [np.nan, negP, posP, np.nan]
                             if posP < negP: temp_tap = [np.nan, posP, negP, np.nan]
 
                             # search for beginning and end of tapping movement
                             # based on signal vector activity
-                            i = posP
-                            while np.isnan(temp_tap[3]):
-
-                                i += 1
-                                try:
-                                    if svm[i] < svm_thr: temp_tap[3] = i
-                                except IndexError:
-                                    break  # skip tap without inactive border
-                            
-                            i = posP
-                            while np.isnan(temp_tap[0]):
-
-                                i -= 1
-                                if svm[i] < svm_thr: temp_tap[0] = i
+                            temp_tap[0], temp_tap[-1] = find_local_act_borders(
+                                posP, smoothsvm, svm_thr
+                            )
 
                             try:
                                 tap_t_list.append([sigTimes[t] for t in temp_tap])
                                 tap_i_list.append([sigInds[t] for t in temp_tap])
+                            
                             except ValueError:
                                 continue  # skip where nan is left bcs of no border
+                            
                             except IndexError:
+                                print('TAP:',temp_tap)  # PM: exclusion of real-taps?
                                 continue
                 
                 # exclude small Peaks close to Tapping-Peaks
-                maxgap = tap_move_distance * fs
+                min_gap = tap_move_distance * fs
                 
-                if len(smallPeaks) > 0:
-                    sel_peaks = []
-                    # try:
-                    for p in smallPeaks:
-                        try:
-                            dist = abs(p - largePos)
-                            if min(dist) > maxgap: sel_peaks.append(p)
-                        except ValueError:
-                            if largePos == []:
-                                sel_peaks.append(p)
-        
-                    move_t_list.extend([sigTimes[t] for t in sel_peaks])
-                    move_i_list.extend([sigInds[t] for t in sel_peaks])
+                if np.logical_and(
+                    len(smallPeaks) == 0,
+                    len(otherLargePeaks) == 0
+                ): continue  # not small/other movements
 
+                sel_peaks = []
 
-                # plt.figure(figsize=(24, 12))
-                # plt.plot(
-                #     sig, label=f'sig ({mainAx_ind})', c='k', ls='dotted', alpha=.5,
-                # )
-                # # plt.plot(
-                # #     sig3ax, alpha=.5, label=['x','y','z']
-                # # )
-                # # plt.plot(np.diff(svm), alpha=.5, label='sigSVM')
-                # plt.plot(svm, alpha=.3, c='r', label='svm')
-                # scatY = [.5, 2, -2]
-                # labels = ['small Peaks (svm)', 'large POS', 'large NEG']
-                # for n, peaks in enumerate([smallPeaks, largePos, largeNeg]):
-                #     plt.scatter(
-                #         peaks, [scatY[n] * 1e-6] * len(peaks),
-                #         label=labels[n], s=70,)
+                for p in smallPeaks:
+                    # ignore moves too close to taps
+                    try:
+                        min_dist = min(abs(p - largePos))
+                        if min_dist > min_gap:
+                            sel_peaks.append(p)
+
+                    except ValueError:
+                        # if no large peaks in 
+                        if largePos == []:
+                            sel_peaks.append(p)
                 
-                # plt.axhline(svm_thr, label=f'svm thr @ {svm_thr}')
-                # plt.axhline(-svm_thr, label=f'svm thr @ {svm_thr}')
-                # plt.xlim(20000, 60000)
-                # plt.ylim(-2.1e-6, 2e-6)
-                # plt.legend(loc='lower center', ncol=3, fontsize=14)
-                # plt.title(f'{side} B # {bN}')
-                # plt.show()
+                for p in otherLargePeaks: sel_peaks.append(p)
+
+                # find movement borders
+                temp_moves = []
+                for p in sel_peaks:
+                    
+                    i_s, i_e = find_local_act_borders(
+                        p, smoothsvm, svm_thr
+                    )
+                    if (i_e - i_s) > ( 5 * fs): continue  # if window is too long (missing data)
+
+                    temp_moves.append([i_s, i_e])
+    
+                temp_moves = remove_lists_with_NaN(temp_moves)
+
+                try:
+                    move_t_list.extend([sigTimes[t] for t in temp_moves])
+                    move_i_list.extend([sigInds[t] for t in temp_moves])
+                except ValueError:
+                    continue  # skip where nan is left bcs of no border
+                
+                except IndexError:
+                    print(temp_moves)
+                    continue
+
 
             out_lists[f'{side}_tap_t'].extend(tap_t_list)
             out_lists[f'{side}_tap_i'].extend(tap_i_list)
             out_lists[f'{side}_move_t'].extend(move_t_list)
             out_lists[f'{side}_move_i'].extend(move_i_list)
 
-        # out_lists[f'{side}_tap_t'] = tap_t_list
-        # out_lists[f'{side}_tap_i'] = tap_i_list
-        # out_lists[f'{side}_move_t'] = move_t_list
-        # out_lists[f'{side}_move_i'] = move_i_list    
-    
     return out_lists
 
+
+def remove_lists_with_NaN(
+    list_of_lists
+):
+    sel = [~np.isnan(l).any() for l in list_of_lists]
+
+    newlist = list(compress(list_of_lists, sel))
+
+    return newlist
+
+
+def find_local_act_borders(
+    peak_i, svm_sig, svmThr
+):
+    pre_i = np.nan
+    post_i = np.nan
+
+    i = peak_i
+    while np.isnan(pre_i):
+        
+        i -= 1
+        try:
+            if svm_sig[i] < svmThr: pre_i = i
+        except IndexError:
+            break  # skip if border is out of data
     
-            
-            
-            # act_win = fs * 10
-            # state='rest'
-
-            # for n, y in enumerate(sig):
-
-            #     if np.isnan(y): continue
-                
-            #     if np.logical_and(
-            #         n < hWin,
-            #         n > (len(sig) - hWin)
-            #     ): continue
-
-            #     win = svm[int(n - hWin):int(n + hWin)]
-            #     win_active = sum(win > svm_thr) > hWin  # more than half of window is active
-
-            #     if state == 'rest':
-            #         print(n)
-            #         print(win > svm_thr)
-            #         sum(win > svm_thr)
-            #         print(win_active)
-
-            #         if win_active:
-
-            #             print('from rest 2 active')
-
-            #             state = 'move'
-            #             move_i = move_template.copy()
-            #             move_t = move_template.copy()
-            #             move_i[0] = sigInds[n]
-            #             move_t[0] = sigTimes[n]
-                    
-            #         else: continue  # state stays rest
-                
-            #     else:   # state is move
-                    
-            #         if ~ win_active:  # less than window is active
-
-            #             move_i[-1] = sigInds[n]
-            #             move_t[-1] = sigTimes[n]
-
-            #             if np.logical_and(
-            #                 ~np.isnan(move_i[2]),
-            #                 ~np.isnan(move_i[3])
-            #             ):  # contains large POS and NEG
-
-            #                 tap_i_list.append(move_i)
-            #                 tap_t_list.append(move_t)
-            #                 print(move_t, move_i)
-
-            #                 state = 'rest'
-                        
-            #             else:
-
-            #                 move_i_list.append(move_i)
-            #                 move_t_list.append(move_t)
-
-            #                 state = 'rest'
-                    
-            #         else:  # window is active
-
-            #             if n in smallPos:
-
-            #                 move_i[1] = sigInds[n]
-            #                 move_t[1] = sigTimes[n]
-                        
-            #             elif n in largePos:
-
-            #                 move_i[2] = sigInds[n]
-            #                 move_t[2] = sigTimes[n]
-
-            #             elif n in largeNeg:
-
-            #                 move_i[3] = sigInds[n]
-            #                 move_t[3] = sigTimes[n]
-
-        # # Lists to store collected indices and timestamps
-        # tapi = []  # list to store indices of tap
-        # movei = []  # list to store indices of other move
-        # resti = []  # list to store indices of rest
-        # resttemp = []  # list to temporarily collect rest-indices
-        # tempi = []  # for during detection process
-        # state = 'lowRest'
-
-        # # Sample-wise movement detection
-        # # Thresholds for movement detection
-        # # posThr = .5e-7  # Try on new patients: adjust to person or tasks?!
-        # # posThr = .5e-7
-        # posSig = sig[sig > 1e-8]
-        # posThr = np.percentile(posSig, 75)  # TRY OUT
-        # print(posThr, len(largePos[0]), len(largeNeg[0]))
-        # negThr = -posThr
-        # for n, y in enumerate(sig[:-1]):
-
-        #     if state == 'otherMov':
-        #         if np.logical_and(
-        #             y > posThr,
-        #             # any([Y in smallPos[0] for Y in range(n, n + int(fs * .2))])
-        #             any([Y in largePos[0] for Y in range(n, n + int(fs))])  # TRY OUT
-        #         ):  # from other Movement into tap-begin
-        #             tempi.append(n)  # END of OTHER MOVE
-        #             if (tempi[-1] - tempi[0]) > fs * .1:
-        #                 movei.append(tempi)
-        #             tempi = []  # start new index list
-        #             state='upAcc1'
-        #             tempi.append(n)  # START TIME Tap-UP
-        #             print('start of TAP/MOV from OTHER MOVEM', y, n)
-        #             maxUpAcc = np.max(sig[n:n + int(fs * .1)])
-        #             continue
-
-        #         try:
-        #             next10 = sum([negThr < Y < posThr for Y in sig[range(
-        #                 n, n + int(fs * .2)
-        #             )]])
-        #             if next10 > (fs * .2) * .8:
-        #                 # End 'other move' if 8 / 10 next samples are inactive
-        #                 tempi.append(n)  # END of OTHER MOVE
-        #                 if (tempi[-1] - tempi[0]) > fs * .1:
-        #                     movei.append(tempi)
-        #                 tempi = []
-        #                 state = 'lowRest'
-        #                 print('ended MOVE bcs next10 inactive')
-        #         except IndexError:  # prevent indexerror out of range for next10
-        #             print('end of timeseries')
-        #             continue
-
-        #     elif state == 'lowRest':
-        #         if np.logical_and(
-        #             y > posThr,
-        #             # any([Y in smallPos[0] for Y in range(n, n + int(fs * .2))])
-        #             any([Y in largePos[0] for Y in range(n, n + int(fs))])  # TRY OUT
-        #         ):
-        #             print('logAND is TRUE from rest', n)
-
-        #             if resttemp:  # close and store active rest period
-        #                 resttemp.append(n)  # Add second and last rest-ind
-        #                 if (resttemp[1] - resttemp[0]) > fs:  # if rest > 1 sec
-        #                     resti.append(resttemp)  # add finished rest-indices
-        #                 resttemp = []  # reset resttemp list
-                    
-        #             state='upAcc1'
-        #             tempi.append(n)  # START TIME Tap-UP
-        #             print('start of TAP/MOV', y, n)
-        #             maxUpAcc = np.max(sig[n:n + int(fs * .1)])
-
-        #         elif np.logical_or(
-        #                 np.logical_or(n in smallPos[0], n in smallNeg[0]),
-        #                 ~ (negThr < y < posThr)
-        #         ):
-
-        #             if resttemp:  # close and store active rest period
-        #                 resttemp.append(n)  # Add second and last rest-ind
-        #                 if (resttemp[1] - resttemp[0]) > fs:  # if rest > 1 sec
-        #                     resti.append(resttemp)  # add finished rest-indices
-        #                 resttemp = []  # reset resttemp list
-
-        #             state = 'otherMov'
-        #             tempi.append(n)  # START TIME Othermovement
-        #             # print('START TIME OTHER MOVEMENT')
-                
-        #         else:  # lowRest stays lowRest
-        #             if not resttemp:  # if rest-temp list is empty
-        #                 resttemp.append(n)  # start of rest period
-                    
-        #     elif state == 'upAcc1':
-        #         if y == maxUpAcc:
-        #             state='upAcc2'  # after acc-peak
-
-        #     elif state == 'upAcc2':  # TRY OUT
-        #         if y < 0:   #negThr < y < posThr:
-        #             tempi.append(n)  # add moment of MAX UP-SPEED
-        #     #         state='upDec0'
-        #     #         maxUpDecc = np.min(sig[n:n + int(fs * .1)])
-
-        #     # elif state == 'upDec0':  # prevent taking an early small neg peak
-        #     #     if y == maxUpDecc:
-        #             state = 'upDec1'
-
-        #     elif state=='upDec1':
-        #         # if n - tempi[0] > (fs * peaksettings['cutoff_time']):
-        #         #     # if movement-up takes > defined cutoff time
-        #         #     state = 'otherMov'  # reset to start-state
-        #         #     movei.append(tempi)  # was untoggled?
-        #         #     tempi = []  # was untoggled?
-        #         # elif n in smallNeg[0]:
-        #         if np.logical_and(
-        #             y < negThr, sigdiff[n] > 0
-        #         ):  # ACC is increasing after neg peak
-        #             state='upDec2'
-        #             print('after lowpeak(UP) coming back up', n)
-
-        #     elif state == 'upDec2':
-        #         if y > 0:  #negThr < y < posThr:
-        #             state='highRest'
-        #             tempi.append(n)  # end of Up
-        #             print('endUP', n)
-
-        #     elif state == 'highRest':
-        #         if n - tempi[2] > (fs * peaksettings['cutoff_time']):
-        #             # if highrest takes > defined cutoff time
-        #             state = 'otherMov'  # reset to start-state
-        #             movei.append(tempi)  # was untoggled?
-        #             tempi = []  # was untoggled?
-        #         elif np.logical_and(
-        #             # np.logical_and(
-        #                 y < negThr, sigdiff[n] < negThr#,
-        #             # (any([Y in largeNeg[0] for Y in range(n, n + int(fs * .2))])
-        #         ):
-        #             state='downAcc1'
-        #             print('START DOWN MOVEMENT', n)
-        #             tempi.append(n)  # start of Tap-DOWN
-
-        #     elif state == 'downAcc1':
-        #         if n in largeNeg[0]:
-        #             state='downAcc2'
-        #         elif np.logical_and(
-        #             y < negThr, sigdiff[n] > posThr
-        #         ):
-        #             state='downAcc2'
-        #         elif n - tempi[3] > (fs * peaksettings['cutoff_time']):
-        #             state = 'otherMov'  # reset to start-state
-        #             movei.append(tempi)
-        #             tempi = []
-
-        #     elif state == 'downAcc2':
-        #         if np.logical_and(
-        #             y < 0,
-        #             sigdiff[n] > posThr
-        #         ):
-        #             print('Fastest DOWN MOVEMENT', n)
-        #             tempi.append(n)  # fastest point in TAP-DOWN
-        #             state='downDec1'
-
-        #         elif n - tempi[3] > (fs * peaksettings['cutoff_time']):
-        #             state = 'otherMov'  # reset to start-state
-        #             movei.append(tempi)
-        #             tempi = []
-                    
-        #     elif state=='downDec1':
-        #         if n in largePos[0]:
-        #             state='downDec2'
-        #         elif n - tempi[3] > (fs * peaksettings['cutoff_time']):
-        #             state = 'otherMov'  # reset to start-state
-        #             movei.append(tempi)
-        #             tempi = []
-                    
-        #     elif state == 'downDec2':
-        #         if negThr < y < posThr:
-        #             state='lowRest'
-        #             tempi.append(n)  # end point of DOWN-TAP
-        #             tapi.append(tempi)
-        #             tempi = []
-
-        # # remove otherMovements directly after tap
-        # # print(tapi)
-        # if tapi and movei:  # only when both exist
-        #     endTaps = [tap[-1] for tap in tapi]
-        #     movei_sel = []
-        #     for tap in movei:
-        #         if min([abs(tap[0] - end) for end in endTaps]) > (.2 * fs):
-        #             movei_sel.append(tap)
-        #     movei = movei_sel
-
-        # # convert detected indices-lists into timestamps
-        # tapTimes = []  # list to store timeStamps of tap
-        # moveTimes = []  # alternative list for movements
-        # restTimes = []  # list to sore rest-timestamps
-        # for tap in tapi: tapTimes.append(sigTimes[tap])
-        # for tap in movei: moveTimes.append(sigTimes[tap])
-        # for tap in resti: restTimes.append(sigTimes[tap])
-
-    # return tapTimes, moveTimes, restTimes
+    i = peak_i
+    while np.isnan(post_i):
+        
+        i += 1
+        try:
+            if svm_sig[i] < svmThr: post_i = i
+        except IndexError:
+            break  # skip if border is out of data
+    
+    return pre_i, post_i
 
 
 def saveAllEphysRestblocks(
