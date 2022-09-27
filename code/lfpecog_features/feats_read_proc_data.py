@@ -13,8 +13,7 @@ from typing import Any
 import csv
 
 # Import own functions
-from feats_helper_funcs import nan_array
-
+#
 
 @dataclass(init=True, repr=True, )
 class subjectData:
@@ -35,6 +34,7 @@ class subjectData:
     dType_excl: list = field(default_factory=lambda: [])
 
     def __post_init__(self,):
+
         self.dtypes, self.nameFiles, self.dataFiles, sub_path = find_proc_data(
             sub=self.sub,
             version=self.data_version,
@@ -57,7 +57,7 @@ class subjectData:
                     dType,
                     self.nameFiles,
                     self.dataFiles,
-                    sub_path
+                    sub_path,
                 )
             )
 
@@ -200,6 +200,33 @@ def create_dopa_timed_array(
 
     return data_out, fs
 
+
+def merge_ephys_sources(
+    subdat
+):
+    sources = [
+        s for s in subdat.dtypes if np.logical_or(
+            'ecog' in s, 'lfp' in s
+        )
+    ]
+
+    merge_df = getattr(
+        subdat, sources[0]
+    ).data.set_index('dopa_time')
+    
+    merge_df = merge_df.join(getattr(
+        subdat, sources[1]
+    ).data.set_index('dopa_time'), rsuffix='_DUPL')
+
+    merge_df = merge_df.join(
+        getattr(subdat, sources[-1]
+    ).data.set_index('dopa_time'), rsuffix='_DUPL')
+
+    # remove duplicate columns (task/move-states)
+    cols_del = [c for c in merge_df.columns if 'DUPL' in c ]
+    merge_df = merge_df.drop(columns=cols_del)
+
+    return merge_df
 
 
 
@@ -422,18 +449,6 @@ class SessionData:
             if run_shortname in self.runs_incl:
                 continue  # skip run if already incl
 
-            # store all runs in dictionary, since the runs
-            # are not known prior to creating this class.
-            # Therefore runs as (data)class is not possible (?)
-            ### TODO: rewrite classes to create one array per
-            # session, order based on dopa-time (unique values)
-            # include different array-attributes for ephys, acc,
-            # and score data.
-            # each has it's own dopa-time array (with corresponding
-            # sample freq (eg 1600/800/1)
-            # Implement each data type (source) as its own class containing
-            # time and data attributes (list/array)
-
             self.runs[run_shortname] = RunData(
                 npy_files=self.npy_files,
                 fdir=self.fdir,
@@ -447,24 +462,3 @@ class SessionData:
             )
             self.runs_incl.append(run_shortname)
 
-
-# def import_tap_annotations(
-#     data_path, sub/run-info
-# ):
-#     """
-#     Import tap-annotations from manually created xlsx-
-#     files
-#     """
-
-
-#     return
-
-
-
-# def import_dysk_scores(
-#     data_path, sub/run-info
-# ):
-#     """
-#     Import clinical rated dyskinesia scores
-#     from xlsx-files
-#     """

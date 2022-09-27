@@ -5,88 +5,24 @@ Feature Extraction
 
 # Import public packages and functions
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy.stats import linregress, variation
-from itertools import compress
-from os.path import join
-
-def aggregate_arr_fts(
-    method, arr
-):
-    """
-    Aggregate array-features (calculated
-    per tap in block) to one value per
-    block.
-    """
-    assert method in [
-        'mean', 'median', 'stddev', 'sum',
-        'coefVar', 'trend_slope', 'trend_R'
-    ], f'Inserted method "{method}" is incorrect'
-
-    if np.isnan(arr).any():
-
-        arr = arr[~np.isnan(arr)]
-
-    if arr.size == 0:
-        print('artificial 0 added')  # TODO: fill unknwons with 0 or nan?
-        return 0  # was inside if statement
-
-    if method == 'allin1':
-
-        if np.isnan(arr).any():
-            arr = arr[~np.isnan(arr)]
-
-        return arr  # all in one big list
-
-    elif method == 'mean':
-        
-        return np.nanmean(arr)
-    
-    elif method == 'median':
-        
-        return np.nanmedian(arr)
-
-    elif method == 'stddev':
-
-        arr = normalize_var_fts(arr)
-        
-        return np.nanstd(arr)
-
-    elif method == 'sum':
-        
-        return np.nansum(arr)
-
-    elif method == 'coefVar':
-
-        arr = normalize_var_fts(arr)
-
-        return variation(arr)
-
-    elif method[:5] == 'trend':
-
-        try:
-            linreg = linregress(
-                np.arange(arr.shape[0]),
-                arr
-            )
-            slope, R = linreg[0], linreg[2]
-
-            if np.isnan(slope):
-                slope = 0
-
-            if method == 'trend_slope': return slope
-            if method == 'trend_R': return R
-
-        except ValueError:
-            
-            return 0
+# from scipy.ndimage import uniform_filter1d
 
 
 def normalize_var_fts(values):
+    """
+    Normalise list or (nd)-array of values
+    """
+    if type(values) == list:
+        np.array(values)
 
-    ft_max = np.nanmax(values)
-    ft_out = values / ft_max
-
+    if len(values.shape) == 1:
+        ft_max = np.nanmax(values)
+        ft_out = values / ft_max
+    
+    elif len(values.shape) == 2:
+        ft_max = np.nanmax(values, axis=1)
+        ft_out = values / ft_max
+    
     return ft_out
 
 
@@ -104,8 +40,38 @@ def nan_array(dim: list):
     return arr
 
 
+def custom_round_array(
+    array, resolution
+):
+    """
+    Round an array on a custom
+    resolution of choice.
+    Works as well for single values
+    
+    Input:
+        - array: array, list or single
+            value to round
+        - resolution: resolution to
+            round on
+    
+    Returns:
+        - round_array: resulting
+            rounded array
+    """
+    if type(array) == list:
+        array = np.array(array)
+    
+    round_array = np.around(
+        array / resolution
+    ) * resolution
 
-# ### SMOOTHING FUNCTION WITH NP.CONVOLVE
+    return round_array
+
+
+
+# ### SMOOTHING FUNCTION WITH NP.CONVOLVE or
+# from scipy.ndimage import uniform_filter1d
+
 
 # sig = accDat['40'].On
 # dfsig = np.diff(sig)

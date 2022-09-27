@@ -1,18 +1,11 @@
 '''Feature Extraction Preparation Functions'''
 
 # Import public packages and functions
-from ast import Index
-from signal import SIG_IGN
 import numpy as np
-import os
-import pandas as pd
 from scipy.signal import find_peaks
-from scipy.stats import variation
 from scipy.ndimage import uniform_filter1d
-from datetime import datetime, timedelta
+from datetime import datetime
 from itertools import compress
-
-import matplotlib.pyplot as plt
 
 # Import own functions
 import lfpecog_features.moveDetection_preprocess as movePrep
@@ -93,16 +86,13 @@ def pausedTapDetector(
 
             tap_i_list, tap_t_list = [], []  # start new list per side (per sub)
             move_i_list, move_t_list = [], []  # start new list per side (per sub)
-            # move_template = [np.nan] * 5  # STOP/smallPos/largePos/largeNeg/STOP
 
             for bN, (iB1, iB2) in enumerate(
                 zip(taskBlock_inds[0], taskBlock_inds[1])
             ):
 
-                # print(f'START block #{bN}')
                 sig3ax = acc_arr[iB1:iB2, :]
                 sig = sig3ax[:, mainAx_ind]
-                # sigdiff = np.diff(sig)  # add diff of signal
                 sigInds = np.arange(iB1, iB2)
                 sigTimes = times[iB1:iB2]
                 svm = movePrep.signalvectormagn(sig3ax)
@@ -113,27 +103,27 @@ def pausedTapDetector(
                 # # Find peaks to help movement detection
                 largePos = find_peaks(
                     sig,
-                    height=5e-7,   #np.max(sig) * .5,
+                    height=5e-7,
                     distance=fs,  # 1 s
                 )[0]
                 smallPeaks = find_peaks(
                     svm,
-                    height=2.5e-7,    #(abs(np.min(sig)) * .1, abs(np.min(sig)) * .4),
-                    distance=fs,  # 10 ms
+                    height=2.5e-7,
+                    distance=fs,
                 )[0]
                 largeNeg = find_peaks(
                     -1 * sig,  # convert pos/neg for negative peaks
-                    height=5e-7,   #abs(np.min(sig)) * .4,  # first value is min, second is max
-                    distance=fs,  # 10 ms
+                    height=5e-7,
+                    distance=fs,
                 )[0]
                 
                 # define peak-timings of TAPS
                 if np.logical_or(
-                    largePos == [], largeNeg == []
+                    len(largePos) == 0, len(largeNeg) == 0
                 ):
                     # not both large Pos and Neg peaks present
-                    if largePos: otherLargePeaks = largePos
-                    elif largeNeg: otherLargePeaks = largeNeg
+                    if len(largePos) > 0: otherLargePeaks = largePos
+                    elif len(largeNeg) > 0: otherLargePeaks = largeNeg
                     else: otherLargePeaks = []
 
                 else:  # both large Pos and Neg present
@@ -142,6 +132,7 @@ def pausedTapDetector(
 
                     for posP in largePos:
                         # check distance to closest negative peak
+
                         if min(abs(posP - largeNeg)) > (fs * .5):
                             # large peak without close negative peak
                             otherLargePeaks.append(posP)  # store for other movement
