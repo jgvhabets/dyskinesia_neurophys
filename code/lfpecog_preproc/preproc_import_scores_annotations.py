@@ -121,7 +121,41 @@ def extract_video_tapTimes(
                 ]
                 # store all taptimes by side
                 tap_times[side].extend(tap_dopaSecs)
-    
-
             
     return tap_times
+
+
+def get_seconds_of_LID_start():
+    """
+    LID-start times updated 06.10.2022
+    """
+
+    lid_start_hhmm = {
+        '008': '11:38',
+        '012': '09:55',
+        '013': '11:17',
+        '014': '09:47'
+    }
+    lt_intakes_hhmm = {
+        '008': '11:30',
+        '012': '09:54',
+        '013': '10:55',
+        '014': '09:30'
+    }
+
+    lid_starts_sec = {}
+
+    for sub in lid_start_hhmm.keys():
+
+        t_dopa = dt.datetime.strptime(
+            lt_intakes_hhmm[sub], '%H:%M'
+        )
+        t_lid = dt.datetime.strptime(
+            lid_start_hhmm[sub], '%H:%M'
+        )
+
+        lidStart_sec = (t_lid - t_dopa).seconds
+
+        lid_starts_sec[sub] = lidStart_sec
+
+    return lid_starts_sec

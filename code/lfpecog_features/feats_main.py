@@ -19,6 +19,7 @@ from scipy.signal import welch, cwt, morlet2
 from lfpecog_features.feats_read_proc_data import subjectData
 import lfpecog_features.feats_spectral_baseline as baseLine
 import lfpecog_features.feats_ftsExtr_Classes as ftClasses
+import lfpecog_features.feats_helper_funcs as ftHelpers
 
 
 """
@@ -136,7 +137,7 @@ class dType_ftExtraction:
                 sigDf=df,
                 fs=fs,
                 ch=ch_key,
-                win_len=self.win_len,
+                winLen_sec=self.win_len,
                 overlap=self.win_overlap,
             )
 
@@ -186,7 +187,7 @@ class dType_ftExtraction:
                     sigDf=lfpDf,
                     ch=combi_ch,
                     fs=fs,
-                    win_len=self.win_len,
+                    winLen_sec=self.win_len,
                     overlap=self.win_overlap,
                 )
 
@@ -225,16 +226,15 @@ class dType_ftExtraction:
 
 
 def get_windows(
-    sigDf, fs, ch, win_len, overlap=.5,
+    sigDf, fs, ch, winLen_sec, overlap=.5,
 ):
     """
     Select from one channel windows with size nWin * Fs,
     exclude windows with nan's, and save corresponding
     dopa-times to included windows.
-    TODO: include activity to select, and optionally
-        activity filter (-> use function part of baseline
-        as seperate function);
-        put all windowing functions in sep-.py-file
+
+    TODO: make function hybrid, A: for getting times only,
+    B: for getting data nd-array
 
     Inputs:
         - sigDg (dataframe)
@@ -249,36 +249,86 @@ def get_windows(
         - win_times (list): corresponding times of window
             start dopa-times
     """
-    sig = sigDf[ch].values
-    times = np.around(sigDf['dopa_time'], 5)
-    nWin = int(fs * win_len)  # n samples within a window
+    # # define ephys-signal en dopa-times
+    # sig = sigDf[ch].values
+    
+    try:  # if dopa-time is as column
+        times = np.around(sigDf['dopa_time'], 5).values
+        sigDf['dopa_time'] = times
+        # del(sigDf['dopa_time'])
 
+    except:  # if dopa is df-index
+        times = np.around(sigDf.index.values, 5)
+        sigDf.insert(loc=0, column='dopa_time', value=times)
+
+    nWin = int(fs * winLen_sec)  # n samples within a window
+
+    # define number of samples for overlap
     if np.logical_or(
         overlap == 0, overlap == None
     ):  # if no overlap, move a full window-length further per window
+
         nHop = nWin
     
     else:
         nHop = int(nWin * overlap)  # n samples used as overlap
 
-    win_list = []
-    win_times = []
+    win_list, win_times = [], []
 
-    for win_i0 in np.arange(0, len(sig) - nWin, nHop):
+    # start with rounded 3 min positions
+    tStart = round(times[0] / winLen_sec) - (winLen_sec * .5)
+    tStart_sec = tStart * winLen_sec
+    # create 3d array with windows
+    nWin = 0
+    arr_list, arr_times_sec = [], []
 
-        # skip window if data is not consecutive
-        if times[win_i0 + nWin] - times[win_i0] > win_len:
+    for win0_sec in np.arange(
+        tStart, times[-1], winLen_sec
+    ):  # currently no overlap included in windowing
 
-            continue
+        wintemp = sigDf.loc[win0_sec:win0_sec + winLen_sec]
 
-        winSig = sig[win_i0:win_i0 + nWin]
-        win_list.append(winSig)
-        win_times.append(times[win_i0])
+        # skip window less than half present
+        if wintemp.shape[0] < (winLen_sec * fs * .5): continue
+
+        # nan-pad windows more than half present
+        elif wintemp.shape[0] < (winLen_sec * fs):
+
+            rows_pad = (winLen_sec * fs) - wintemp.shape[0]
+            pad = ftHelpers.nan_array((rows_pad, wintemp.shape[1]))
+            wintemp = np.concatenate([wintemp, pad], axis=0)
+            arr_times_sec.append(win0_sec)
+        
+        else:
+            # no pnan-padding necessary
+            arr_times_sec.append(win0_sec)
+        
+
+        arr_list.append(wintemp)
+        nWin += 1
     
-    # convert list of lists into np array
-    win_arr = np.array(win_list)
+    win_array = np.array(arr_list)
+    arr_keys = sigDf.keys()
 
-    return win_arr, win_times
+    return win_array, arr_keys, arr_times_sec
+
+
+    ### PREVIOUS SINGLE SIG-CHANNEL BASED METHOD
+    # for win_i0 in np.arange(0, len(sig) - nWin, nHop):
+
+    #     # skip window if data is not consecutive
+    #     if times[win_i0 + nWin] - times[win_i0] > winLen_sec:
+
+    #         continue
+
+    #     winSig = sig[win_i0:win_i0 + nWin]
+    #     win_list.append(winSig)
+    #     win_times.append(times[win_i0])
+    
+    # # convert list of lists into np array
+    # win_arr = np.array(win_list)
+
+    # return win_arr, win_times
 
 
 def get_window_tasks(

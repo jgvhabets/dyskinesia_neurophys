@@ -73,9 +73,7 @@ def select_bandwidths(
         - f_max (float): higher cut-off of
             frequencies to select
     """
-    sel = [f_min < f < f_max for f in freqs]
-
-    freqs = freqs[sel]
+    sel = [f_min <= f <= f_max for f in freqs]
 
     if len(values.shape) == 1:
 
@@ -83,7 +81,13 @@ def select_bandwidths(
     
     elif len(values.shape) == 2:
 
+        if values.shape[1] != len(freqs):
+
+            values = values.T
+
         values = values[:, sel]
+    
+    freqs = freqs[sel]
 
     return values, freqs
 

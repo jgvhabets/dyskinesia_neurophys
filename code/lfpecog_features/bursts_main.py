@@ -55,8 +55,8 @@ def get_bursts_main(
             print(f'start {freq_name}')
 
             # define range of minutes to search for windows
-            startWin = round(merged_df.index[0] / 180) - 1
-            stopWin = round(merged_df.index[-1] / 180) + 1
+            startWin = round(merged_df.index[0] / winLen_sec) - 1
+            stopWin = round(merged_df.index[-1] / winLen_sec) + 1
             # plus / minus one to prevent missing window by rounding
 
             winStartTimes = []
