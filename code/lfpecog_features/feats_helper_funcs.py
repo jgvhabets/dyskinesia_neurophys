@@ -68,6 +68,13 @@ def custom_round_array(
     return round_array
 
 
+def spaced_arange(
+    start, step, num
+):
+    arr = np.arange(num) * step + start
+
+    return arr
+
 
 # ### SMOOTHING FUNCTION WITH NP.CONVOLVE or
 # from scipy.ndimage import uniform_filter1d
