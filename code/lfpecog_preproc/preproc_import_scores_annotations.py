@@ -9,6 +9,7 @@ import os
 import numpy as np
 import pandas as pd
 import datetime as dt
+from dataclasses import dataclass
 
 # Import own functions
 
@@ -128,34 +129,63 @@ def extract_video_tapTimes(
 def get_seconds_of_LID_start():
     """
     LID-start times updated 06.10.2022
-    """
 
-    lid_start_hhmm = {
-        '008': '11:38',
-        '012': '09:55',
-        '013': '11:17',
-        '014': '09:47'
-    }
+    Returns:
+        - lid_times (dict): per sub onne class
+            containing sub, seconds of LID-start,
+            and seconds of LID-peak
+    """
     lt_intakes_hhmm = {
         '008': '11:30',
         '012': '09:54',
         '013': '10:55',
         '014': '09:30'
     }
+    # check LID-times in video/with Patricia
+    lid_start_hhmm = {
+        '008': '11:38',
+        '012': '09:55',
+        '013': '11:17',
+        '014': '09:47'
+    }
+    lid_peak_hhmm = {
+        '008': '12:05',
+        '012': '10:24',
+        '013': '11:40',
+        '014': '10:15'  # TO BE RATED PER 10-minutes
+    }
+    # ADD options for no LID
 
-    lid_starts_sec = {}
+    lid_times = {}
 
     for sub in lid_start_hhmm.keys():
 
         t_dopa = dt.datetime.strptime(
             lt_intakes_hhmm[sub], '%H:%M'
         )
-        t_lid = dt.datetime.strptime(
+        t_start = dt.datetime.strptime(
             lid_start_hhmm[sub], '%H:%M'
         )
+        t_peak = dt.datetime.strptime(
+            lid_peak_hhmm[sub], '%H:%M'
+        )
 
-        lidStart_sec = (t_lid - t_dopa).seconds
+        lid_times[sub] = lid_timing(
+            sub=sub,
+            t_start=(t_start - t_dopa).seconds,
+            t_peak=(t_peak - t_dopa).seconds,
+        )
 
-        lid_starts_sec[sub] = lidStart_sec
+    return lid_times
 
-    return lid_starts_sec
+
+@dataclass(init=True, repr=True, )
+class lid_timing:
+    """
+    Store timing of first LID and
+    peak-LID expressed in seconds
+    """
+    sub: str
+    t_start: float
+    t_peak: float
+

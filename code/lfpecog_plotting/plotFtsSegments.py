@@ -23,6 +23,7 @@ def run_segmentFts(
     fig_dir: str,
     winLen_sec: int = 180,
     segLen_sec = .5,
+    part_segOverlap = 0,
     plot_norm_method = None,
     return_class: bool = False,
     to_save_timeFreqPlot = False,
@@ -37,29 +38,29 @@ def run_segmentFts(
 
     for sub in subs_incl:
 
-        restarr, restkeys, restWinTimes = ftsMain.get_windows(
-            sub_dfs[sub],  # was sub_dfs
+        data_arr, data_keys, dataWinTimes = ftsMain.get_windows(
+            sub_dfs[sub],
             fs=fs,  
-            ch='none',  # obsolote in current usage
+            ch='none',  # obsolete in current usage
             winLen_sec=winLen_sec
         )
-        lid_starts_sec = importClin.get_seconds_of_LID_start()
+        lid_timings = importClin.get_seconds_of_LID_start()
 
         segmFts[sub] = {}
 
         for ephySource in ephysSources_incl:
 
-            print(f'start ft extraction {ephySource}')
+            print(f'start ft extraction {ephySource} ({sub})')
         
             segmFts[sub][ephySource] = getFtsSegm.segmentFeatures(
                 sub=sub,
-                data_arr=restarr,
+                data_arr=data_arr,
                 fs=fs,
-                data_keys=restkeys,
-                winTimes=restWinTimes,
+                data_keys=data_keys,
+                winTimes=dataWinTimes,
                 ephyGroup=ephySource,
                 segLen_sec=segLen_sec,
-                part_overlap=0,
+                part_overlap=part_segOverlap,
             )
 
             if np.logical_or(
@@ -71,7 +72,7 @@ def run_segmentFts(
                 plot_timeFreqSeg_perGroup(
                     segmFtsClass=segmFts[sub][ephySource],
                     fig_dir=fig_dir,
-                    LID_start_time=lid_starts_sec[sub],
+                    LID_timings=lid_timings[sub],
                     to_save=to_save_timeFreqPlot,
                     to_show=to_show_timeFreqPlot,
                     segLen_sec=segLen_sec,
@@ -91,7 +92,7 @@ def plot_timeFreqSeg_perGroup(
     winLen_sec=180,
     segLen_sec=.5,
     norm_method=True,
-    LID_start_time=None,
+    LID_timings=None,
     to_save=False,
     to_show=False,
 ):
@@ -160,16 +161,23 @@ def plot_timeFreqSeg_perGroup(
             )
 
         # PLOT DYSKINESIA TIMINGS
-        if LID_start_time:  # add clinical DYSK-timings
-            lidStart_i = np.argmin(
-                abs(np.array(
-                    getattr(segmFtsClass, col).segmentTimes
-                ) - LID_start_time)
-            )
-            axes[n].scatter(
-                lidStart_i, pxsel.shape[1] * .95,
-                color='orange', s=300, marker='*',
-            )
+        if LID_timings:  # add clinical DYSK-timings
+            lid_clrs = {
+                'start': 'green',
+                'peak': 'orange'
+            }
+            for timing in lid_clrs:
+                lid_i = np.argmin(
+                    abs(np.array(
+                        getattr(segmFtsClass, col).segmentTimes
+                    ) - getattr(LID_timings, f"t_{timing}"))
+                )
+                axes[n].scatter(
+                    lid_i, pxsel.shape[1] * .95,
+                    color=lid_clrs[timing],
+                    s=300, marker='*',
+                    label=f'LID-{timing}',
+                )
 
         # CREATE AND SET XTICKLABELS WITH SEGMENT DOPA-TIMES
         axes[n].set_xlim(0, pxsel.shape[0])

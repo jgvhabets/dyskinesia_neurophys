@@ -230,54 +230,6 @@ def merge_ephys_sources(
 
 
 
-# def select_runs(
-#     sub: str,
-#     version: str,
-#     project_path: str,
-#     sess_incl: list=[],
-#     tasks_incl: list=[],
-#     acqs_incl: list=[],
-#     groups_incl: list=[],
-# ):
-#     '''
-#     Select run-files to use for eploration, or
-#     feature extraction.
-#     Write to DataClass
-#     '''
-#     # get available files for sub + version
-#     fdir = os.path.join(
-#         project_path, 
-#         'data/preprocess',
-#         f'sub-{sub}',
-#         version,
-#     )
-#     files = os.listdir(fdir)
-#     # filter files on npy, session, task, acq
-#     files = [f for f in files if f[-3:] == 'npy']
-#     if sess_incl:  # if session(s) given
-#         files = [f for f in files
-#             if f.split('_')[1] in sess_incl]
-#     if tasks_incl:  # if task(s) given
-#         files = [f for f in files
-#             if f.split('_')[2] in tasks_incl]
-#     if acqs_incl:  # if acq(s) given
-#         files = [f for f in files
-#             if f.split('_')[3] in acqs_incl]
-#     f_sel = []  # filter on group
-#     for f in files:
-#         g = f.split('_')[7:-2]
-#         if len(g) == 2: g = f'{g[0]}_{g[1]}'
-#         if len(g) == 1: g = g[0]
-#         if g in groups_incl: f_sel.append(f)
-
-#     if len(f_sel) == 0:
-#         print('\nWARNING: No files are included for '
-#               'data exploration or feature extraction!')
-#         return
-
-#     return f_sel, groups_incl, fdir
-
-
 def read_ieeg_file(npy_f, fdir):
     '''
     
@@ -306,6 +258,8 @@ def read_ieeg_file(npy_f, fdir):
 
 def read_files(fsel, groups, fdir):
     '''
+    OBSOLETE????
+    
     Function which reads the saved preprocessed 3d-ararys and lists
     with channel-names again into Python Objects.
 
