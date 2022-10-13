@@ -54,7 +54,7 @@ def bandpass(sig, freqs, fs, order=3,):
 
 
 def calc_coherence(
-    stn_sig, ecog_sig, fs: int, nperseg=None,
+    sig1, sig2, fs: int, nperseg=None,
 ):
     """
     Coherence, calculated per bandwidth frequencies based on
@@ -88,13 +88,13 @@ def calc_coherence(
     if nperseg == None: nperseg = fs // 2
     
     # calculate power spectra (these power spectra are not stored)
-    f, S_stn = signal.welch(stn_sig, fs=fs, nperseg=nperseg,)
-    _, S_ecog = signal.welch(ecog_sig, fs=fs, nperseg=nperseg,)
-    _, S_csd = signal.csd(stn_sig, ecog_sig, fs=fs, nperseg=nperseg,)
+    f, S_xx = signal.welch(sig1, fs=fs, nperseg=nperseg,)
+    _, S_yy = signal.welch(sig2, fs=fs, nperseg=nperseg,)
+    _, S_xy = signal.csd(sig1, sig2, fs=fs, nperseg=nperseg,)
 
     # calculate coherencies (Nolte ea 2004)
-    coherency = S_csd / np.sqrt(
-        np.multiply(S_stn, S_ecog)
+    coherency = S_xy / np.sqrt(
+        np.multiply(S_xx, S_yy)
     )
     # coherency -> (imag) coherence
     coh = np.abs(coherency)

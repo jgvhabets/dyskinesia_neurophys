@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 from scipy.signal import hilbert
 from scipy.ndimage import uniform_filter1d
+from array import array
+from typing import Union
 
 # import own functions
 from lfpecog_features.feats_spectral_features import bandpass
@@ -18,6 +20,7 @@ def get_burst_features(
     threshold_meth,
     min_shortBurst_sec, min_longBurst_sec,
     envelop_smoothing=False,
+    smooth_factor_ms=125,
 ):
     """
     Function to extract burst-dynamics from specified
@@ -33,22 +36,34 @@ def get_burst_features(
         - threshold_meth: method to define thresholds,
             'full-window' means threshold-definition
             over every full considered window again;
-            'extreme-on-off' means threshold definition
+            'extremes-on-off' means threshold definition
             on extreme windows at start and end of recording
         - min_short(long)Burst_sec: n seconds a short/
             long burst should be
         - envelop-smoothing (bool): moving average over
             envelop. default in function fs / 8 acc to
             175 ms in Lofredi, Neurobiol of Dis 2019
+        - smooth_factor_ms: window of smoothing in milisec
     """
+    possible_thr_meths = [
+        'full-window',
+        'extremes-on-off'
+    ]
+    if threshold_meth not in possible_thr_meths:
+        # raise
+        print(
+            'ERROR:'
+            f'inserted treshold-method {threshold_meth}'
+            f' is not in {possible_thr_meths}')
+
     env = get_envelop(
         sig=sig, fs=fs, bandpass_freqs=burst_freqs,
         in_blocks=True
     )
 
     if envelop_smoothing:
-        
-        env = uniform_filter1d(env, int(fs / 8))
+        smooth_samples = int(fs / 1000 * smooth_factor_ms)  # smoothing-samples in defined ms-window
+        env = uniform_filter1d(env, smooth_samples)
     
     burst_thr = get_burst_threshold(
         threshold_meth, cutoff_perc, env
@@ -97,36 +112,25 @@ def find_data_blocks(sig):
         startBlocks = np.concatenate([startBlocks, nanStops])
 
         stopBlocks = nanStarts
-
-        # if not np.isnan(sig[-1]):
-            
-        #     stopBlocks = np.concatenate([stopBlocks, np.array([len(sig - 1)])])
     
     elif np.isnan(sig[0]):
 
         startBlocks = nanStops
         stopBlocks = nanStarts
-        # stopBlocks = np.concatenate([nanStarts, np.array([])])  # TODO: include last index !!
-
     
     if not np.isnan(sig[-1]):
         # if ongoing data at end: add last index to nanStops
         stopBlocks = np.concatenate(
             [stopBlocks, np.array([len(sig) - 1])]  # -1 for indexing
         )
-    
-    # elif np.isnan(sig[-1]):  # nothing needs to be done
-    #     nanStops = np.concatenate(
-    #         [nanStops, np.array([len(sig) - 1])]
-    #     )
-
-    
+        
     return startBlocks, stopBlocks
 
 
 def get_envelop(
     sig, fs, bandpass_freqs,
     in_blocks=False,
+    min_sec_block = 10,
 ):
     """
     """
@@ -152,6 +156,7 @@ def get_envelop(
         blockStarts, blockEnds = find_data_blocks(sig)
 
         env = []
+        list_of_envs = []
         
         for i1, i2 in zip(blockStarts, blockEnds):
 
@@ -159,23 +164,48 @@ def get_envelop(
                 sig[i1 + fs:i2 - fs], bandpass_freqs, fs
             )  # discard neighbouring seconds to NaN
 
-            if len(filt_sig) < (5 * fs):
-                # print(f'skipped short signal (n={len(filt_sig)}')
+            if len(filt_sig) < (min_sec_block * fs):
+                # skip too short blocks of data
                 continue
 
             hilb_sig = hilbert(filt_sig)
             
             env.extend(abs(hilb_sig))  # rectify -> analytical signal / envelop
+            list_of_envs.append(abs(hilb_sig))
         
         env = np.array(env)
 
-    return env
+    return env  # return list_of_envs to calculate data-parts seperately
+
+
+def get_burst_indices(
+    envelop, burst_thr,
+):
+    exceedThr = envelop > burst_thr
+
+    if sum(exceedThr) == 0: return (None, None)
+
+    changeThr = np.diff(exceedThr.astype(int))
+    startBursts = np.where(changeThr == 1)[0] + 1  # add one to correct for diff-index
+    endBursts = np.where(changeThr == -1)[0] + 1
+    
+    # correct for burst at beginning or end
+    if exceedThr[0]:
+        startBursts = np.concatenate([np.array[0], startBursts])
+    
+    if exceedThr[-1]:
+        endBursts = np.concatenate([endBursts, np.array[len(exceedThr) - 1]])
+    
+    return (startBursts, endBursts)
+
 
 
 def calc_bursts_from_env(
-    envelop, fs, burst_thr,
-    min_shortBurst_sec, min_longBurst_sec,
-    
+    envelop: Union(array, list),
+    fs: int,
+    burst_thr: float,
+    min_shortBurst_sec: Union(float, int),
+    min_longBurst_sec: Union(float, int),
 ):
     """
     Consider to add burst-amplitudes
@@ -186,25 +216,23 @@ def calc_bursts_from_env(
     min_shortBurst_samples = min_shortBurst_sec * fs
     min_longBurst_samples = min_longBurst_sec * fs
 
-    overThr = envelop > burst_thr
-    
-    # define burst-lengths
-    changeThr = np.diff(overThr.astype(int))
-    startBursts = np.where(changeThr == 1)[0] + 1  # add one to correct for diff-index
-    endBursts = np.where(changeThr == -1)[0] + 1
+    # define burst-starts and - ends
+    if type(envelop) == list:
+        burstIndices = []
+        # create list with tuples
+        for env in envelop:
+            burstIndices.append(get_burst_indices(
+                env, burst_thr,
+            ))
 
-    if len(startBursts) == 0:
-
-        print(
-            '\n##### No Bursts detected!! #####'
-            f'\n\tburst threshold was {burst_thr}'
+    else:
+        # if one envelop -> create tuple with start- and end-indices
+        burstIndices = get_burst_indices(
+            envelop, burst_thr,
         )
-        print('env:', envelop)
-        return 0, 0, 0, 0
 
-    # correct for ongoing bursts at beginning or end of signal
-    if startBursts[0] > endBursts[0]: endBursts = endBursts[1:]
-    if len(startBursts) > len(endBursts): startBursts = startBursts[:-1]        
+    # CHECK FOR NO BURSTS FUCTIONALITY
+# TODO: REVISE with new set up     
 
     burstSampleLengths = endBursts - startBursts
     # count number of short and long bursts as defined
