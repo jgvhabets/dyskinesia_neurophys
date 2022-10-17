@@ -1,4 +1,7 @@
-'''Feature Extraction Preparation Functions'''
+'''
+Connectivity-Feature Extraction
+based on two ephys-channels
+'''
 
 # Import public packages and functions
 import numpy as np
@@ -12,7 +15,7 @@ from utils import utils_windowing as utils_win
 import lfpecog_features.feats_helper_funcs as ftHelpers
 
 @dataclass(init=True, repr=True, )
-class segmentFeatures:
+class segmentConnectFts:
     """
     Calculate features per segment
     """
@@ -21,7 +24,8 @@ class segmentFeatures:
     data_keys: list
     winTimes: list
     fs: int
-    ephyGroup: str
+    seed_ephyGroup: str
+    target_ephyGroup: str
     segLen_sec: float = .5
     part_overlap: float = 0.
     

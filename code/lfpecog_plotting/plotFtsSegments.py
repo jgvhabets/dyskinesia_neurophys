@@ -169,7 +169,7 @@ def plot_timeFreqSeg_perGroup(
             for timing in lid_clrs:
                 lid_i = np.argmin(
                     abs(np.array(
-                        getattr(segmFtsClass, col).segmentTimes
+                        getattr(segmFtsClass, col).segmTimes
                     ) - getattr(LID_timings, f"t_{timing}"))
                 )
                 axes[n].scatter(
