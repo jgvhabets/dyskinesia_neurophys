@@ -72,6 +72,10 @@ def select_bandwidths(
             frequencies to select
         - f_max (float): higher cut-off of
             frequencies to select
+    
+    Returns:
+        - values: 1- or 2-d array with spectral values
+        - freqs: 1d-array with corresponding frequencies
     """
     sel = [f_min <= f <= f_max for f in freqs]
 

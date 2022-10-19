@@ -86,6 +86,12 @@ def calc_coherence(
         - coh: array of coherence values
     """
     if nperseg == None: nperseg = fs // 2
+
+    assert np.logical_and(
+        type(sig1[0]) == np.float64, type(sig2[0]) == np.float64 
+    ), print(
+        'ERROR: ones of given signals does not contain np.float64'
+    )
     
     # calculate power spectra (these power spectra are not stored)
     f, S_xx = signal.welch(sig1, fs=fs, nperseg=nperseg,)
@@ -93,18 +99,10 @@ def calc_coherence(
     _, S_xy = signal.csd(sig1, sig2, fs=fs, nperseg=nperseg,)
 
     # calculate coherencies (Nolte ea 2004)
-    coherency = S_xy / np.sqrt(
-        np.multiply(abs(S_xx), abs(S_yy)).astype(float)
-    )
+    coherency = S_xy / np.sqrt(S_xx * S_yy)
     
-    coh = np.abs(S_xy) / np.sqrt(
-        np.multiply(abs(S_xx), abs(S_yy)).astype(float)
-    )  # take real part
-    # icoh = np.imag(coherency)  # take imaginary
-    icoh = S_xy.imag / np.sqrt(
-            (abs(S_xx) * abs(S_yy)).astype(float)
-        )  # take imaginary
-
+    coh = np.abs(coherency)  # take real part
+    icoh = np.imag(coherency)  # take imaginary
 
     # get rid of 3rd dimensionality
     if len(coh.shape) == 3: coh = coh[:, 0, :]

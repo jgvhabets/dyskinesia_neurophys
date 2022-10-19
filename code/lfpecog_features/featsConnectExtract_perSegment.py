@@ -74,9 +74,11 @@ class segmentConnectFts:
             seed = getattr(chSegments, seedTarget[0])
             target = getattr(chSegments, seedTarget[1])
             # reshape 3d segments to 2d, and internally check whether
-            # number of segments and timestamps are equal 
-            seed2d = get_clean2d(seed.data, seed.times)
-            target2d = get_clean2d(target.data, target.times)
+            # number of segments and timestamps are equal
+            seed2d = get_clean2d(seed.data, seed.times).astype(np.float64)
+            target2d = get_clean2d(target.data, target.times).astype(np.float64)
+
+            # IMPORTANT TO TRANSFORM FLOAT's INTO NP.FLOAT64's
 
             # loop over times and find matching indices
             for i_seed, t in enumerate(seed.times):

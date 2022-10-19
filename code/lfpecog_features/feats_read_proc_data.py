@@ -32,6 +32,10 @@ def load_stored_sub_df(
     dat_arr = np.load(
         pathbase + 'data.npy', allow_pickle=True,
     )
+    # IMPORTANT: floats are imported as python float
+    # this can cause errors in spectral feature extraction
+    # correct only later due to strings
+    # consider later to correct here only for float-columns
 
     # load indices from npy array
     time_arr = np.load(
