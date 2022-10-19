@@ -8,7 +8,8 @@ from array import array
 from dataclasses import dataclass
 
 # import own functions
-from utils import utils_windowing as utils_win
+import utils.utils_windowing as utils_win
+# from utils import utils_windowing
 import lfpecog_features.feats_helper_funcs as ftHelpers
 
 @dataclass(init=True, repr=True, )

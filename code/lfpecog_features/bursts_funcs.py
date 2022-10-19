@@ -201,11 +201,11 @@ def get_burst_indices(
 
 
 def calc_bursts_from_env(
-    envelop: Union(array, list),
+    envelop: array,
     fs: int,
     burst_thr: float,
-    min_shortBurst_sec: Union(float, int),
-    min_longBurst_sec: Union(float, int),
+    min_shortBurst_sec: float,
+    min_longBurst_sec: float,
 ):
     """
     Consider to add burst-amplitudes

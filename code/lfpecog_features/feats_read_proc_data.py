@@ -12,8 +12,71 @@ from dataclasses import dataclass, field
 from typing import Any
 import csv
 
-# Import own functions
-#
+# import own functions
+import utils.utils_fileManagement as fileMng
+
+
+def load_stored_sub_df(
+    sub: str,
+):
+    data_path = fileMng.get_project_path('data')
+    # set subject-spec pathbase
+    pathbase = os.path.join(
+        data_path,
+        'preprocessed_data',
+        'merged_sub_dfs',
+        f'{sub}_mergeDf_'
+    )
+
+    # load data from npy array
+    dat_arr = np.load(
+        pathbase + 'data.npy', allow_pickle=True,
+    )
+
+    # load indices from npy array
+    time_arr = np.load(
+        pathbase + 'timeIndex.npy', allow_pickle=True,
+    )
+
+    # load column-names from txt
+    col_names = np.loadtxt(
+        pathbase + 'columnNames.csv',
+        dtype=str, delimiter=','
+    )
+
+    sub_df = pd.DataFrame(
+        data=dat_arr,
+        index=time_arr,
+        columns=col_names,
+    )
+
+    return sub_df
+
+
+@dataclass(init=True, repr=True, )
+class merged_sub_dfs:
+    """
+    Class with merged dataframes per subject,
+    takes merged dataframes from already preprocessed
+    and stored data
+
+    Input:
+        - list_of_subs: 
+    """
+    list_of_subs: list
+
+    def __post_init__(self,):
+
+        for sub in self.list_of_subs:
+    
+            print(f'start merging DataFrame Sub {sub}')
+            setattr(
+                self,
+                f'sub{sub}',
+                load_stored_sub_df(sub)
+            )
+
+
 
 @dataclass(init=True, repr=True, )
 class subjectData:

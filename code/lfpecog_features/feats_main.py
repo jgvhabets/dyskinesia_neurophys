@@ -228,7 +228,7 @@ class dType_ftExtraction:
 def get_windows(
     sigDf,
     fs,
-    ch,
+    ch=None,
     winLen_sec=180,
     part_winOverlap=.0,
     min_winPart_present=.33,
