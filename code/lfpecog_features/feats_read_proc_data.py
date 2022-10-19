@@ -9,7 +9,7 @@ import os
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, List
 import csv
 
 # import own functions
@@ -54,27 +54,119 @@ def load_stored_sub_df(
 
 
 @dataclass(init=True, repr=True, )
-class merged_sub_dfs:
+class main_loadMergedSubDfs:
     """
-    Class with merged dataframes per subject,
+    Main class to run to load merged dataframes per subject,
     takes merged dataframes from already preprocessed
     and stored data
 
+    TODO: include filtering on ACC-state
+
     Input:
-        - list_of_subs: 
+        - list_of_subs: list of subject to include,
+            every sub coded as '001', '002', etc.
+        - tasks: list of tasks for which a merged-
+            df is created, can be ['all', 'rest']  
+    
+    Returns:
+        - class containing merged dataframes, sorted
+            by task, then by sub (e.g.: className.rest.subXXX)
+    
+    Raises:
+        - ValueError if an incorrect list of tasks
+            is given
     """
     list_of_subs: list
+    tasks: List = field(default_factory=lambda: ['all', 'rest'])
+    # filter_on_ACC: str/list
+
+    def __post_init__(self,):
+
+        # create a seperate class per task-selection 
+        for task in self.tasks:
+
+            if task not in ['all', 'rest']:
+                raise ValueError(
+                    f'task ("{task}") not "all", or "rest"'
+                    f', TODO: change input tasks ({self.tasks})')
+
+            print(f'start loading {task} DataFrames')
+            setattr(
+                self,
+                task,
+                mergedDfs_perTask(
+                    self.list_of_subs,
+                    task
+                )
+            )        
+
+@dataclass(repr=True, init=True,)
+class mergedDfs_perTask:
+    """
+    Class to store merged dataframes of
+    different subject, one class of this
+    is created per 'task', can be 'all'-tasks
+    (e.g. no filtering), or only data from
+    'rest'-recordings
+
+    Input:
+        - list_of_subs: list of sub-code to
+            include
+        - task: task code to include, must be
+            in ['all', 'rest',]
+        - acc_filter: defaults to None, if
+            defined: data is also filtered
+            on a specifc detected-ACC-state
+        TODO: consider to move ACC-filtering
+            to segmenting-function, in order
+            to only exclude segments instead
+            of windows based on ACC-states
+
+    """
+    list_of_subs: list
+    task: str
+    acc_filter: str = None
 
     def __post_init__(self,):
 
         for sub in self.list_of_subs:
-    
-            print(f'start merging DataFrame Sub {sub}')
+
+            print(
+                f'\tloading Sub {sub} ({self.task})'
+            )
+
+            df = load_stored_sub_df(sub)
+
+            if self.task == 'rest':  # select only rest-data
+                
+                sel = df['task'] == 'rest'
+                df = df[sel]
+            
+            # Add ACC-selection here
+            # if self.acc_filter in []:
+                # df = filter_df_on_ACC(df, self.acc_filter)
+            
+            # add all/selected data to class
             setattr(
                 self,
                 f'sub{sub}',
-                load_stored_sub_df(sub)
+                df
             )
+        
+
+# def filter_df_on_ACC(
+#     df, acc_filter
+#  ):
+#     """
+#     TODO: write selection function based on 
+#     column representing detected Accelerometer-
+#     activity
+#     """
+
+    # sel = df['no_move'] == True
+    # df = df[sel]
+
+    # return df
 
 
 

@@ -5,6 +5,33 @@ processing
 """
 # Import public packages
 import numpy as np
+from dataclasses import dataclass
+from array import array
+from typing import Any
+
+
+@dataclass(repr=True, init=True,)
+class windowedData:
+    """
+    Class to store and access data, keys,
+    and timestamps from windowed data.
+    """
+    data: array
+    keys: list
+    win_starttimes: list
+
+
+@dataclass(repr=True, init=True,)
+class segmentedChannel:
+    """
+    Class to store and access (3d) data
+    and timestamps of segments per
+    windows.
+    Contains one ephys-channel per class
+    """
+    data: array
+    times: array
+
 
 def get_noNanSegm_from_singleWindow(
     windat, segLen_n: int, n_overlap=0,
@@ -24,7 +51,7 @@ def get_noNanSegm_from_singleWindow(
             overlap between consecutive segments
         - win_times (array): defaults to zero-array
             if not defined, if given: should be
-            parallel to windat
+            all timestamps corresponding to windat
     
     Returns:
         - windat (nd-array): 2d-array with segmented
@@ -37,6 +64,11 @@ def get_noNanSegm_from_singleWindow(
         timing = False
     else:
         timing = True
+        if len(windat) != len(win_times):
+
+            raise ValueError(
+                'Unequal shapes of windat and win_times'
+            )
 
     # get rid of redundant data at end of window
     nSegments = int(len(windat) / (segLen_n - n_overlap))
@@ -46,8 +78,8 @@ def get_noNanSegm_from_singleWindow(
 
     # reshape to [n-segments x n-samples per segment]
     if n_overlap == 0:
-        windat = windat.reshape(nSegments, segLen_n)
-        if timing: win_times = win_times[::segLen_n]
+        segdat = windat.reshape(nSegments, segLen_n)
+        if timing: seg_times = win_times[::segLen_n]
     
     else:
         tempdat = []
@@ -62,101 +94,116 @@ def get_noNanSegm_from_singleWindow(
             if timing:
                 temptimes.append(win_times[istart])
         
-        windat = np.array(tempdat)
-        if timing: win_times = np.array(temptimes)
+        segdat = np.array(tempdat)
+        if timing: seg_times = np.array(temptimes)
     
-    if timing: assert (
-        len(win_times) == windat.shape[0]
-    ), print('segment times and number is not equal')
+    if timing:
+        assert len(seg_times) == segdat.shape[0], print(
+            'segment times and number is not equal'
+        )
 
     
     # delete segments (rows) with nan's
-    nanrows = [np.isnan(list(row)).any() for row in windat]
-    windat = windat[~np.array(nanrows)]
-    if timing: win_times = win_times[~np.array(nanrows)]
+    nanrows = [np.isnan(list(row)).any() for row in segdat]
+    segdat = segdat[~np.array(nanrows)]
+    if timing: seg_times = seg_times[~np.array(nanrows)]
 
-    if timing: return windat, win_times
+    if timing: return segdat, seg_times
     
-    else: return windat
+    else: return segdat
 
 
 
-def get_3dArray_from_segmWindows(
-
+def get_3dSegmArray_allWindows(
+    windows,
+    channelName: str,
+    fs,
+    winLen_sec: float = 180,
+    segLen_sec: float = .25,
 ):
-    ### TODO: ADJUST FOR PY USE
+    """
+    Function to combine all 2d-arrays of segmented
+    data per window.
+    Takes one channel, per time!
 
-    sub = '008'
-    fs=1600
-    winLen_sec = 180
-    chNames = {
-        'seed': ['LFP_L_1_2',],
-        'target': ['ECOG_L_02',],
-    }
-    segLen_sec = .25
+    Inputs:
+        - windows: class with data/keys/win_starttimes
+            resulting from windowedData() class
+        - channelName: channel name to handle
+        - fs: sampling freq
+        - winLen_sec: segment length in seconds
+    
+    Returns:
+        - segDat: 3d-array (# windows, max # of segments
+            per window, # samples per segment). All
+            segment rows with data are without NaN;
+            full rows of NaNs are padded at the end
+            of windows, to enable 3d-stacking
+        - segTimes: chronological timestamps of all
+            segments without nan
+    """
+    i_times = np.where(windows.keys == 'dopa_time')[0][0]       
+    i_ch = np.where(windows.keys == channelName)[0][0]
+    # max shape of array, aka max #-segments in window
+    max_n_segs = (fs * winLen_sec) / (fs * segLen_sec)
+    
+    for i_win in range(windows.data.shape[0]):
+        # extract segmented data per window (2d array) with
+        # shape: # segments-in-window, #samples-per-segm)
+        tempDat, tempTimes = get_noNanSegm_from_singleWindow(
+            windows.data[i_win, :, i_ch],
+            segLen_n=int(fs * segLen_sec),
+            n_overlap=0,
+            win_times=windows.data[i_win, :, i_times],
+        )
+        
+        # pad with nans to equalise shape to max-shape
+        if tempDat.shape[0] < max_n_segs:
 
-    segDat, segTimes = {}, {}
+            pad = np.array([
+                [np.nan] * tempDat.shape[1]  # defines # columns
+            ] * int(max_n_segs - tempDat.shape[0])  # defines # rows
+            )
+            tempDat = np.concatenate([tempDat, pad], axis=0)
+        
+        if i_win == 0:
+            tempSegDats = [tempDat,]
+            segTimes = tempTimes
 
-    winDat = {}
-    # perform per sub
-    # data_arr, data_keys, dataWinTimes = ftsMain.get_windows(
-    #     rest_dfs[sub],
-    #     fs=fs,  
-    #     winLen_sec=winLen_sec
-    # )
-    winDat[sub] = windowedData(data_arr, data_keys, dataWinTimes)
+        else:
+            tempSegDats.append(tempDat)
+            segTimes = np.concatenate([segTimes, tempTimes])
+        
+    segDat = np.stack(tempSegDats)
+    winTimes = windows.win_starttimes
 
-    i_times = np.where(winDat[sub].keys == 'dopa_time')[0][0]
+    return segDat, segTimes, winTimes
 
-    for ch_group in ['seed', 'target']:
-    # later add all needed channel-names and extract noNan-Segments in once
-        for ch in chNames[ch_group]:
-            
-            print(f'start {ch}')
-            
-            i_ch = np.where(winDat[sub].keys == ch)[0][0]
 
-            for i_win in range(winDat[sub].data.shape[0]):
-                # define max sizes array
-                max_n_segs = (fs * winLen_sec) / (fs * segLen_sec)
-                # extract segmented data per window (2d array)
-                tempDat, tempTimes = utils_win.get_noNanSegm_from_singleWindow(
-                    winDat[sub].data[i_win, :, i_ch],
-                    segLen_n=int(fs * segLen_sec),
-                    n_overlap=0,
-                    win_times=winDat[sub].data[i_win, :, i_times],
+@dataclass(init=True, repr=True,)
+class segmArrays_multipleChannels:
+    """
+    
+    """
+    windows: Any  # must be class windowedData()
+    channels_incl: list
+    fs: int
+
+    def __post_init__(self,):
+
+        for ch in self.channels_incl:
+
+            segdat, segtimes, _ = get_3dSegmArray_allWindows(
+                windows=self.windows,
+                channelName=ch,
+                fs=self.fs,
+            )
+
+            setattr(
+                self,
+                ch,
+                segmentedChannel(
+                    data=segdat,
+                    times=segtimes
                 )
-                # pad with nans to equalise shapes
-                if tempDat.shape[0] < max_n_segs:
-
-                    pad = [
-                        [np.nan] * tempDat.shape[1]  # defines # columns
-                    ] * int(max_n_segs - tempDat.shape[0])  # defines # rows
-                    tempDat = np.concatenate([tempDat, pad], axis=0)
-                    
-            
-                if i_win == 0:
-                    tempSegDats = [tempDat,]
-                    segTimes[ch] = [tempTimes, ]
-                else:
-                    tempSegDats.append(tempDat)
-                    segTimes[ch].append(tempTimes)
-                
-                segDat[ch] = np.stack([tempSegDats])
-                # remove 4-th 1 dimension
-                # segDat[ch], segTimes[ch] = 
-                # print(i_win, tempDat.shape, tempTimes.shape)
-
-# calculate features over segmented data
-# incl times0checking per ch-combi
-
-# segmentConnectFts(
-#     sub = '012',
-#     data_arr
-#     data_keys: list
-#     winTimes: list
-#     fs: int
-#     seed_ephyGroup: str
-#     target_ephyGroup: str
-#     segLen_sec: float = .5
-#     part_overlap: float = 0.
+            )

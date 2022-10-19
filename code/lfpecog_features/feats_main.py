@@ -238,6 +238,7 @@ def get_windows(
     exclude windows with nan's, and save corresponding
     dopa-times to included windows.
 
+    TODO: MOVE TO UTILS_WINDOWING
     TODO: make function hybrid, A: for getting times only,
     B: for getting data nd-array
 
