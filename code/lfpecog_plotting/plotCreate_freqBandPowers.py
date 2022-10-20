@@ -15,21 +15,39 @@ import lfpecog_features.feats_helper_funcs as ftHelpers
 import lfpecog_preproc.preproc_import_scores_annotations as importClin
 
 
-def get_FreqBandPowers_array(
-    segmPsdArray, psdFreqs,
+def get_FreqBandArray_fromSpecFts(
+    segmFtArray, ftFreqs,
     to_Zscore=False,
     to_Smooth=False,
     smoothWin_sec=10,
 
 ):
     """
-    Makes an array with mean-PSDs over time
-    per freq-band, out of an array containing
-    full PSDs over time
+    Transforms an array of spectral features
+    over time into an array containing mean-
+    features per pre-defined freq-bandwidth.
+
+    Input:
+        - segmFtArray: 2d array of spectral features
+            over time, shape: freqs, time
+        - ftFreqs: array with corr freqs to features
+        - to_Zscore: boolean to apply z-scoring
+            per freq-bandwidth
+        - to_Smooth: boolean to apply smoothing
+            within freq-bandwidth
+        - smoothWin_sec: if smoothing is applied,
+            this defines the window in seconds
+    
+    Returns:
+        - bp_array: new array with mean-features per
+            bandwidth, shape: bandwidths x time
+        - freq_bandwidth.keys: names of bandwidths
     """
+    # define bandwidths: names are used for output,
+    # frequencies for feature-selection
     freq_bandwidths = {
         'theta-alpha': (4, 12),
-        'low-beta': (13, 20),
+        'low-beta': (12, 20),
         'high-beta': (20, 30),
         'broadband gamma': (50, 200),
         'narrow-band gamma': (60, 90)
@@ -39,7 +57,7 @@ def get_FreqBandPowers_array(
     smooth_nSegs = int(smoothWin_sec / segLen_sec)
     # create nan-array to fill
     bp_array = ftHelpers.nan_array(
-        [len(freq_bandwidths), segmPsdArray.shape[0]]
+        [len(freq_bandwidths), segmFtArray.shape[0]]
     )
 
     for ax_n, f_band in enumerate(
@@ -49,8 +67,8 @@ def get_FreqBandPowers_array(
         flow, fhigh = freq_bandwidths[f_band]
 
         bandpowers, _ = specHelpers.select_bandwidths(
-            segmPsdArray,
-            freqs=psdFreqs,
+            segmFtArray,
+            freqs=ftFreqs,
             f_min=flow, f_max=fhigh
         )
         bp_sig = np.nanmean(bandpowers, axis=1)
@@ -69,7 +87,8 @@ def get_FreqBandPowers_array(
 
 
 def plot_bandPower_colormap(
-    inputChannel_classes, 
+    inputChannels,
+    ft_type: str,
     to_Zscore=True,
     to_Smooth=False,
     smoothWin_sec=10,
@@ -80,11 +99,31 @@ def plot_bandPower_colormap(
     fig_dir=None,
     sub=None, # TODO: PUT SUB IN CLASS
 ):
+    """
+    Takes one or multiple array with spectral
+    features over time and plots colormaps
+
+    Input:
+        - inputChannels: containing spectral features
+            of channels to plot, list of classes or
+            one class; one channel(combi) per class
+        - ft_type: describes features inserted, should
+            be in ['Spectral Power', Imag-Coherence']
+        
+    """
     # adjust for input as 1 Class or list of Classes
     try:  # if list is given
-        nrows = len(inputChannel_classes)
+        nrows = len(inputChannels)
     except TypeError:  # if class is given
         nrows = 1
+    
+    list_of_ftTypes = [
+        'Spectral Power', 'Imag-Coherence'
+    ]
+    assert ft_type in list_of_ftTypes, print(
+        f'ft_type ({ft_type}) not in list'
+    )
+
     # set up figure
     fig, axes = plt.subplots(
         nrows, 1,
@@ -97,33 +136,42 @@ def plot_bandPower_colormap(
         if nrows == 1:
             ax = axes
             try:
-                ch_fts = inputChannel_classes[0]
+                ch_fts = inputChannels[0]
             except TypeError:
-                ch_fts = inputChannel_classes
+                ch_fts = inputChannels
 
         else:
             ax = axes[i]
-            ch_fts = inputChannel_classes[i]
+            ch_fts = inputChannels[i]
 
         # create actual freq bandpower arrays
-        bp_array, freqBandNames = get_FreqBandPowers_array(
-            segmPsdArray=ch_fts.segmPsds,
-            psdFreqs=ch_fts.psdFreqs,
+        bp_array, freqBandNames = get_FreqBandArray_fromSpecFts(
+            segmFtArray=ch_fts.segmPsds,
+            ftFreqs=ch_fts.psdFreqs,
             to_Zscore=to_Zscore,
             to_Smooth=to_Smooth,
             smoothWin_sec=smoothWin_sec,
         )
 
-        if to_Zscore:
+        # set correct figure-parameters for ft-type and settings
+        if ft_type == 'Spectral Power':
+            if to_Zscore:
+                map_params = {
+                    'cmap': 'coolwarm',  # blue-white-red: bwr, yellow-orange-red: YlOrRd
+                    'vmin': -2.5, 'vmax':2.5
+                }
+            else:
+                map_params = {
+                    'cmap': 'viridis',
+                    'vmin': 0, 'vmax':1e-12
+                }
+        elif ft_type == 'Imag-Coherence':
             map_params = {
-                'cmap': 'coolwarm',  # blue-white-red: bwr, yellow-orange-red: YlOrRd
-                'vmin': -2.5, 'vmax':2.5
-            }
-        else:
-            map_params = {
-                'cmap': 'viridis',
-                'vmin': 0, 'vmax':1e-12
-            }
+                    'cmap': 'PiYG',  # coolwarm
+                    'vmin': -1, 'vmax':1
+                }
+
+
         # PLOT freqband-array
         im = ax.pcolormesh(
             bp_array,
@@ -172,7 +220,7 @@ def plot_bandPower_colormap(
                 ymin=0, ymax=5, color='k', lw=3, alpha=.8,
             )
 
-        title = 'Bandpowers'
+        title = 'Freq-Band' + ft_type
         if to_Zscore: title = 'Z-scored ' + title
         if nrows > 1: title = f'{ch_fts.contactName}: ' + title
         ax.set_title(title, size=fsize + 4)
@@ -185,10 +233,15 @@ def plot_bandPower_colormap(
         x=.05, y=.9, size=fsize + 12)
 
     if to_save:
+        nameCode = {
+            'Spectral Power': 'Powers',
+            'Imag-Coherences': 'ICOH'
+        }
         plt.savefig(
             os.path.join(
                 fig_dir, 'ft_exploration', 'rest',
-                'freqBandPowers', fig_name + f'_smooth{smoothWin_sec}'
+                f'freqBand{nameCode[ft_type]}',
+                fig_name + f'_smooth{smoothWin_sec}'
             ), dpi=150, facecolor='w',
         )
     

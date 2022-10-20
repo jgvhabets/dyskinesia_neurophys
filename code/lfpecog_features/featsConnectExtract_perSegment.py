@@ -18,9 +18,10 @@ import lfpecog_features.feats_main as ftsMain
 import lfpecog_features.feats_spectral_features as specFeats
 
 @dataclass(init=True, repr=True, )
-class segmentConnectFts:
+class prepare_segmConnectFts:
     """
-    Calculate features per segment
+    Prepare the Extraction of Connectivity
+    features per segments
     """
     sub: str
     sub_df: Any
@@ -60,23 +61,36 @@ class segmentConnectFts:
             fs=self.fs,
         )
         setattr(self, 'chSegments', chSegments)
+        # segments here are still py float's, not np.float64
 
         # get list with tuples of all target x seed combis
-        allCombis = list(product(seeds, targets))
+        self.allCombis = list(product(seeds, targets))
 
-        for seedTarget in allCombis[:1]:
+
+@dataclass(init=True, repr=True, )
+class extract_segmConnectFts:
+    """
+    Extract of Connectivity
+    features per segments
+    """
+    chSegments: Any  # attr of prepare_segmConnectFts()
+    allCombi: Any   # attr of prepare_segmConnectFts()
+    fts_to_extract: list
+
+    def __post_init__(self,):
+        for seedTarget in self.allCombis[:1]:
 
             print(
-                f'SEED: {seedTarget[0]}'
+                f'SEED: {seedTarget[0]} x '
                 f'TARGET: {seedTarget[1]}'
             )
             # define channel classes containing segmented 3d-data and times
-            seed = getattr(chSegments, seedTarget[0])
-            target = getattr(chSegments, seedTarget[1])
+            seed = getattr(self.chSegments, seedTarget[0])
+            target = getattr(self.chSegments, seedTarget[1])
             # reshape 3d segments to 2d, and internally check whether
             # number of segments and timestamps are equal
-            seed2d = get_clean2d(seed.data, seed.times).astype(np.float64)
-            target2d = get_clean2d(target.data, target.times).astype(np.float64)
+            seed2d = get_clean2d(seed.data, seed.times)
+            target2d = get_clean2d(target.data, target.times)
 
             # IMPORTANT TO TRANSFORM FLOAT's INTO NP.FLOAT64's
 
@@ -114,8 +128,8 @@ def get_clean2d(data3d, times=None):
         assert sum(sel) == times.shape, print(
             'new 2d data is not equal with times'
         )
-    
-    data2d = data2d[sel]
+    # CONVERT TO NP.FLOAT64 FOR NORMAL SPECTRAL-DECOMPOSITION RESULTS
+    data2d = data2d[sel].astype(np.float64)
     
     return data2d
 

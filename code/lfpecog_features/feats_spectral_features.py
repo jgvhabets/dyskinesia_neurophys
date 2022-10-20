@@ -101,7 +101,8 @@ def calc_coherence(
     # calculate coherencies (Nolte ea 2004)
     coherency = S_xy / np.sqrt(S_xx * S_yy)
     
-    coh = np.abs(coherency)  # take real part
+    coh = coherency.real  # take real part
+    sq_coh = S_xy.real**2 / (S_xx * S_yy)  # take squared coherence
     icoh = np.imag(coherency)  # take imaginary
 
     # get rid of 3rd dimensionality
@@ -109,7 +110,7 @@ def calc_coherence(
     if len(icoh.shape) == 3: icoh = icoh[:, 0, :]
 
 
-    return f, icoh, coh
+    return f, icoh, coh, sq_coh
 
 
 

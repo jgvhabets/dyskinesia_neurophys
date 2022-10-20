@@ -250,3 +250,8 @@ def plot_timeFreqSeg_perGroup(
 
     plt.close()
 
+"""
+Play around with diverging colormaps of:
+https://matplotlib.org/stable/tutorials/colors/colormaps.html
+Diverging: white around the middle
+"""
