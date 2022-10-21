@@ -4,6 +4,7 @@ based on two ephys-channels
 '''
 
 # Import public packages and functions
+from socket import AI_NUMERICHOST
 from typing import Any
 import numpy as np
 import os
@@ -18,7 +19,7 @@ import lfpecog_features.feats_main as ftsMain
 import lfpecog_features.feats_spectral_features as specFeats
 
 @dataclass(init=True, repr=True, )
-class prepare_segmConnectFts:
+class run_segmConnectFts:
     """
     Prepare the Extraction of Connectivity
     features per segments
@@ -40,6 +41,7 @@ class prepare_segmConnectFts:
             fs=self.fs,  
             winLen_sec=self.winLen_sec
         )
+        print('got windows')
         # make class out of window results
         windows = utils_win.windowedData(
             data_arr, data_keys, dataWinTimes
@@ -62,25 +64,52 @@ class prepare_segmConnectFts:
         )
         setattr(self, 'chSegments', chSegments)
         # segments here are still py float's, not np.float64
+        print('got segments')
 
         # get list with tuples of all target x seed combis
         self.allCombis = list(product(seeds, targets))
 
+        setattr(
+            self,
+            'features',
+            calculate_segmConnectFts(
+                chSegments=self.chSegments,
+                fs=self.fs,
+                allCombis=self.allCombis,
+                fts_to_extract=['coh', 'icoh']
+            )
+        )
+
 
 @dataclass(init=True, repr=True, )
-class extract_segmConnectFts:
+class calculate_segmConnectFts:
     """
     Extract of Connectivity
     features per segments
+
+    TODO: DEFINE ALLOWED CODENAMES FOR FEATURES
     """
     chSegments: Any  # attr of prepare_segmConnectFts()
-    allCombi: Any   # attr of prepare_segmConnectFts()
+    fs: int
+    allCombis: Any   # attr of prepare_segmConnectFts()
     fts_to_extract: list
 
     def __post_init__(self,):
-        for seedTarget in self.allCombis[:1]:
+
+        coh_fts_incl = [
+            ft for ft in self.fts_to_extract
+            if 'coh' in ft.lower()
+        ]
+        if len(coh_fts_incl) > 1:
+            coh_lists = {}
+            for ft in coh_fts_incl: coh_lists[f'{ft.upper()}_list'] = []
+
+        print(f'Coherence fts to include: {coh_fts_incl}')
+
+        for seedTarget in self.allCombis[:3]:
 
             print(
+                '\tstarting feature extraction: '
                 f'SEED: {seedTarget[0]} x '
                 f'TARGET: {seedTarget[1]}'
             )
@@ -94,6 +123,8 @@ class extract_segmConnectFts:
 
             # IMPORTANT TO TRANSFORM FLOAT's INTO NP.FLOAT64's
 
+            time_list = []
+
             # loop over times and find matching indices
             for i_seed, t in enumerate(seed.times):
 
@@ -101,13 +132,41 @@ class extract_segmConnectFts:
 
                     i_target = np.where(target.times == t)[0][0]
 
-                    # COHERENCE EXTRACTION
-                    f, icoh, coh = specFeats.calc_coherence(
-                        sig1=seed2d[i_seed, :],
-                        sig2=target2d[i_target],
-                        fs=self.fs,
-                    )
+                    time_list.append(t)
 
+                    # COHERENCE EXTRACTION
+                    if len(coh_fts_incl) > 0:
+                        f, icoh, coh, _ = specFeats.calc_coherence(
+                            sig1=seed2d[i_seed, :],
+                            sig2=target2d[i_target],
+                            fs=self.fs,
+                            nperseg=seed2d.shape[1],
+                        )
+                        coh_lists['COH_list'].append(coh)
+                        coh_lists['ICOH_list'].append(icoh)
+            
+            setattr(
+                self,
+                f'{seedTarget[0]}_{seedTarget[1]}',
+                storeSegmFeats(time_list, coh_lists)
+            )
+
+@dataclass(init=True, repr=True,)
+class storeSegmFeats:
+    times_list: list
+    ft_lists: dict
+
+    def __post_init__(self,):
+
+        self.times = np.array(self.times_list)
+        for key in self.ft_lists.keys():
+
+            ft = key.split('_')[0]
+            setattr(
+                self,
+                ft,
+                np.array(self.ft_lists[f'{ft}_list'])
+            )
 
 
 
