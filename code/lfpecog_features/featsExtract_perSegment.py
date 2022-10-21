@@ -164,8 +164,7 @@ class segmentFeatures:
                     segmTimes=times_out_array,
                     winStartTimes=self.winTimes,
                     winStartIndices=index_win_start,
-                    # segmentTimes=None,  # OLD
-                    contactName=col,
+                    channelName=col,
                     sub=self.sub,
                 )
             )
@@ -174,7 +173,6 @@ class segmentFeatures:
             del(
                 psd_out_array,
                 index_win_start,
-                # allTimes,
                 times_out_array
             )
         
@@ -190,6 +188,5 @@ class segmentFts_perContact:
     segmTimes: array
     winStartTimes: list
     winStartIndices: list
-    # segmentTimes: list
-    contactName: str
+    channelName: str
     sub: str

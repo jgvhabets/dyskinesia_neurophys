@@ -62,7 +62,7 @@ class run_segmConnectFts:
             channels_incl=targets+seeds,
             fs=self.fs,
         )
-        setattr(self, 'chSegments', chSegments)
+        setattr(self, 'chSegments', chSegments)  # store for notebook use
         # segments here are still py float's, not np.float64
         print('got segments')
 
@@ -101,12 +101,13 @@ class calculate_segmConnectFts:
             if 'coh' in ft.lower()
         ]
         if len(coh_fts_incl) > 1:
-            coh_lists = {}
+            extract_COH = True  # create boolean indicator for coherences     
+            coh_lists = {}  # create empty lists to store COH's while calculating
             for ft in coh_fts_incl: coh_lists[f'{ft.upper()}_list'] = []
 
         print(f'Coherence fts to include: {coh_fts_incl}')
 
-        for seedTarget in self.allCombis[:3]:
+        for seedTarget in self.allCombis:
 
             print(
                 '\tstarting feature extraction: '
@@ -118,25 +119,27 @@ class calculate_segmConnectFts:
             target = getattr(self.chSegments, seedTarget[1])
             # reshape 3d segments to 2d, and internally check whether
             # number of segments and timestamps are equal
-            seed2d = get_clean2d(seed.data, seed.times)
-            target2d = get_clean2d(target.data, target.times)
-
-            # IMPORTANT TO TRANSFORM FLOAT's INTO NP.FLOAT64's
-
+            seed2d = get_clean2d(seed.data, seed.segmTimes)
+            target2d = get_clean2d(target.data, target.segmTimes)
+            # IMPORTANT: 2d arrays returned as NP.FLOAT64's, not PY FLOAT's
+            
+            # reset storing lists
             time_list = []
+            if extract_COH:
+                for l in coh_lists: coh_lists[l] = []
 
             # loop over times and find matching indices
-            for i_seed, t in enumerate(seed.times):
+            for i_seed, t in enumerate(seed.segmTimes):
 
-                if t in target.times:
+                if t in target.segmTimes:
 
-                    i_target = np.where(target.times == t)[0][0]
+                    i_target = np.where(target.segmTimes == t)[0][0]
 
                     time_list.append(t)
 
                     # COHERENCE EXTRACTION
                     if len(coh_fts_incl) > 0:
-                        f, icoh, coh, _ = specFeats.calc_coherence(
+                        f_coh, icoh, coh, _ = specFeats.calc_coherence(
                             sig1=seed2d[i_seed, :],
                             sig2=target2d[i_target],
                             fs=self.fs,
@@ -145,20 +148,33 @@ class calculate_segmConnectFts:
                         coh_lists['COH_list'].append(coh)
                         coh_lists['ICOH_list'].append(icoh)
             
+            # TODO: CONSIDER POST-HOC STANDARDISATION, such as ICOH-detectability
+
+
+            # STORE RESULTING FEATURES IN CLASSES
             setattr(
                 self,
                 f'{seedTarget[0]}_{seedTarget[1]}',
-                storeSegmFeats(time_list, coh_lists)
+                storeSegmFeats(
+                    channelName=f'{seedTarget[0]}_{seedTarget[1]}',
+                    times_list=time_list,
+                    ft_lists=coh_lists,
+                    freqs=f_coh,
+                    winStartTimes=target.winTimes,
+                )
             )
 
 @dataclass(init=True, repr=True,)
 class storeSegmFeats:
+    channelName: str
     times_list: list
     ft_lists: dict
+    freqs: array
+    winStartTimes: Any
 
     def __post_init__(self,):
 
-        self.times = np.array(self.times_list)
+        # create feature attrbiutes
         for key in self.ft_lists.keys():
 
             ft = key.split('_')[0]
@@ -167,6 +183,13 @@ class storeSegmFeats:
                 ft,
                 np.array(self.ft_lists[f'{ft}_list'])
             )
+        
+        # create time attributes
+        self.segmTimes = np.array(self.times_list)  # all timestamps for segmentfts
+        # find corr indices to window moments
+        self.winStartIndices = [
+            np.argmin(abs(self.segmTimes - t)) for t in self.winStartTimes
+        ]
 
 
 

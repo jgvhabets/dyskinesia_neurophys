@@ -109,6 +109,11 @@ def calc_coherence(
     if len(coh.shape) == 3: coh = coh[:, 0, :]
     if len(icoh.shape) == 3: icoh = icoh[:, 0, :]
 
+    """
+    TODO: implement ICOH detectable according to
+     https://link.springer.com/article/10.1007/s10548-018-0640-0
+    """
+
 
     return f, icoh, coh, sq_coh
 

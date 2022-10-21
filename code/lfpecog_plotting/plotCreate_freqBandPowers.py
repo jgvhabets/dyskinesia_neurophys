@@ -124,15 +124,25 @@ def plot_bandPower_colormap(
         f'ft_type ({ft_type}) not in list'
     )
 
+    ft_params = {
+        'Spectral Power': {'ft_attr': 'segmPsds',
+                           'freq_attr': 'psdFreqs'},
+        'Imag-Coherence': {'ft_attr': 'ICOH',
+                           'freq_attr': 'freqs'}
+    }
+
     # set up figure
+    if nrows > 6: fig_width = 32
+    else: fig_width = 16
     fig, axes = plt.subplots(
         nrows, 1,
-        figsize=(16, 4 * nrows),
+        figsize=(fig_width, 4 * nrows),
         sharex=True
     )
-
+    
+    # LOOP OVER INPUTCHANNELS
     for i in np.arange(nrows):
-        # set variables (1 contact-Class or list of contact-Classes)
+        
         if nrows == 1:
             ax = axes
             try:
@@ -146,12 +156,12 @@ def plot_bandPower_colormap(
 
         # create actual freq bandpower arrays
         bp_array, freqBandNames = get_FreqBandArray_fromSpecFts(
-            segmFtArray=ch_fts.segmPsds,
-            ftFreqs=ch_fts.psdFreqs,
+            segmFtArray=getattr(ch_fts, ft_params[ft_type]['ft_attr']),
+            ftFreqs=getattr(ch_fts, ft_params[ft_type]['freq_attr']),
             to_Zscore=to_Zscore,
             to_Smooth=to_Smooth,
             smoothWin_sec=smoothWin_sec,
-        )
+        )            
 
         # set correct figure-parameters for ft-type and settings
         if ft_type == 'Spectral Power':
@@ -188,10 +198,17 @@ def plot_bandPower_colormap(
             'peak': 'orange'
         }
         for timing in lid_clrs:
-            lid_i = np.argmin(abs(
-                ch_fts.segmDopaTimes -
-                getattr(lid_timings, f"t_{timing}")
-            ))
+            try:
+                lid_i = np.argmin(abs(
+                    ch_fts.segmDopaTimes -
+                    getattr(lid_timings, f"t_{timing}")
+                ))
+            except AttributeError:
+                lid_i = np.argmin(abs(
+                    ch_fts.segmTimes -
+                    getattr(lid_timings, f"t_{timing}")
+                ))
+                if ft_type[:2]=='Sp': print('REMOVE segmDopaTimes!! line 209')
             axes[i].scatter(
                 lid_i, len(freqBandNames) - .2,
                 color=lid_clrs[timing],
@@ -222,7 +239,7 @@ def plot_bandPower_colormap(
 
         title = 'Freq-Band' + ft_type
         if to_Zscore: title = 'Z-scored ' + title
-        if nrows > 1: title = f'{ch_fts.contactName}: ' + title
+        if nrows > 1: title = f'{ch_fts.channelName}: ' + title
         ax.set_title(title, size=fsize + 4)
 
         for side in ['top','right','bottom','left']:
@@ -235,13 +252,18 @@ def plot_bandPower_colormap(
     if to_save:
         nameCode = {
             'Spectral Power': 'Powers',
-            'Imag-Coherences': 'ICOH'
+            'Imag-Coherence': 'ICOH'
         }
+        if to_Smooth: fig_name += f'_smooth{smoothWin_sec}'
+        else: fig_name += f'_noSmooth'
+
+        if to_Zscore: fig_name += f'_zScored'
+
         plt.savefig(
             os.path.join(
                 fig_dir, 'ft_exploration', 'rest',
-                f'freqBand{nameCode[ft_type]}',
-                fig_name + f'_smooth{smoothWin_sec}'
+                f'freqBand_{nameCode[ft_type]}',
+                fig_name
             ), dpi=150, facecolor='w',
         )
     

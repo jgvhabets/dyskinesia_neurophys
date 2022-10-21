@@ -30,7 +30,8 @@ class segmentedChannel:
     Contains one ephys-channel per class
     """
     data: array
-    times: array
+    segmTimes: array
+    winTimes: Any
 
 
 def get_noNanSegm_from_singleWindow(
@@ -193,7 +194,7 @@ class segmArrays_multipleChannels:
 
         for ch in self.channels_incl:
 
-            segdat, segtimes, _ = get_3dSegmArray_allWindows(
+            segdat, segtimes, winTimes = get_3dSegmArray_allWindows(
                 windows=self.windows,
                 channelName=ch,
                 fs=self.fs,
@@ -204,6 +205,7 @@ class segmArrays_multipleChannels:
                 ch,
                 segmentedChannel(
                     data=segdat,
-                    times=segtimes
+                    segmTimes=segtimes,
+                    winTimes=winTimes
                 )
             )
