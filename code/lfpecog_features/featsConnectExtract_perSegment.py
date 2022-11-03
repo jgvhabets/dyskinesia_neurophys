@@ -76,7 +76,7 @@ class run_segmConnectFts:
                 chSegments=self.chSegments,
                 fs=self.fs,
                 allCombis=self.allCombis,
-                fts_to_extract=['coh', 'icoh']
+                fts_to_extract=['COH', 'ICOH', 'absICOH', 'sqCOH']
             )
         )
 
@@ -103,7 +103,7 @@ class calculate_segmConnectFts:
         if len(coh_fts_incl) > 1:
             extract_COH = True  # create boolean indicator for coherences     
             coh_lists = {}  # create empty lists to store COH's while calculating
-            for ft in coh_fts_incl: coh_lists[f'{ft.upper()}_list'] = []
+            for ft in coh_fts_incl: coh_lists[f'{ft}_list'] = []
 
         print(f'Coherence fts to include: {coh_fts_incl}')
 
@@ -139,14 +139,17 @@ class calculate_segmConnectFts:
 
                     # COHERENCE EXTRACTION
                     if len(coh_fts_incl) > 0:
-                        f_coh, icoh, coh, _ = specFeats.calc_coherence(
+                        f_coh, icoh, icoh_abs, coh, sq_coh = specFeats.calc_coherence(
                             sig1=seed2d[i_seed, :],
                             sig2=target2d[i_target],
                             fs=self.fs,
                             nperseg=seed2d.shape[1],
                         )
-                        coh_lists['COH_list'].append(coh)
+                        coh_lists['absICOH_list'].append(icoh_abs)
                         coh_lists['ICOH_list'].append(icoh)
+                        coh_lists['COH_list'].append(coh)
+                        coh_lists['sqCOH_list'].append(sq_coh)
+                        
             
             # TODO: CONSIDER POST-HOC STANDARDISATION, such as ICOH-detectability
 
@@ -190,8 +193,6 @@ class storeSegmFeats:
         self.winStartIndices = [
             np.argmin(abs(self.segmTimes - t)) for t in self.winStartTimes
         ]
-
-
 
 
 

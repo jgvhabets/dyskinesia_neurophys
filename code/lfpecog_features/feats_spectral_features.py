@@ -83,15 +83,19 @@ def calc_coherence(
     Returns:
         - f: array of frequencies corr to coherence-values
         - icoh: array of imaginary coherence values
+        - icoh: array of abs-values of imaginary coherence
         - coh: array of coherence values
+        - sq_coh: array of squared-coherence values
     """
     if nperseg == None: nperseg = fs // 2
-
-    assert np.logical_and(
-        type(sig1[0]) == np.float64, type(sig2[0]) == np.float64 
-    ), print(
-        'ERROR: ones of given signals does not contain np.float64'
-    )
+    # check if signals are in np.float64 dtype, if not psd output raises errors 
+    if np.logical_or(
+        type(sig1[0]) != np.float64, type(sig2[0]) != np.float64 
+    ):
+        raise ValueError(
+            'Not both signals contain np.float64:'
+            f'sig1 is {type(sig1[0])}, sig2 is {type(sig2[0])}'
+        )
     
     # calculate power spectra (these power spectra are not stored)
     f, S_xx = signal.welch(sig1, fs=fs, nperseg=nperseg,)
@@ -101,21 +105,22 @@ def calc_coherence(
     # calculate coherencies (Nolte ea 2004)
     coherency = S_xy / np.sqrt(S_xx * S_yy)
     
-    coh = coherency.real  # take real part
-    sq_coh = S_xy.real**2 / (S_xx * S_yy)  # take squared coherence
-    icoh = np.imag(coherency)  # take imaginary
+    coh = coherency.real  # take real part for coherence
+    sq_coh = S_xy.real**2 / (S_xx * S_yy)  # squared coherence
+    icoh = np.imag(coherency)  # take imaginary (pos and neg)
+    icoh_abs = abs(abs)  # take absolute value
 
     # get rid of 3rd dimensionality
     if len(coh.shape) == 3: coh = coh[:, 0, :]
     if len(icoh.shape) == 3: icoh = icoh[:, 0, :]
 
     """
-    TODO: implement ICOH detectable according to
-     https://link.springer.com/article/10.1007/s10548-018-0640-0
+    PM: implement ICOH detectable according to
+    https://link.springer.com/article/10.1007/s10548-018-0640-0
     """
 
 
-    return f, icoh, coh, sq_coh
+    return f, icoh, icoh_abs, coh, sq_coh
 
 
 
