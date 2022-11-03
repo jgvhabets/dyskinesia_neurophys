@@ -36,7 +36,7 @@ class run_segmConnectFts:
     
     def __post_init__(self,):
         # divide full dataframe in present windows
-        data_arr, data_keys, dataWinTimes = ftsMain.get_windows(
+        data_arr, data_keys, dataWinTimes = utils_win.get_windows(
             self.sub_df,
             fs=self.fs,  
             winLen_sec=self.winLen_sec

@@ -9,7 +9,6 @@ L-Dopa intake.
 # Import general packages and functions
 from dataclasses import field, dataclass
 import os
-from re import sub
 from typing import Any
 import json
 import numpy as np
@@ -225,94 +224,7 @@ class dType_ftExtraction:
 
 
 
-def get_windows(
-    sigDf,
-    fs,
-    ch=None,
-    winLen_sec=180,
-    part_winOverlap=.0,
-    min_winPart_present=.33,
-):
-    """
-    Select from one channel windows with size nWin * Fs,
-    exclude windows with nan's, and save corresponding
-    dopa-times to included windows.
 
-    TODO: MOVE TO UTILS_WINDOWING
-    TODO: make function hybrid, A: for getting times only,
-    B: for getting data nd-array
-
-    Inputs:
-        - sigDg (dataframe)
-        - fs (int): sample freq
-        - win_len: length of window in seconds
-        - part_winOverlap (float): part of window used as overlap
-            between consecutive windows
-        - min_winPart_present (float): exclude window if
-            smaller part than this variable is present
-    
-    Returns:
-        - win_arr (arr): 2d array of n-windows x n-samples
-        - win_times (list): corresponding times of window
-            start dopa-times
-    """
-    # # define ephys-signal en dopa-times
-    # sig = sigDf[ch].values
-    
-    try:  # if dopa-time is as column
-        times = np.around(sigDf['dopa_time'], 6).values
-        sigDf['dopa_time'] = times
-        # del(sigDf['dopa_time'])
-
-    except:  # if dopa is df-index
-        times = np.around(sigDf.index.values, 6)
-        sigDf.insert(loc=0, column='dopa_time', value=times)
-
-    nWin = int(fs * winLen_sec)  # n samples within a window
-
-    # define number of samples for overlap
-    nHop = int(nWin * part_winOverlap)  # n samples used as overlap
-
-    # start with rounded winLen (default 3 min) positions
-    tStart = round(times[0] / winLen_sec) - (winLen_sec * .5)
-    # tStart_sec = tStart * winLen_sec
-
-    # create 3d array with windows
-    winCount = 0  # obsolete currently
-    arr_list, arr_times_sec = [], []
-
-    # epoch windows based on dopatime-seconds and index of dataframe
-    for win0_sec in np.arange(
-        tStart, times[-1], winLen_sec
-    ):  # currently no overlap included in windowing
-
-        wintemp = sigDf.loc[win0_sec:win0_sec + winLen_sec]
-
-        # skip window present less than given threshold
-        if wintemp.shape[0] < (nWin * min_winPart_present): continue
-
-        # nan-pad windows which are not completely present
-        elif wintemp.shape[0] < (winLen_sec * fs):
-
-            rows_pad = nWin - wintemp.shape[0]
-            nanpad_arr = np.array(
-                [[np.nan] * wintemp.shape[1]] * rows_pad
-            )
-            wintemp = np.concatenate([wintemp, nanpad_arr], axis=0)
-            arr_times_sec.append(win0_sec)
-        
-        else:
-            # no pnan-padding necessary
-            arr_times_sec.append(win0_sec)
-        
-
-        arr_list.append(wintemp)
-        winCount += 1
-    
-    win_array = np.array(arr_list)
-    arr_keys = sigDf.keys()
-
-    return win_array, arr_keys, arr_times_sec
 
 
     ### PREVIOUS SINGLE SIG-CHANNEL BASED METHOD

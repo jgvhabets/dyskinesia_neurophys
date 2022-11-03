@@ -74,32 +74,6 @@ class segmentFeatures:
                     del_wins.append(i_win)
                     continue
 
-                # TODO: correct variables names fornew functionn
-                # ### OLD
-                # rev_win_i = orig_n_times - i_win  # take reverse-index for later deletion
-                
-                # # remove NaNs if present
-                # if np.isnan(list(windat)).any():
-                #     nansel = ~np.isnan(list(windat))
-                #     windat = windat[nansel]  # take only non nan-data
-                #     wintimes = wintimes[nansel]  # take times for only non nan-data
-                    
-                #     if len(windat) < segLen_n:
-                #         # skip if window w/o nan's not long enough
-                #         del_wins.append(i_win)
-                #         continue
-                    
-                #     nseg = int(len(windat) / segLen_n)  # n of segments in window
-                #     # reshape data to 2d to get segment-psds
-                #     windat = windat[:int(nseg * segLen_n)].reshape(
-                #         nseg, int(segLen_n)
-                #     )  # discard end of window not fitting in full-segment anymore
-                
-                # else:  # if no nan's present
-
-                #     windat = windat.reshape(
-                #         int(len(windat) / segLen_n), int(segLen_n)
-                #     )  # reshape data to 2d to get segment-psds
 
                 ### TODO: differentiate between different FEATURES-TYPES (bursts, PAC, coherence)
                 
@@ -112,16 +86,6 @@ class segmentFeatures:
                 )
                 ps = abs(ps).astype(float)  # take real-value, discard imaginary part
                 
-                # get corresponding times  OLD
-                # psd_times = wintimes[
-                #     :int(windat.shape[0] * windat.shape[1])  # times until n samples included
-                #     :int(segLen_n - nOverlap)  # hop over segment start-times
-                # ].astype(float)
-                
-                # if len(ps) == 0:  # if psd is empty, do not add
-                #     del_wins.append(i_win)  # remove window time later
-                #     continue
-                
                 assert ps.shape[0] == len(segm_times), print(
                     'PSD-# and times-# are UNEQUAL '
                 )
@@ -133,22 +97,12 @@ class segmentFeatures:
                     times_out_array = np.concatenate(
                         [times_out_array, segm_times]
                     )
-                    # allTimes.extend(list(ftHelpers.spaced_arange(
-                    #     start=temp_times[-rev_win_i],
-                    #     step=self.segLen_sec,
-                    #     num=len(ps)
-                    # )))
-
 
                 except NameError:  # array created with first window
                     index_win_start = [0]
                     psd_out_array = ps
                     times_out_array = segm_times
-                    # allTimes = list(ftHelpers.spaced_arange(
-                    #     start=temp_times[-rev_win_i],
-                    #     step=self.segLen_sec,
-                    #     num=len(ps)
-                    # ))
+                    
 
             # delete times of skipped windows due to missing data
             for i_w in sorted(del_wins, reverse=True):

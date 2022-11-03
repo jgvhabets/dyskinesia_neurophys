@@ -13,6 +13,7 @@ import lfpecog_features.feats_main as ftsMain
 import lfpecog_features.feats_spectral_helpers as specHelpers
 import lfpecog_features.featsExtract_perSegment as getFtsSegm
 import lfpecog_preproc.preproc_import_scores_annotations as importClin
+from utils import utils_windowing
 
 
 def run_segmentFts(
@@ -38,7 +39,7 @@ def run_segmentFts(
 
     for sub in subs_incl:
 
-        data_arr, data_keys, dataWinTimes = ftsMain.get_windows(
+        data_arr, data_keys, dataWinTimes = utils_windowing.get_windows(
             sub_dfs[sub],
             fs=fs,  
             ch='none',  # obsolete in current usage
