@@ -10,6 +10,42 @@ from scipy.signal import periodogram, welch
 import lfpecog_preproc.preproc_filters as fltrs
 
 
+def plot_act_per_window(
+    classData, winlength, fig_dir
+):
+
+    plt.figure(figsize=(12, 6))
+
+    for sub in classData.list_of_subs:
+        tempdata = getattr(classData.rest, f'sub{sub}')
+        sec_first = np.round(tempdata.iloc[0]['dopa_time'], 0)
+        sec_last = np.round(tempdata.iloc[-1]['dopa_time'], 0)
+
+        act_list, sec_list = [], []
+
+        for sec0 in np.arange(sec_first, sec_last, winlength):
+
+            act = tempdata.loc[sec0:sec0 + winlength]['no_move']
+            if len(act) > 0:
+                act_list.append(sum(act) / len(act) * 100)
+                sec_list.append(sec0 / 60)
+            else:
+                act_list.append(np.nan)
+                sec_list.append(sec0 / 60)
+                
+        plt.plot(sec_list, act_list, label=sub)
+    
+    plt.title(f'Activity-% per {winlength} sec windows')
+    plt.ylabel('% WITHOUT accelerometer-activity')
+    plt.xlabel('Time after L-Dopa intake (min)')
+    plt.legend(loc='lower left')
+    plt.tight_layout()
+    fname = f'act_perc_per_sub_{winlength}s_windows'
+    plt.savefig(
+        os.path.join(fig_dir, 'ft_exploration', 'rest', fname),
+        dpi=150, facecolor='w',)
+    plt.close()
+
 
 def blank_empty_axes(axes):
     '''
