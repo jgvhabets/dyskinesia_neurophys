@@ -108,11 +108,13 @@ def calc_coherence(
     coh = coherency.real  # take real part for coherence
     sq_coh = S_xy.real**2 / (S_xx * S_yy)  # squared coherence
     icoh = np.imag(coherency)  # take imaginary (pos and neg)
-    icoh_abs = abs(abs)  # take absolute value
+    abs_icoh = abs(icoh)  # take absolute value
 
     # get rid of 3rd dimensionality
     if len(coh.shape) == 3: coh = coh[:, 0, :]
     if len(icoh.shape) == 3: icoh = icoh[:, 0, :]
+    if len(abs_icoh.shape) == 3: abs_icoh = abs_icoh[:, 0, :]
+    if len(sq_coh.shape) == 3: sq_coh = sq_coh[:, 0, :]
 
     """
     PM: implement ICOH detectable according to
@@ -120,7 +122,7 @@ def calc_coherence(
     """
 
 
-    return f, icoh, icoh_abs, coh, sq_coh
+    return f, icoh, abs_icoh, coh, sq_coh
 
 
 
