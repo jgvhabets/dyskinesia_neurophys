@@ -15,6 +15,8 @@ import os
 import numpy as np
 from scipy import signal
 
+import feats_spectral_helpers as specHelpers
+
 or_wd = os.getcwd()  # get original working directory
 
 # if necessary: change working directory to import tensorpac
@@ -54,7 +56,7 @@ def bandpass(sig, freqs, fs, order=3,):
 
 
 def calc_coherence(
-    sig1, sig2, fs: int, nperseg=None,
+    sig1, sig2, fs: int, use_rel_powers: bool, nperseg=None,
 ):
     """
     Coherence, calculated per bandwidth frequencies based on
@@ -101,6 +103,11 @@ def calc_coherence(
     f, S_xx = signal.welch(sig1, fs=fs, nperseg=nperseg,)
     _, S_yy = signal.welch(sig2, fs=fs, nperseg=nperseg,)
     _, S_xy = signal.csd(sig1, sig2, fs=fs, nperseg=nperseg,)
+
+    if use_rel_powers:  # TODO test rel powers
+        S_xx = specHelpers.relative_power(S_xx)
+        S_yy = specHelpers.relative_power(S_yy)
+        S_xy = specHelpers.relative_power(S_xy)
 
     # calculate coherencies (Nolte ea 2004)
     coherency = S_xy / np.sqrt(S_xx * S_yy)
