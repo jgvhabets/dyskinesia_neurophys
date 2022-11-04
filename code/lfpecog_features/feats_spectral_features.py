@@ -56,7 +56,11 @@ def bandpass(sig, freqs, fs, order=3,):
 
 
 def calc_coherence(
-    sig1, sig2, fs: int, use_rel_powers: bool, nperseg=None,
+    sig1,
+    sig2,
+    fs: int,
+    use_rel_powers: bool = False,
+    nperseg=None,
 ):
     """
     Coherence, calculated per bandwidth frequencies based on
@@ -70,10 +74,18 @@ def calc_coherence(
     (based on Nolte ea, Clin Neurophy 2004; Hohlefeld ea,
     Neuroscience 2015; Rolston & Chang, Cereb Cortex 2018).
 
-    PM1: Standardisation (detectability) are calculated outside
+    PM1: Coherence function works with large windows (+/- 1 min),
+    despite of the defined shorter segments within the different
+    parts of the formula, the formula doesnt produce reasonable
+    values if its performed on windows of 0.5 sec e.g.
+    Averaging the COH values afterwards, does NOT give comparable
+    values to inputting larger windows, which are averaged
+    within the Welch and CSD computations.
+
+    PM2: Standardisation (detectability) are calculated outside
     of this function.
 
-    PM2: imag-coherency assumption no phase shift is proven
+    PM3: imag-coherency assumption no phase shift is proven
     for freq's below 100 Hz (Stinstra & Peters, 1998; referred
     to in Nolte 2004).
 
@@ -111,9 +123,9 @@ def calc_coherence(
 
     # calculate coherencies (Nolte ea 2004)
     coherency = S_xy / np.sqrt(S_xx * S_yy)
-    
+
     coh = coherency.real  # take real part for coherence
-    sq_coh = S_xy.real**2 / (S_xx * S_yy)  # squared coherence
+    sq_coh = S_xy.real**2 / (S_xx * S_yy)  # squared coherence, used by Gilron 2021
     icoh = np.imag(coherency)  # take imaginary (pos and neg)
     abs_icoh = abs(icoh)  # take absolute value
 
