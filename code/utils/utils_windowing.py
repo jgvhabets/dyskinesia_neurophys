@@ -204,7 +204,7 @@ def get_3dSegmArray_allWindows(
     channelName: str,
     fs,
     winLen_sec: float = 180,
-    segLen_sec: float = .25,
+    segLen_sec: float = .5,
 ):
     """
     Function to combine all 2d-arrays of segmented
@@ -238,7 +238,7 @@ def get_3dSegmArray_allWindows(
         tempDat, tempTimes = get_noNanSegm_from_singleWindow(
             windows.data[i_win, :, i_ch],
             segLen_n=int(fs * segLen_sec),
-            n_overlap=0,
+            n_overlap=0,  # TODO: incorporate segment-overlap feature
             win_times=windows.data[i_win, :, i_times],
         )
         
@@ -250,12 +250,13 @@ def get_3dSegmArray_allWindows(
             ] * int(max_n_segs - tempDat.shape[0])  # defines # rows
             )
             tempDat = np.concatenate([tempDat, pad], axis=0)
+            # times are not padded, because nan's are removed from data later
         
-        if i_win == 0:
+        if i_win == 0:  # first iteration create the variable
             tempSegDats = [tempDat,]
             segTimes = tempTimes
 
-        else:
+        else:  # then store in existing variable
             tempSegDats.append(tempDat)
             segTimes = np.concatenate([segTimes, tempTimes])
         
@@ -273,6 +274,7 @@ class segmArrays_multipleChannels:
     windows: Any  # must be class windowedData()
     channels_incl: list
     fs: int
+    winLen_sec: float
 
     def __post_init__(self,):
 
@@ -282,6 +284,7 @@ class segmArrays_multipleChannels:
                 windows=self.windows,
                 channelName=ch,
                 fs=self.fs,
+                winLen_sec=self.winLen_sec
             )
 
             setattr(

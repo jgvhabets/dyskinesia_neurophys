@@ -61,6 +61,7 @@ class run_segmConnectFts:
             windows=windows,
             channels_incl=targets+seeds,
             fs=self.fs,
+            winLen_sec=self.winLen_sec,
         )
         setattr(self, 'chSegments', chSegments)  # store for notebook use
         # segments here are still py float's, not np.float64
@@ -87,7 +88,6 @@ class calculate_segmConnectFts:
     Extract of Connectivity
     features per segments
 
-    TODO: DEFINE ALLOWED CODENAMES FOR FEATURES
     """
     chSegments: Any  # attr of prepare_segmConnectFts()
     fs: int
@@ -122,7 +122,8 @@ class calculate_segmConnectFts:
             seed2d = get_clean2d(seed.data, seed.segmTimes)
             target2d = get_clean2d(target.data, target.segmTimes)
             # IMPORTANT: 2d arrays returned as NP.FLOAT64's, not PY FLOAT's
-            
+            print(seed.data.shape, target.data.shape)
+            print(seed2d.shape, target2d.shape)
             # reset storing lists
             time_list = []
             if extract_COH:
