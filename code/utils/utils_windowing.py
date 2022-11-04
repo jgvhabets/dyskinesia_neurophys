@@ -13,7 +13,6 @@ from typing import Any
 def get_windows(
     sigDf,
     fs,
-    ch=None,
     winLen_sec=180,
     part_winOverlap=.0,
     min_winPart_present=.33,
@@ -39,9 +38,7 @@ def get_windows(
         - win_arr (arr): 2d array of n-windows x n-samples
         - win_times (list): corresponding times of window
             start dopa-times
-    """
-    # # define ephys-signal en dopa-times
-    
+    """ 
     try:  # if dopa-time is as column
         times = np.around(sigDf['dopa_time'], 6).values
         sigDf['dopa_time'] = times
@@ -62,7 +59,6 @@ def get_windows(
     tStart = round(times[0] / winLen_sec) - (winLen_sec * .5)
 
     # create 3d array with windows
-    winCount = 0  # obsolete currently
     arr_list, arr_times_sec = [], []
 
     # epoch windows based on dopatime-seconds and index of dataframe
@@ -91,7 +87,6 @@ def get_windows(
         
 
         arr_list.append(wintemp)
-        winCount += 1
     
     win_array = np.array(arr_list)
     arr_keys = sigDf.keys()
