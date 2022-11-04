@@ -23,13 +23,17 @@ class run_segmConnectFts:
     """
     Prepare the Extraction of Connectivity
     features per segments
+
+    Default settings translate to a feature resolution
+    of 2 Hz (e.g. 60 sec windows, with 50% overlap
+    lead to a coherency-value every 30 seconds).
     """
     sub: str
     sub_df: Any
     fs: int
-    winLen_sec: float
-    segLen_sec: float
-    part_overlap: float = 0.
+    winLen_sec: float = 60
+    segLen_sec: float = .5
+    part_overlap: float = 0.5
     channels_incl: list = field(default_factory=list)
     channels_excl: list = field(default_factory=list)
     
@@ -39,7 +43,8 @@ class run_segmConnectFts:
         data_arr, data_keys, dataWinTimes = utils_win.get_windows(
             self.sub_df,
             fs=self.fs,  
-            winLen_sec=self.winLen_sec
+            winLen_sec=self.winLen_sec,
+            part_winOverlap=self.part_overlap,
         )
         print('got windows')
         # make class out of window results
@@ -150,9 +155,6 @@ class calculate_segmConnectFts:
                         coh_lists['ICOH_list'].append(icoh)
                         coh_lists['COH_list'].append(coh)
                         coh_lists['sqCOH_list'].append(sq_coh)
-                        
-            
-            # TODO: CONSIDER POST-HOC STANDARDISATION, such as ICOH-detectability
 
 
             # STORE RESULTING FEATURES IN CLASSES
