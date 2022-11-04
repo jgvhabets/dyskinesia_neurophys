@@ -24,6 +24,11 @@ class run_segmConnectFts:
     Prepare the Extraction of Connectivity
     features per segments
 
+    TODO: MAKE THIS MAIN FEATURE EXTRACTION FUNCTION
+        - INCLUDE UNI-SIGNAL, NOT-CONNECTIVITY FEATURES IN HERE
+        - CREATE OPTIONAL attributes for features and conn_features
+    TODO: ADD PROPER FEATURE STORING FUNCTION
+
     Default settings translate to a feature resolution
     of 2 Hz (e.g. 60 sec windows, with 50% overlap
     lead to a coherency-value every 30 seconds).
@@ -32,8 +37,9 @@ class run_segmConnectFts:
     sub_df: Any
     fs: int
     winLen_sec: float = 60
+    part_winOverlap: float = .5
     segLen_sec: float = .5
-    part_overlap: float = 0.5
+    part_segmOverlap: float = .5
     channels_incl: list = field(default_factory=list)
     channels_excl: list = field(default_factory=list)
     
@@ -44,7 +50,7 @@ class run_segmConnectFts:
             self.sub_df,
             fs=self.fs,  
             winLen_sec=self.winLen_sec,
-            part_winOverlap=self.part_overlap,
+            part_winOverlap=self.part_winOverlap,
         )
         print('got windows')
         # make class out of window results
@@ -67,6 +73,8 @@ class run_segmConnectFts:
             channels_incl=targets+seeds,
             fs=self.fs,
             winLen_sec=self.winLen_sec,
+            segLen_sec=self.segLen_sec,
+            part_segmOverlap=self.part_segmOverlap,
         )
         setattr(self, 'chSegments', chSegments)  # store for notebook use
         # segments here are still py float's, not np.float64
@@ -82,7 +90,7 @@ class run_segmConnectFts:
                 chSegments=self.chSegments,
                 fs=self.fs,
                 allCombis=self.allCombis,
-                fts_to_extract=['COH', 'ICOH', 'absICOH', 'sqCOH']
+                fts_to_extract=['COH', 'ICOH', 'absICOH', 'sqCOH'],
             )
         )
 
