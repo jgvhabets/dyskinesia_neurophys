@@ -18,6 +18,7 @@ import utils.utils_fileManagement as fileMng
 
 def load_stored_sub_df(
     sub: str,
+    float_convert: bool = True
 ):
     data_path = fileMng.get_project_path('data')
     # set subject-spec pathbase
@@ -37,6 +38,7 @@ def load_stored_sub_df(
     # correct only later due to strings
     # consider later to correct here only for float-columns
 
+
     # load indices from npy array
     time_arr = np.load(
         pathbase + 'timeIndex.npy', allow_pickle=True,
@@ -54,7 +56,37 @@ def load_stored_sub_df(
         columns=col_names,
     )
 
+    if float_convert:
+
+        sub_df = convert_to_npfloats(sub_df)
+
     return sub_df
+
+
+def convert_to_npfloats(df):
+    """
+    Convert LFP and ECOG signals from py
+    floats to np.float64's. This for better
+    spectral decomposition function
+    """
+    for key in df.keys():
+        # skip non ephys channels
+        if not np.logical_or(
+            'lfp' in key.lower(), 
+            'ecog' in key.lower()
+        ):
+            continue
+        # find first value without nan
+        i = 0
+        while np.isnan(df.iloc[i][key]):
+            i += 1
+
+        # convert if columns contains py floats
+        if type(df.iloc[i][key]) == float:
+            
+            df[key] = np.float64(df[key])
+    
+    return df
 
 
 @dataclass(init=True, repr=True, )
