@@ -105,21 +105,12 @@ class windowedData:
     win_starttimes: list
 
 
-@dataclass(repr=True, init=True,)
-class segmentedChannel:
-    """
-    Class to store and access (3d) data
-    and timestamps of segments per
-    windows.
-    Contains one ephys-channel per class
-    """
-    data: array
-    segmTimes: array
-    winTimes: Any
-
 
 def get_noNanSegm_from_singleWindow(
-    windat, segLen_n: int, n_overlap=0,
+    windat,
+    segLen_n: int,
+    fs: int,
+    part_segmOverlap=0,
     win_times=np.array([0]),
 ):
     """
@@ -156,13 +147,14 @@ def get_noNanSegm_from_singleWindow(
             )
 
     # get rid of redundant data at end of window
-    nSegments = int(len(windat) / (segLen_n - n_overlap))
-    windat = windat[:int((segLen_n - n_overlap) * nSegments)]
+    n_segmOverlap = int(part_segmOverlap * fs)
+    nSegments = int(len(windat) / (segLen_n - n_segmOverlap))
+    windat = windat[:int((segLen_n - n_segmOverlap) * nSegments)]
 
     if timing: win_times = win_times[:len(windat)]
 
     # reshape to [n-segments x n-samples per segment]
-    if n_overlap == 0:
+    if n_segmOverlap == 0:
         segdat = windat.reshape(nSegments, segLen_n)
         if timing: seg_times = win_times[::segLen_n]
     
@@ -172,7 +164,7 @@ def get_noNanSegm_from_singleWindow(
         
         for i in np.arange(nSegments):
 
-            istart = int(i * (segLen_n - n_overlap))
+            istart = int(i * (segLen_n - n_segmOverlap))
             if (len(windat) - istart) < segLen_n: continue  # not enough samples left
             tempdat.append(windat[istart:istart + segLen_n])
 
@@ -205,11 +197,12 @@ def get_3dSegmArray_allWindows(
     fs,
     winLen_sec: float = 180,
     segLen_sec: float = .5,
+    part_segmOverlap: float = .5,
 ):
     """
     Function to combine all 2d-arrays of segmented
     data per window.
-    Takes one channel, per time!
+    Takes one ephys-channel, per time!
 
     Inputs:
         - windows: class with data/keys/win_starttimes
@@ -217,6 +210,8 @@ def get_3dSegmArray_allWindows(
         - channelName: channel name to handle
         - fs: sampling freq
         - winLen_sec: segment length in seconds
+        - part_segmOverlap: part of overlap in small
+            segment epoch
     
     Returns:
         - segDat: 3d-array (# windows, max # of segments
@@ -237,8 +232,9 @@ def get_3dSegmArray_allWindows(
         # shape: # segments-in-window, #samples-per-segm)
         tempDat, tempTimes = get_noNanSegm_from_singleWindow(
             windows.data[i_win, :, i_ch],
+            fs=fs,
             segLen_n=int(fs * segLen_sec),
-            n_overlap=0,  # TODO: incorporate segment-overlap feature
+            part_segmOverlap=part_segmOverlap,
             win_times=windows.data[i_win, :, i_times],
         )
         
@@ -266,15 +262,39 @@ def get_3dSegmArray_allWindows(
     return segDat, segTimes, winTimes
 
 
+@dataclass(repr=True, init=True,)
+class segmentedChannel:
+    """
+    Class to store and access (3d) data
+    and timestamps of segments per
+    windows.
+    Contains one ephys-channel per class
+    """
+    data: array
+    segmTimes: array
+    winTimes: Any
+
+
 @dataclass(init=True, repr=True,)
 class segmArrays_multipleChannels:
     """
-    
+    main class contains data and times per
+    ephys-Channel.
+    Data is organised in 3d-arrays, existing of
+    n-windows x n-segments (per window) x n-samples
+    (per segment). In case of overlap, every window
+    or segment has a separate array/row, meaning
+    last part of row N can be equal to first part
+    of row N + 1.
+    segmTimes contain times of each segment (2nd dim),
+    winTimes contain start-times of each window (1st-dim).
     """
     windows: Any  # must be class windowedData()
     channels_incl: list
     fs: int
     winLen_sec: float
+    segLen_sec: float
+    part_segmOverlap: float = .5
 
     def __post_init__(self,):
 
@@ -284,7 +304,9 @@ class segmArrays_multipleChannels:
                 windows=self.windows,
                 channelName=ch,
                 fs=self.fs,
-                winLen_sec=self.winLen_sec
+                winLen_sec=self.winLen_sec,
+                segLen_sec=self.segLen_sec,
+                part_segmOverlap=self.part_segmOverlap,
             )
 
             setattr(
