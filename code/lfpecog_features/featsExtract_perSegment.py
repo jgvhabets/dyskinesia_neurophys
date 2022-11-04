@@ -62,7 +62,7 @@ class segmentFeatures:
                 wintimes = times_arr[i_win, :]
 
                 # TODO: SAVE no-non-segment-array per window??
-                segm_dat, segm_times = utils_win.get_noNanSegm_from_window(
+                segm_dat, segm_times = utils_win.get_noNanSegm_from_singleWindow(
                     windat=windat,
                     segLen_n=segLen_n,
                     win_times=wintimes,

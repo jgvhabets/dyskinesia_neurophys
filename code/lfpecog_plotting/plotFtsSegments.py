@@ -40,7 +40,7 @@ def run_segmentFts(
     for sub in subs_incl:
 
         data_arr, data_keys, dataWinTimes = utils_windowing.get_windows(
-            sub_dfs[sub],
+            getattr(sub_dfs, f'sub{sub}'),
             fs=fs,  
             ch='none',  # obsolete in current usage
             winLen_sec=winLen_sec

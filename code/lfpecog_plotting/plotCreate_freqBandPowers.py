@@ -118,7 +118,8 @@ def plot_bandPower_colormap(
         nrows = 1
     
     list_of_ftTypes = [
-        'Spectral Power', 'Imag-Coherence'
+        'Spectral Power', 'Imag-Coherence',
+        'abs-Imag-Coherence',
     ]
     assert ft_type in list_of_ftTypes, print(
         f'ft_type ({ft_type}) not in list'
@@ -128,6 +129,8 @@ def plot_bandPower_colormap(
         'Spectral Power': {'ft_attr': 'segmPsds',
                            'freq_attr': 'psdFreqs'},
         'Imag-Coherence': {'ft_attr': 'ICOH',
+                           'freq_attr': 'freqs'},
+        'abs-Imag-Coherence': {'ft_attr': 'absICOH',
                            'freq_attr': 'freqs'}
     }
 
@@ -175,11 +178,17 @@ def plot_bandPower_colormap(
                     'cmap': 'viridis',
                     'vmin': 0, 'vmax':1e-12
                 }
-        elif ft_type == 'Imag-Coherence':
+        elif  ft_type == 'Imag-Coherence':
             map_params = {
                     'cmap': 'PiYG',  # coolwarm
-                    'vmin': -1, 'vmax':1
+                    'vmin': -1, 'vmax': 1
                 }
+        elif  ft_type == 'abs-Imag-Coherence':
+            map_params = {
+                    'cmap': 'PiYG',  # coolwarm
+                    'vmin': -1, 'vmax': 1
+                }
+
 
 
         # PLOT freqband-array
@@ -208,7 +217,7 @@ def plot_bandPower_colormap(
                     ch_fts.segmTimes -
                     getattr(lid_timings, f"t_{timing}")
                 ))
-                if ft_type[:2]=='Sp': print('REMOVE segmDopaTimes!! line 209')
+                if ft_type[:2]=='Sp': print('REMOVE segmDopaTimes!! line 214')
             axes[i].scatter(
                 lid_i, len(freqBandNames) - .2,
                 color=lid_clrs[timing],
@@ -252,7 +261,8 @@ def plot_bandPower_colormap(
     if to_save:
         nameCode = {
             'Spectral Power': 'Powers',
-            'Imag-Coherence': 'ICOH'
+            'Imag-Coherence': 'ICOH',
+            'abs-Imag-Coherence': 'absICOH'
         }
         if to_Smooth: fig_name += f'_smooth{smoothWin_sec}'
         else: fig_name += f'_noSmooth'
