@@ -120,7 +120,7 @@ def plot_bandPower_colormap(
     
     list_of_ftTypes = [
         'Spectral Power', 'Imag-Coherence',
-        'abs-Imag-Coherence',
+        'abs-Imag-Coherence', 'Squared-Coherence',
     ]
     assert ft_type in list_of_ftTypes, print(
         f'ft_type ({ft_type}) not in list'
@@ -129,6 +129,8 @@ def plot_bandPower_colormap(
     ft_params = {
         'Spectral Power': {'ft_attr': 'segmPsds',
                            'freq_attr': 'psdFreqs'},
+        'Squared-Coherence': {'ft_attr': 'sqCOH',
+                           'freq_attr': 'freqs'},
         'Imag-Coherence': {'ft_attr': 'ICOH',
                            'freq_attr': 'freqs'},
         'abs-Imag-Coherence': {'ft_attr': 'absICOH',
@@ -181,14 +183,19 @@ def plot_bandPower_colormap(
                 }
         elif  ft_type == 'Imag-Coherence':
             map_params = {
-                    'cmap': 'PiYG',  # coolwarm
-                    'vmin': -1, 'vmax': 1
-                }
-        elif  ft_type == 'abs-Imag-Coherence':
+                'cmap': 'PiYG',  # coolwarm
+                'vmin': -1, 'vmax': 1
+            }
+        elif ft_type == 'abs-Imag-Coherence':
             map_params = {
-                    'cmap': 'BuPu',
-                    'vmin': 0, 'vmax': .5
-                }
+                'cmap': 'BuPu',
+                'vmin': 0, 'vmax': .5
+            }
+        elif ft_type == 'Squared-Coherence':
+            map_params = {
+            'cmap': 'BuPu',
+                'vmin': 0, 'vmax': .3
+            }
 
 
 
@@ -234,6 +241,8 @@ def plot_bandPower_colormap(
             try:
                 scores, _, _ = importClin.run_import_clinInfo(sub=sub)
                 # get closest CDRS score to epoch_time
+                if type(scores) == type(None):
+                    raise ValueError('None scores')
                 epoch_clin_scores = [scores.iloc[
                     np.argmin(abs(m - scores['dopa_time']))
                 ]['CDRS_total'] for m  in (ch_fts.epoch_times / 60)]
@@ -243,10 +252,12 @@ def plot_bandPower_colormap(
                     epoch_clin_scores,
                     color='darkblue', alpha=.2, lw=5,)
                 clinAx.set_ylim(0, 20)
+                clinAx.set_ylabel('CDRS total score')
+
             except FileNotFoundError:
                 print(f'No clin scores found for sub {sub}')
-            except ValueError:
-                print(f'Incorrect clin scores found for sub {sub}')
+            # except ValueError:
+            #     print(f'Incorrect clin scores found for sub {sub}')
 
         # set Freq-Band names as y-ticks
         ax.set_yticks(np.arange(.5, bp_array.shape[0], 1))
@@ -292,6 +303,7 @@ def plot_bandPower_colormap(
     if to_save:
         nameCode = {
             'Spectral Power': 'Powers',
+            'Squared-Coherence': 'sqCOH',
             'Imag-Coherence': 'ICOH',
             'abs-Imag-Coherence': 'absICOH'
         }
