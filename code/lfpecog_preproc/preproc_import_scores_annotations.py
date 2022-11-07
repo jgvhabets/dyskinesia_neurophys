@@ -15,11 +15,7 @@ from dataclasses import dataclass
 
 
 def run_import_clinInfo(
-    sub: str,
-    onedrive_path: str=(
-        '/Users/jeroenhabets/Library/CloudStorage'
-        '/OneDrive-Charité-UniversitätsmedizinBerlin/'
-    )
+    sub: str, verbose=False,
 ):
     """
     Main function to run the import and preprocessing
@@ -30,17 +26,34 @@ def run_import_clinInfo(
         - sub (str): three-number code of sub
         - onedrive_path (str): local-path where Charite-
         OneDrive is synced
+    
+    Returns:
+        - scores (df)
+        - dopa_taps
+        - annot_dict
     """
-    clin_fpath = os.path.join(
-        onedrive_path, 'dysk_ecoglfp', 'data'
-    )
+    _, data_path = find_onedrive_path()
+    
+    try:
+        annot_dict = read_annotations(sub, data_path)
+    except:
+        if verbose: print(f'Read ANNOTATIONS failed (sub {sub})')
+        annot_dict = None
+    
+    try:
+        scores = read_clinical_scores(sub, data_path)
+    except:
+        if verbose: print(f'Read CLINICAL SCORES failed (sub {sub})')
+        scores = None
+    
+    try:
+        dopa_taps = extract_video_tapTimes(annot_dict)
+    except:
+        if verbose: print(f'Read DOPA-TAPS failed (sub {sub})')
+        dopa_taps = None
+    
 
-    annot_dict = read_annotations(sub, clin_fpath)
-    scores = read_clinical_scores(sub, clin_fpath,)
-
-    dopaTaps = extract_video_tapTimes(annot_dict)
-
-    return scores, dopaTaps, annot_dict   
+    return scores, dopa_taps, annot_dict   
 
 
 def read_annotations(
@@ -191,6 +204,16 @@ class lid_timing:
 
 
 def find_onedrive_path():
+    """
+    Finds main OneDrive folder and projects'
+    data folder on onedrive
+
+    No inputs
+
+    Returns:
+        - onedrive_path
+        - data_path
+    """
         
     path = os.getcwd()
     
@@ -203,14 +226,14 @@ def find_onedrive_path():
             'charit' in f.lower()
         ) 
     ]  # gives list
-    onedrivepath = os.path.join(path, onedrive_f[0])
+    onedrive_path = os.path.join(path, onedrive_f[0])
     
     data_path = os.path.join(
-        onedrivepath,
+        onedrive_path,
         'dysk_ecoglfp',  # adjust this so that it leads to project's data folder
         'data', 
     )
     
-    return data_path
+    return onedrive_path, data_path
 
 
