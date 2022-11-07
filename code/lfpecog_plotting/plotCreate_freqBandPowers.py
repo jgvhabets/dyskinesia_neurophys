@@ -16,10 +16,12 @@ import lfpecog_preproc.preproc_import_scores_annotations as importClin
 
 
 def get_FreqBandArray_fromSpecFts(
-    segmFtArray, ftFreqs,
+    epochedFtArray,
+    ftFreqs,
     to_Zscore=False,
     to_Smooth=False,
     smoothWin_sec=10,
+    segLen_sec=.5,
 
 ):
     """
@@ -53,11 +55,10 @@ def get_FreqBandArray_fromSpecFts(
         'narrow-band gamma': (60, 90)
     }
     # define resulting variables
-    segLen_sec = .5
-    smooth_nSegs = int(smoothWin_sec / segLen_sec)
+    if to_Smooth: smooth_nSegs = int(smoothWin_sec / segLen_sec)
     # create nan-array to fill
     bp_array = ftHelpers.nan_array(
-        [len(freq_bandwidths), segmFtArray.shape[0]]
+        [len(freq_bandwidths), epochedFtArray.shape[0]]
     )
 
     for ax_n, f_band in enumerate(
@@ -67,7 +68,7 @@ def get_FreqBandArray_fromSpecFts(
         flow, fhigh = freq_bandwidths[f_band]
 
         bandpowers, _ = specHelpers.select_bandwidths(
-            segmFtArray,
+            epochedFtArray,
             freqs=ftFreqs,
             f_min=flow, f_max=fhigh
         )
@@ -140,7 +141,7 @@ def plot_bandPower_colormap(
     fig, axes = plt.subplots(
         nrows, 1,
         figsize=(fig_width, 4 * nrows),
-        sharex=True
+        sharex=False,
     )
     
     # LOOP OVER INPUTCHANNELS
@@ -159,7 +160,7 @@ def plot_bandPower_colormap(
 
         # create actual freq bandpower arrays
         bp_array, freqBandNames = get_FreqBandArray_fromSpecFts(
-            segmFtArray=getattr(ch_fts, ft_params[ft_type]['ft_attr']),
+            epochedFtArray=getattr(ch_fts, ft_params[ft_type]['ft_attr']),
             ftFreqs=getattr(ch_fts, ft_params[ft_type]['freq_attr']),
             to_Zscore=to_Zscore,
             to_Smooth=to_Smooth,
@@ -185,8 +186,8 @@ def plot_bandPower_colormap(
                 }
         elif  ft_type == 'abs-Imag-Coherence':
             map_params = {
-                    'cmap': 'PiYG',  # coolwarm
-                    'vmin': -1, 'vmax': 1
+                    'cmap': 'BuPu',
+                    'vmin': 0, 'vmax': .5
                 }
 
 
@@ -214,10 +215,13 @@ def plot_bandPower_colormap(
                 ))
             except AttributeError:
                 lid_i = np.argmin(abs(
-                    ch_fts.segmTimes -
+                    ch_fts.epoch_times -
                     getattr(lid_timings, f"t_{timing}")
                 ))
-                if ft_type[:2]=='Sp': print('REMOVE segmDopaTimes!! line 214')
+
+                if ft_type[:2]=='Sp':
+                    print('REMOVE segmDopaTimes!! line 214')
+
             axes[i].scatter(
                 lid_i, len(freqBandNames) - .2,
                 color=lid_clrs[timing],
@@ -234,17 +238,24 @@ def plot_bandPower_colormap(
             'Time after LT intake (min)',
             fontsize=fsize,
         )
-        ax.set_xticks(ch_fts.winStartIndices,)
+        ax.set_xticks(
+            np.arange(
+                0, ch_fts.epoch_times.shape[0], 3
+            )
+        )
         ax.set_xticklabels(
-            np.array(ch_fts.winStartTimes) / 60,
+            np.around(ch_fts.epoch_times[::3] / 60, 1),
             fontsize=fsize,
         )
         # PLOT WINDOW INDICATORS (gray line where temporal interruption is)
-        for xline in ch_fts.winStartIndices[1:]:
-            ax.axvline(
-                xline,
-                ymin=0, ymax=5, color='k', lw=3, alpha=.8,
-            )
+        for i_pre, x_t in enumerate(ch_fts.epoch_times[1:]):
+            # if epochs are more than 5 minutes separated
+            if x_t - ch_fts.epoch_times[i_pre] > 300:
+
+                ax.axvline(
+                    i_pre + 1,
+                    ymin=0, ymax=5, color='k', lw=3, alpha=.8,
+                )
 
         title = 'Freq-Band' + ft_type
         if to_Zscore: title = 'Z-scored ' + title
@@ -256,7 +267,8 @@ def plot_bandPower_colormap(
 
     plt.suptitle(
         f'sub-{sub}', color='gray',
-        x=.05, y=.9, size=fsize + 12)
+        x=.05, y=.97, size=fsize + 12)
+    plt.tight_layout()
 
     if to_save:
         nameCode = {
