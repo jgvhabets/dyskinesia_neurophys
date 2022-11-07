@@ -22,7 +22,6 @@ def get_FreqBandArray_fromSpecFts(
     to_Smooth=False,
     smoothWin_sec=10,
     segLen_sec=.5,
-
 ):
     """
     Transforms an array of spectral features
@@ -99,6 +98,7 @@ def plot_bandPower_colormap(
     fig_name=None,
     fig_dir=None,
     sub=None, # TODO: PUT SUB IN CLASS
+    to_include_clinScores=False,
 ):
     """
     Takes one or multiple array with spectral
@@ -222,12 +222,31 @@ def plot_bandPower_colormap(
                 if ft_type[:2]=='Sp':
                     print('REMOVE segmDopaTimes!! line 214')
 
-            axes[i].scatter(
+            ax.scatter(
                 lid_i, len(freqBandNames) - .2,
                 color=lid_clrs[timing],
                 s=500, marker='*',
                 label=f'LID-{timing}',
             )
+        
+        # PLOT CDRS SCORES
+        if to_include_clinScores:
+            try:
+                scores, _, _ = importClin.run_import_clinInfo(sub=sub)
+                # get closest CDRS score to epoch_time
+                epoch_clin_scores = [scores.iloc[
+                    np.argmin(abs(m - scores['dopa_time']))
+                ]['CDRS_total'] for m  in (ch_fts.epoch_times / 60)]
+
+                clinAx = ax.twinx()
+                clinAx.plot(
+                    epoch_clin_scores,
+                    color='darkblue', alpha=.2, lw=5,)
+                clinAx.set_ylim(0, 20)
+            except FileNotFoundError:
+                print(f'No clin scores found for sub {sub}')
+            except ValueError:
+                print(f'Incorrect clin scores found for sub {sub}')
 
         # set Freq-Band names as y-ticks
         ax.set_yticks(np.arange(.5, bp_array.shape[0], 1))
@@ -257,7 +276,7 @@ def plot_bandPower_colormap(
                     ymin=0, ymax=5, color='k', lw=3, alpha=.8,
                 )
 
-        title = 'Freq-Band' + ft_type
+        title = 'Freq-Band ' + ft_type
         if to_Zscore: title = 'Z-scored ' + title
         if nrows > 1: title = f'{ch_fts.channelName}: ' + title
         ax.set_title(title, size=fsize + 4)
