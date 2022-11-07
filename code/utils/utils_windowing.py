@@ -16,6 +16,7 @@ def get_windows(
     winLen_sec=180,
     part_winOverlap=.0,
     min_winPart_present=.66,
+    movement_part_acceptance: float = 1.,
     return_as_class=False,
 ):
     """
@@ -36,7 +37,11 @@ def get_windows(
             between consecutive windows
         - min_winPart_present (float): exclude window if
             smaller part than this variable is present
-        - get_as_class: bool defines whether results are
+        - movement_part_acceptance (float): if given, a window
+            will be excluded when the part of accelerometer-
+            detected movement exceeds this number. Defaults
+            to 1, meaning that all windows are accepted.
+        - return_as_class: bool defines whether results are
             returned as class consisting of data, keys, times;
             or as separate variable (tuple)
     
@@ -73,9 +78,15 @@ def get_windows(
     ):
 
         wintemp = sigDf.loc[win0_sec:win0_sec + winLen_sec]
-
-        # skip window present less than given threshold
+        
+        # skip window if smaller than given presence-threshold
         if wintemp.shape[0] < (nWin * min_winPart_present): continue
+
+        move_part = 1 - (sum(wintemp['no_move']) / wintemp.shape[0])
+        # skip window if it contains too many movement samples
+        if move_part > movement_part_acceptance:
+            print(f'\t window skipped due to MOVEMENT ({win0_sec} s)')
+            continue
 
         # nan-pad windows which are not completely present
         elif wintemp.shape[0] < (winLen_sec * fs):

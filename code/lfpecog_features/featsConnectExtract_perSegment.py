@@ -40,6 +40,7 @@ class run_segmConnectFts:
     part_winOverlap: float = .5
     segLen_sec: float = .5
     part_segmOverlap: float = .5
+    movement_part_acceptance: float = 1
     channels_incl: list = field(default_factory=list)
     channels_excl: list = field(default_factory=list)
     
@@ -52,6 +53,7 @@ class run_segmConnectFts:
             winLen_sec=self.winLen_sec,
             part_winOverlap=self.part_winOverlap,
             return_as_class = True,  # returns data/keys/times as class
+            movement_part_acceptance=self.movement_part_acceptance,
         )
         print('got windows')
         
