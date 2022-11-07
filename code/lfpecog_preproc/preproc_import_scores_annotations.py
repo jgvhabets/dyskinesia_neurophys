@@ -189,3 +189,28 @@ class lid_timing:
     t_start: float
     t_peak: float
 
+
+def find_onedrive_path():
+        
+    path = os.getcwd()
+    
+    while os.path.dirname(path)[-5:] != 'Users':
+        path = os.path.dirname(path)
+    # path is now Users/username
+    onedrive_f = [
+        f for f in os.listdir(path) if np.logical_and(
+            'onedrive' in f.lower(),
+            'charit' in f.lower()
+        ) 
+    ]  # gives list
+    onedrivepath = os.path.join(path, onedrive_f[0])
+    
+    data_path = os.path.join(
+        onedrivepath,
+        'dysk_ecoglfp',  # adjust this so that it leads to project's data folder
+        'data', 
+    )
+    
+    return data_path
+
+
