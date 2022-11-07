@@ -45,18 +45,16 @@ class run_segmConnectFts:
     
     
     def __post_init__(self,):
-        # divide full dataframe in present windows
-        data_arr, data_keys, dataWinTimes = utils_win.get_windows(
+        # divides full dataframe in present windows
+        windows = utils_win.get_windows(
             self.sub_df,
             fs=self.fs,  
             winLen_sec=self.winLen_sec,
             part_winOverlap=self.part_winOverlap,
+            return_as_class = True,  # returns data/keys/times as class
         )
         print('got windows')
-        # make class out of window results
-        windows = utils_win.windowedData(
-            data_arr, data_keys, dataWinTimes
-        )
+        
 
         # select all ECOG-channels as targets
         targets = [ch for ch in windows.keys if 'ECOG' in ch]
@@ -68,7 +66,7 @@ class run_segmConnectFts:
         ]
 
         # create class with 3d-segmented-data and times, per channel
-        chSegments = utils_win.segmArrays_multipleChannels(
+        epochedChannels = utils_win.epochedData_multipleChannels(
             windows=windows,
             channels_incl=targets+seeds,
             fs=self.fs,
@@ -76,9 +74,11 @@ class run_segmConnectFts:
             segLen_sec=self.segLen_sec,
             part_segmOverlap=self.part_segmOverlap,
         )
-        setattr(self, 'chSegments', chSegments)  # store for notebook use
-        # segments here are still py float's, not np.float64
-        print('got segments')
+        # store for notebook use
+        setattr(self, 'channels', epochedChannels)
+
+        print('got epoched data')
+        # TODO: FUTURE SAVE EPOCHED CHANNEL DATA
 
         # get list with tuples of all target x seed combis
         self.allCombis = list(product(seeds, targets))
@@ -87,10 +87,12 @@ class run_segmConnectFts:
             self,
             'features',
             calculate_segmConnectFts(
-                chSegments=self.chSegments,
+                epochChannels=self.channels,
                 fs=self.fs,
                 allCombis=self.allCombis,
-                fts_to_extract=['COH', 'ICOH', 'absICOH', 'sqCOH'],
+                fts_to_extract=[
+                    'COH', 'ICOH', 'absICOH', 'sqCOH',
+                ],
             )
         )
 
@@ -102,7 +104,7 @@ class calculate_segmConnectFts:
     features per segments
 
     """
-    chSegments: Any  # attr of prepare_segmConnectFts()
+    epochChannels: Any  # attr of prepare_segmConnectFts()
     fs: int
     allCombis: Any   # attr of prepare_segmConnectFts()
     fts_to_extract: list
@@ -127,37 +129,48 @@ class calculate_segmConnectFts:
                 f'SEED: {seedTarget[0]} x '
                 f'TARGET: {seedTarget[1]}'
             )
-            # define channel classes containing segmented 3d-data and times
-            seed = getattr(self.chSegments, seedTarget[0])
-            target = getattr(self.chSegments, seedTarget[1])
+            # get epoched 2d/3d-data and times for channels of interest
+            seed = getattr(self.epochChannels, seedTarget[0])
+            target = getattr(self.epochChannels, seedTarget[1])
             # reshape 3d segments to 2d, and internally check whether
             # number of segments and timestamps are equal
-            seed2d = get_clean2d(seed.data, seed.segmTimes)
-            target2d = get_clean2d(target.data, target.segmTimes)
-            # IMPORTANT: 2d arrays returned as NP.FLOAT64's, not PY FLOAT's
-            print(seed.data.shape, target.data.shape)
-            print(seed2d.shape, target2d.shape)
+            if len(seed.data.shape) == 3:
+                setattr(
+                    seed,
+                    'data',
+                    get_clean2d(seed.data, seed.segmTimes)
+                )
+            if len(target.data.shape) == 3:
+                setattr(
+                    target,
+                    'data',
+                    get_clean2d(target.data, target.segmTimes)
+                )
+
             # reset storing lists
             time_list = []
             if extract_COH:
                 for l in coh_lists: coh_lists[l] = []
 
-            # loop over times and find matching indices
-            for i_seed, t in enumerate(seed.segmTimes):
+            # find time-matching target-indices for seed-indices
+            for i_seed, t in enumerate(seed.winTimes):
 
-                if t in target.segmTimes:
+                if t in target.winTimes:
 
-                    i_target = np.where(target.segmTimes == t)[0][0]
+                    i_target = np.where(target.winTimes == t)[0][0]
 
                     time_list.append(t)
 
                     # COHERENCE EXTRACTION
                     if len(coh_fts_incl) > 0:
+
                         f_coh, icoh, icoh_abs, coh, sq_coh = specFeats.calc_coherence(
-                            sig1=seed2d[i_seed, :],
-                            sig2=target2d[i_target],
+                            sig1=seed.data[i_seed, :],
+                            sig2=target.data[i_target, :],
                             fs=self.fs,
-                            nperseg=seed2d.shape[1],
+                            nperseg=int(
+                                self.epochChannels.segLen_sec * self.fs
+                            ),
                         )
                         coh_lists['absICOH_list'].append(icoh_abs)
                         coh_lists['ICOH_list'].append(icoh)
@@ -171,7 +184,7 @@ class calculate_segmConnectFts:
                 f'{seedTarget[0]}_{seedTarget[1]}',
                 storeSegmFeats(
                     channelName=f'{seedTarget[0]}_{seedTarget[1]}',
-                    times_list=time_list,
+                    epoch_times=np.array(time_list),
                     ft_lists=coh_lists,
                     freqs=f_coh,
                     winStartTimes=target.winTimes,
@@ -181,7 +194,7 @@ class calculate_segmConnectFts:
 @dataclass(init=True, repr=True,)
 class storeSegmFeats:
     channelName: str
-    times_list: list
+    epoch_times: array
     ft_lists: dict
     freqs: array
     winStartTimes: Any
@@ -197,13 +210,6 @@ class storeSegmFeats:
                 ft,
                 np.array(self.ft_lists[f'{ft}_list'])
             )
-        
-        # create time attributes
-        self.segmTimes = np.array(self.times_list)  # all timestamps for segmentfts
-        # find corr indices to window moments
-        self.winStartIndices = [
-            np.argmin(abs(self.segmTimes - t)) for t in self.winStartTimes
-        ]
 
 
 
@@ -228,17 +234,3 @@ def get_clean2d(data3d, times=None):
     return data2d
 
 
-
-# @dataclass(init=True, repr=True, )
-# class segmentFts_perContact:
-#     """
-#     Store segment-features and timings per column/contact
-#     """
-#     segmPsds: array
-#     psdFreqs: array
-#     segmTimes: array
-#     winStartTimes: list
-#     winStartIndices: list
-#     # segmentTimes: list
-#     contactName: str
-#     sub: str

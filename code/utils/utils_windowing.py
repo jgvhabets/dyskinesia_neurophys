@@ -5,7 +5,7 @@ processing
 """
 # Import public packages
 import numpy as np
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from array import array
 from typing import Any
 
@@ -15,12 +15,15 @@ def get_windows(
     fs,
     winLen_sec=180,
     part_winOverlap=.0,
-    min_winPart_present=.33,
+    min_winPart_present=.66,
+    return_as_class=False,
 ):
     """
     Select from one channel windows with size nWin * Fs,
     exclude windows with nan's, and save corresponding
     dopa-times to included windows.
+    Function selects windows based on dopa-times using
+    .loc function within a pd.DataFrame.
 
     TODO: make function hybrid, A: for getting times only,
     B: for getting data nd-array
@@ -33,6 +36,9 @@ def get_windows(
             between consecutive windows
         - min_winPart_present (float): exclude window if
             smaller part than this variable is present
+        - get_as_class: bool defines whether results are
+            returned as class consisting of data, keys, times;
+            or as separate variable (tuple)
     
     Returns:
         - win_arr (arr): 2d array of n-windows x n-samples
@@ -47,7 +53,7 @@ def get_windows(
         times = np.around(sigDf.index.values, 6)
         sigDf.insert(loc=0, column='dopa_time', value=times)
 
-    nWin = int(fs * winLen_sec)  # n samples within a window
+    nWin = int(fs * winLen_sec)  # n samples within a full window
 
     # define seconds after which a new window starts (incl overlap)
     if part_winOverlap > 0:
@@ -91,14 +97,25 @@ def get_windows(
     win_array = np.array(arr_list)
     arr_keys = sigDf.keys()
 
-    return win_array, arr_keys, arr_times_sec
+
+    if return_as_class:
+        
+        windows = windowedData(
+            win_array, arr_keys, arr_times_sec
+        )
+        return windows
+
+    else:
+        
+        return win_array, arr_keys, arr_times_sec
 
 
 @dataclass(repr=True, init=True,)
 class windowedData:
     """
     Class to store and access data, keys,
-    and timestamps from windowed data.
+    and timestamps from windowed data defined by
+    get_windows() above.
     """
     data: array
     keys: list
@@ -191,13 +208,15 @@ def get_noNanSegm_from_singleWindow(
 
 
 
-def get_3dSegmArray_allWindows(
+def get_epochedData_perChannel(
     windows,
     channelName: str,
     fs,
     winLen_sec: float = 180,
     segLen_sec: float = .5,
     part_segmOverlap: float = .5,
+    return_3d_segmData: bool = False,
+    return_noNan_windows: bool = False,
 ):
     """
     Function to combine all 2d-arrays of segmented
@@ -221,49 +240,90 @@ def get_3dSegmArray_allWindows(
             of windows, to enable 3d-stacking
         - segTimes: chronological timestamps of all
             segments without nan
+    
+    Raises:
+        - valueError: if return_3d_segmData and return_
+            noNan_windows are both True or None is True
     """
+    if np.logical_or(
+        return_3d_segmData == 0 and return_noNan_windows == 0,
+        return_3d_segmData == 1 and return_noNan_windows == 1,
+    ):
+        raise ValueError('Choose EXACTLY 1 return method')
+    
     i_times = np.where(windows.keys == 'dopa_time')[0][0]       
     i_ch = np.where(windows.keys == channelName)[0][0]
-    # max shape of array, aka max #-segments in window
-    max_n_segs = (fs * winLen_sec) / (fs * segLen_sec)
     
-    for i_win in range(windows.data.shape[0]):
-        # extract segmented data per window (2d array) with
-        # shape: # segments-in-window, #samples-per-segm)
-        tempDat, tempTimes = get_noNanSegm_from_singleWindow(
-            windows.data[i_win, :, i_ch],
-            fs=fs,
-            segLen_n=int(fs * segLen_sec),
-            part_segmOverlap=part_segmOverlap,
-            win_times=windows.data[i_win, :, i_times],
-        )
+    if return_3d_segmData:
+        # max shape of array, aka max #-segments in window
+        max_n_segs = (fs * winLen_sec) / (fs * segLen_sec)
         
-        # pad with nans to equalise shape to max-shape
-        if tempDat.shape[0] < max_n_segs:
-
-            pad = np.array([
-                [np.nan] * tempDat.shape[1]  # defines # columns
-            ] * int(max_n_segs - tempDat.shape[0])  # defines # rows
+        for i_win in range(windows.data.shape[0]):
+            # extract segmented data per window (2d array) with
+            # shape: # segments-in-window, #samples-per-segm)
+            tempDat, tempTimes = get_noNanSegm_from_singleWindow(
+                windows.data[i_win, :, i_ch],
+                fs=fs,
+                segLen_n=int(fs * segLen_sec),
+                part_segmOverlap=part_segmOverlap,
+                win_times=windows.data[i_win, :, i_times],
             )
-            tempDat = np.concatenate([tempDat, pad], axis=0)
-            # times are not padded, because nan's are removed from data later
-        
-        if i_win == 0:  # first iteration create the variable
-            tempSegDats = [tempDat,]
-            segTimes = tempTimes
+            
+            # pad with nans to equalise shape to max-shape
+            if tempDat.shape[0] < max_n_segs:
 
-        else:  # then store in existing variable
-            tempSegDats.append(tempDat)
-            segTimes = np.concatenate([segTimes, tempTimes])
-        
-    segDat = np.stack(tempSegDats)
-    winTimes = windows.win_starttimes
+                pad = np.array([
+                    [np.nan] * tempDat.shape[1]  # defines # columns
+                ] * int(max_n_segs - tempDat.shape[0])  # defines # rows
+                )
+                tempDat = np.concatenate([tempDat, pad], axis=0)
+                # times are not padded, because nan's are removed from data later
+            
+            if i_win == 0:  # first iteration create the variable
+                tempSegDats = [tempDat,]
+                segTimes = tempTimes
 
-    return segDat, segTimes, winTimes
+            else:  # then store in existing variable
+                tempSegDats.append(tempDat)
+                segTimes = np.concatenate([segTimes, tempTimes])
+            
+        segDat = np.stack(tempSegDats)
+
+        epoched_channel = epochedChannel(
+            data=segDat,
+            segmTimes=segTimes,
+            winTimes=windows.win_starttimes
+        )
+
+
+    elif return_noNan_windows:
+
+        newDat = []
+        newTimes = []
+
+        for i_win in range(windows.data.shape[0]):
+            
+            tempdat = windows.data[i_win, :, i_ch]
+            # only include full windows w/o NaN-data
+            if ~ np.isnan(list(tempdat)).any():
+                # convert py-float to np-float if necessary            
+                if type(tempdat[0]) == float:
+                    tempdat = tempdat.astype(np.float64)
+
+                newDat.append(tempdat)
+                newTimes.append(windows.win_starttimes[i_win])
+
+        epoched_channel = epochedChannel(
+            data=np.array(newDat),
+            winTimes=np.array(newTimes)
+        )
+
+
+    return epoched_channel
 
 
 @dataclass(repr=True, init=True,)
-class segmentedChannel:
+class epochedChannel:
     """
     Class to store and access (3d) data
     and timestamps of segments per
@@ -271,23 +331,26 @@ class segmentedChannel:
     Contains one ephys-channel per class
     """
     data: array
-    segmTimes: array
     winTimes: Any
+    segmTimes: array = field(default_factory=lambda: np.array([]))
 
 
 @dataclass(init=True, repr=True,)
-class segmArrays_multipleChannels:
+class epochedData_multipleChannels:
     """
     main class contains data and times per
-    ephys-Channel.
-    Data is organised in 3d-arrays, existing of
+    ephys-Channel (epochedChannel, containing data,
+    window-times, and segment-times if applicable).
+    
+    Data can be epoched in windows and segments, meaning
+    data is organised in 3d-arrays, existing of
     n-windows x n-segments (per window) x n-samples
     (per segment). In case of overlap, every window
     or segment has a separate array/row, meaning
     last part of row N can be equal to first part
     of row N + 1.
-    segmTimes contain times of each segment (2nd dim),
-    winTimes contain start-times of each window (1st-dim).
+    OR Data can be epoched in windows, in which only
+    windows WITHOUT NaN-values are included.
     """
     windows: Any  # must be class windowedData()
     channels_incl: list
@@ -297,24 +360,23 @@ class segmArrays_multipleChannels:
     part_segmOverlap: float = .5
 
     def __post_init__(self,):
-
+        # loop over included channels, and create class
+        # with data and times per channel
         for ch in self.channels_incl:
 
-            segdat, segtimes, winTimes = get_3dSegmArray_allWindows(
+            epochedChannel = get_epochedData_perChannel(
                 windows=self.windows,
                 channelName=ch,
                 fs=self.fs,
                 winLen_sec=self.winLen_sec,
                 segLen_sec=self.segLen_sec,
                 part_segmOverlap=self.part_segmOverlap,
+                return_3d_segmData=False,
+                return_noNan_windows=True,
             )
 
             setattr(
                 self,
                 ch,
-                segmentedChannel(
-                    data=segdat,
-                    segmTimes=segtimes,
-                    winTimes=winTimes
-                )
+                epochedChannel
             )
