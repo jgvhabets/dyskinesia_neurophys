@@ -1,10 +1,12 @@
 """Plot time-frequency Plots for connectivity measures"""
 
 # import
+from os.path import join
 import numpy as np
 import matplotlib.pyplot as plt
 
 import lfpecog_preproc.preproc_import_scores_annotations as importClin
+import lfpecog_features.feats_spectral_helpers as specHelpers
 
 
 def plot_timeFreq_Coherence(
@@ -57,8 +59,8 @@ def plot_timeFreq_Coherence(
                            'freq_attr': 'freqs'}
     }
 
-    fmin = 1
-    fmax = 100
+    fmin = 5
+    fmax = 98
 
     # set up figure
     if nrows > 6: fig_width = 32
@@ -84,50 +86,45 @@ def plot_timeFreq_Coherence(
             ch_fts = inputChannels[i]
 
         # create actual time-coherence arrays
-        pxsel, fsel = specHelpers.select_bandwidths(
-            getattr(segmFtsClass, col).segmPsds,
-            getattr(segmFtsClass, col).psdFreqs,
-            fmin, fmax
-        )         
+        coh_sel, f_sel = specHelpers.select_bandwidths(
+            values=getattr(ch_fts, ft_params[ft_type]['ft_attr']),
+            freqs=getattr(ch_fts, ft_params[ft_type]['freq_attr']),
+            f_min=fmin,
+            f_max=fmax
+        )
+        # print(coh_sel.shape, coh_sel,)
+        # print(f_sel.shape, f_sel)
+        # print(ch_fts.epoch_times.shape, ch_fts.epoch_times)
+        # break  
 
         # set correct figure-parameters for ft-type and settings
-        if ft_type == 'Spectral Power':
-            if to_Zscore:
-                map_params = {
-                    'cmap': 'coolwarm',  # blue-white-red: bwr, yellow-orange-red: YlOrRd
-                    'vmin': -2.5, 'vmax':2.5
-                }
-            else:
-                map_params = {
-                    'cmap': 'viridis',
-                    'vmin': 0, 'vmax':1e-12
-                }
-        elif  ft_type == 'Imag-Coherence':
+        if  ft_type == 'Imag-Coherence':
             map_params = {
                 'cmap': 'PiYG',  # coolwarm
-                'vmin': -1, 'vmax': 1
+                'vmin': -1, 'vmax': .3
             }
         elif ft_type == 'abs-Imag-Coherence':
             map_params = {
                 'cmap': 'BuPu',
-                'vmin': 0, 'vmax': .5
+                'vmin': 0, 'vmax': .3
             }
         elif ft_type == 'Squared-Coherence':
             map_params = {
-            'cmap': 'BuPu',
+                'cmap': 'BuPu',
                 'vmin': 0, 'vmax': .3
             }
 
-
-
-        # PLOT freqband-array
-        im = ax.pcolormesh(
-            bp_array,
-            **map_params,
+        # if coh_sel.shape[0] <= 10: aspect_ratio = .05
+        # else: aspect_ratio = .08
+        aspect_ratio = .25 / (coh_sel.shape[1] / coh_sel.shape[0])
+        if nrows > 6: aspect_ratio / 2
+        # PLOT FEATURE VALUES
+        im = ax.imshow(
+            coh_sel.T, cmap='viridis',
+            vmin=map_params['vmin'],
+            vmax=map_params['vmax'],
+            aspect=aspect_ratio,  # change horizontal/vertical proportion
         )
-        cb = fig.colorbar(im, ax=ax)
-        for tick in cb.ax.get_yticklabels():
-            tick.set_fontsize(fsize)
 
         # PLOT LID-timings (observed Start and Peak)
         lid_timings = importClin.get_seconds_of_LID_start()[sub]
@@ -151,7 +148,7 @@ def plot_timeFreq_Coherence(
                     print('REMOVE segmDopaTimes!! line 214')
 
             ax.scatter(
-                lid_i, len(freqBandNames) - .2,
+                lid_i, coh_sel.shape[0] - .2,
                 color=lid_clrs[timing],
                 s=500, marker='*',
                 label=f'LID-{timing}',
@@ -170,8 +167,8 @@ def plot_timeFreq_Coherence(
 
                 clinAx = ax.twinx()
                 clinAx.plot(
-                    epoch_clin_scores,
-                    color='darkblue', alpha=.2, lw=5,)
+                    epoch_clin_scores, ls='dotted',
+                    color='orange', alpha=.6, lw=3,)
                 clinAx.set_ylim(0, 20)
                 clinAx.set_ylabel('CDRS total score')
 
@@ -180,9 +177,15 @@ def plot_timeFreq_Coherence(
             # except ValueError:
             #     print(f'Incorrect clin scores found for sub {sub}')
 
-        # set Freq-Band names as y-ticks
-        ax.set_yticks(np.arange(.5, bp_array.shape[0], 1))
-        ax.set_yticklabels(freqBandNames, size=fsize,)
+        # # set Freq-Band names as y-ticks
+        yticklabs = list(np.arange(fmin, fmax, 10))
+        yticklabs[0] = fmin
+        yticklabs.append(fmax)
+        yticks = np.linspace(0, coh_sel.shape[1], len(yticklabs))
+        ax.set_yticks(yticks)
+        ax.set_yticklabels(yticklabs)
+        ax.set_ylabel(f'Frequency (Hz)', fontsize=16, )
+        ax.set_ylim(0, coh_sel.shape[1])
 
         # set dopa-times correpsonding to segments as x-ticks
         ax.set_xlabel(
@@ -191,11 +194,11 @@ def plot_timeFreq_Coherence(
         )
         ax.set_xticks(
             np.arange(
-                0, ch_fts.epoch_times.shape[0], 3
+                0, ch_fts.epoch_times.shape[0], 2
             )
         )
         ax.set_xticklabels(
-            np.around(ch_fts.epoch_times[::3] / 60, 1),
+            np.around(ch_fts.epoch_times[::2] / 60, 1),
             fontsize=fsize,
         )
         # PLOT WINDOW INDICATORS (gray line where temporal interruption is)
@@ -205,10 +208,10 @@ def plot_timeFreq_Coherence(
 
                 ax.axvline(
                     i_pre + 1,
-                    ymin=0, ymax=5, color='k', lw=3, alpha=.8,
+                    ymin=0, ymax=50, color='lightgray', lw=3, alpha=.8,
                 )
 
-        title = 'Freq-Band ' + ft_type
+        title = f'Freq-Band {ft_type}'
         if to_Zscore: title = 'Z-scored ' + title
         if nrows > 1: title = f'{ch_fts.channelName}: ' + title
         ax.set_title(title, size=fsize + 4)
@@ -220,6 +223,8 @@ def plot_timeFreq_Coherence(
         f'sub-{sub}', color='gray',
         x=.05, y=.97, size=fsize + 12)
     plt.tight_layout()
+    # create colorbar for time-freq plot
+    fig.colorbar(im, ax=axes.ravel().tolist())
 
     if to_save:
         nameCode = {
@@ -234,9 +239,9 @@ def plot_timeFreq_Coherence(
         if to_Zscore: fig_name += f'_zScored'
 
         plt.savefig(
-            os.path.join(
+            join(
                 fig_dir, 'ft_exploration', 'rest',
-                f'freqBand_{nameCode[ft_type]}',
+                f'timeFreq_{nameCode[ft_type]}',
                 fig_name
             ), dpi=150, facecolor='w',
         )
