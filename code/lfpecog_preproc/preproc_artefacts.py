@@ -5,11 +5,12 @@ from itertools import compress
 
 # Import own functions
 import preproc_plotting as plotting
-from tapping_feat_calc import nan_array
+from lfpecog_features.feats_helper_funcs import nan_array
 
 
 def artf_removal_dict(
     dataDict: dict,
+    Fs_dict: dict,
     namesDict: dict,
     runInfo,
 ):
@@ -28,6 +29,7 @@ def artf_removal_dict(
 
         dataDict[group], namesDict[group] = artf_removal_array(
             data=dataDict[group],
+            Fs=Fs_dict[group],
             names=namesDict[group],
             group=group,
             runInfo=runInfo,
@@ -40,10 +42,13 @@ def artf_removal_dict(
 
 def artf_removal_array(
     data,
+    Fs: int,
     names: list,
     group: str,
     runInfo,
+    win_len = 1,
     ch_nan_limit=.5,
+    remove_edge_secs=5,
     to_plot: bool=False,
 ):
     '''
@@ -58,23 +63,26 @@ def artf_removal_array(
     Inputs:
         - data (2d array): array containing ephys-data, including
             time rows.
+        - Fs (int): sampling frequency
         - names (list): list of corresponding array-row-names
         - group (str): names of group (lfp_left, ecog, lfp_right)
         - runInfo (class): settings extracted from input-JSONs in
             main script
-        # - win_len (int): block window length in milliseconds,
-        # - n_stds_cut, int: number of std-dev's above and below mean that
-        #     is used for cut-off's in artefact detection,
-        # - save (str): 1) directory where to store figure, 2) 'show' to only
-        #     plot in notebook, 3) None to not plot.
+        - win_len: window length in seconds to calculate artefacts
+        - ch_nan_limit
+        - remove_edge_secs: number of seconds on start and end-
+            edge to be removed
 
     Returns:
-        - sel_bids (array): array with all channels in which artefacts
-        are replaced by np.nan's.
+        - clea_data (array): array with all channels in which
+            artefacts are replaced by np.nan's
+        - names: channel names
     '''
-    Fs = runInfo.mainSettings['ephys']['resample_Fs']
     sd_cut = runInfo.mainSettings['ephys']['artf_sd']
-    win_len = 1  # window length in seconds
+    
+    # remove edges
+    data = data[:, int(remove_edge_secs * Fs):-int(remove_edge_secs * Fs):]
+
     w_samples = win_len * Fs
     n_wins = int(data.shape[-1] / w_samples)
 
@@ -94,13 +102,23 @@ def artf_removal_array(
         print(f'\nstart channel #{ch}: {names[ch]} (# {n_wins} win"s)')
         group_nans[ch] = []
 
-        thresh_dat = data[ch, int(5 * Fs):-int(5 * Fs)]
-        # define thresholds not over first and last seconds
+        ### DEFINE if artf removal is necessary
+        sig_mean = np.nanmean(abs(data[ch, :]))
+        sig_sd_thr = sd_cut * np.nanstd(data[ch, :])
+        sd_ratio = sig_sd_thr / sig_mean
+        print(f'ARTEFACT REMOVAL CHECK: ratio SD-cutoff/absmean: {sd_ratio}')
+
+        if sd_ratio < .99:
+            print(f'artefact removal skipped for {ch}')
+            # dont change channel row in clean_data
+            continue
+            
+
+        # define thresholds
         threshs = (
-            np.nanmean(thresh_dat) - (sd_cut * np.nanstd(thresh_dat)),
-            np.nanmean(thresh_dat) + (sd_cut * np.nanstd(thresh_dat))
+            np.nanmean(data[ch, :]) - (sd_cut * np.nanstd(data[ch, :])),
+            np.nanmean(data[ch, :]) + (sd_cut * np.nanstd(data[ch, :]))
         )  # tuple with lower and upper threshold
-        ### TODO: TRY OUT WITH SELECTION BASED ON PSD OFF-SET
 
         print('Tresholds:', threshs)
         nancount = 0
@@ -108,12 +126,12 @@ def artf_removal_array(
         for w in np.arange(n_wins):
 
             tempdat = data[ch, w_samples * w:w_samples * (w + 1)]
-
+            # indicate as artefact if at least 1 sample exceeds threshold
             if np.logical_or(
                 (tempdat < threshs[0]).any(),
                 (tempdat > threshs[1]).any()
             ):
-
+                # if threshold is exceeded: fill with nans
                 clean_data[
                     ch, w_samples * w:w_samples * (w + 1)
                 ] = [np.nan] * w_samples

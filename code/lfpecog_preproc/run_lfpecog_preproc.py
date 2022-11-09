@@ -83,7 +83,7 @@ if __name__ == '__main__':
             dataDict, chNameDict = loadData.get_data_and_channels(
                 rawRun=rawRun,
                 runInfo=runInfo,
-                Fs=mainSettings['ephys']['orig_Fs'],
+                Fs=rawRun.bids.info['sfreq'],
                 to_plot=mainSettings['report_plots'],
             )
 
@@ -113,7 +113,7 @@ if __name__ == '__main__':
             # Resampling
             dataDict, Fs_dict = resample.resample_for_dict(
                 dataDict, chNameDict, mainSettings
-            )
+            )  # new resampled sample-freqs can vary between datatypes
         
             if mainSettings['report_plots']:
                 print('\n\n MAIN SETTINGS TO PLOT POSITIVE')
@@ -129,6 +129,7 @@ if __name__ == '__main__':
             # Artefact Removal
             dataDict, chNameDict = artefacts.artf_removal_dict(
                 dataDict=dataDict,
+                Fs_dict=Fs_dict,
                 namesDict=chNameDict,
                 runInfo=runInfo,
             )
