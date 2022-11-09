@@ -36,7 +36,7 @@ def resample_for_dict(
             Fs_orig=settings[dtype]['orig_Fs'],
             Fs_new=settings[dtype]['resample_Fs'],
         )
-
+        # new freq sample can vary between datatypes
         groups_Fs[group] = settings[dtype]['resample_Fs']
 
     return dataDict, groups_Fs
