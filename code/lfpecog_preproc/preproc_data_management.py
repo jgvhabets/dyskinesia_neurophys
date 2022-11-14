@@ -19,21 +19,24 @@ import mne_bids
 import csv
 import json
 
+from utils.utils_fileManagement import get_project_path, get_onedrive_path
+
 
 def get_sub_runs(
-    sub, proj_path
+    sub,
 ):
     """
     Extract which runs to preprocess
     """
-    sub_file = join(
-        proj_path,
-        'data/preprocess_jsons/'
+    data_path = get_project_path('data')
+    sub_path = join(
+        data_path,
+        'preprocess_jsons',
         f'runInfo_{sub}.json'
     )
     sub_runs = {}
         
-    with open(join(proj_path, sub_file)) as f:
+    with open(sub_path) as f:
 
         try:
             sub_json = json.load(f, )  # list of runinfo-dicts
@@ -41,7 +44,7 @@ def get_sub_runs(
         except json.decoder.JSONDecodeError:
             print(
                 '\n\t json.decoder.JSONDecodeError ERROR'
-                f' while reading {sub_file}'
+                f' while reading {sub_path}'
             )
             print(
                 'If JSON-file looks correct, try writing '
@@ -52,10 +55,10 @@ def get_sub_runs(
 
     scans_df = read_csv(
         join(
-            sub_json['raw_path'],
-            f'sub-{sub}',
+            get_onedrive_path('rawdata'),
+            f'sub-EL{sub}',
             f'ses-{sub_json["ses"]}',
-            f'sub-{sub}_ses-{sub_json["ses"]}_scans.tsv'
+            f'sub-EL{sub}_ses-{sub_json["ses"]}_scans.tsv'
         ),
         sep='\t',
     )
@@ -78,7 +81,7 @@ def get_sub_runs(
             'tasks_excl': sub_json["tasks_exclude"],
             'data_include': sub_json["data_include"],
             'lead_type': sub_json["lead_type"],
-            'raw_path': sub_json["raw_path"]
+            'raw_path': get_onedrive_path('rawdata')
         }
     
     return sub_runs
@@ -92,8 +95,10 @@ class RunInfo:
     project_path: str
 
     def __post_init__(self,):  # is called after initialization
+        self.rawdata_path = get_onedrive_path('rawdata')
+        
         self.bidspath = mne_bids.BIDSPath(
-            subject=self.runDict["sub"],
+            subject=f'EL{self.runDict["sub"]}',
             session=self.runDict["ses"],
             task=self.runDict["task"],
             acquisition=self.runDict["acq"],
@@ -101,7 +106,7 @@ class RunInfo:
             suffix='ieeg',
             extension='.vhdr',
             datatype='ieeg',
-            root=self.runDict["raw_path"],
+            root=self.rawdata_path,
         )
 
         self.data_groups = self.runDict["data_include"]
@@ -135,9 +140,7 @@ class RunInfo:
         
         for folder in [self.data_path, self.fig_path]:
 
-            if not exists(folder):
-                
-                makedirs(folder)
+            if not exists(folder): makedirs(folder)
 
         if self.mainSettings['report_file']:
 
@@ -145,9 +148,7 @@ class RunInfo:
                 self.project_path, 'data',
                 f'preproc_reports/sub-{self.runDict["sub"]}'
             )
-            if not exists(report_folder):
-                
-                makedirs(report_folder)
+            if not exists(report_folder): makedirs(report_folder)
 
             now = datetime.datetime.now()
             now = now.strftime("%Y%m%d_%H%M")
@@ -168,7 +169,7 @@ class RunInfo:
                 )
                 f.write(
                     '##### PREPROCESSING REPORT #####\n\n'
-                    f'\tSub-{self.runDict["sub"]}\n\t'
+                    f'\tSub-EL{self.runDict["sub"]}\n\t'
                     f'Task: {self.runDict["task"]}\n\t'
                     f'Acquisition: {self.runDict["acq"]}\n\t'
                     f'Settings-Version: {self.mainSettings["settingsVersion"]}'

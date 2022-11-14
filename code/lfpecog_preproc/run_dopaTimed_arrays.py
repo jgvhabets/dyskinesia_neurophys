@@ -24,7 +24,7 @@ if __name__ == '__main__':
     sys.path.append(ft_path)  # enable import in sub-functions
 
     # Import own functions
-    import feats_read_proc_data as fts_read
+    import lfpecog_features.feats_read_proc_data as fts_read
    
     # open argument (json file) defined in command (line)
     with open(sys.argv[1], 'r') as json_data:

@@ -20,8 +20,13 @@ the 'settings_xxx' JSON-file.
 
 Instructions to run and keep Git-Sync to repo:
 - set work dir: cd /.../dyskinesia_neurophys/
-- run file: python3 code/lfpecog_preproc/run_lfpecog_preproc.py
+
+- run file MacOS: python3 code/lfpecog_preproc/run_lfpecog_preproc.py
     - add json as argument for sys: data/preprocess_jsons/xxx.json
+
+- run file Windows (from cwd ...\code): python -m lfpecog_preproc.run_lfpecog_preproc
+    - add json filename as argument for sys, eg: preprocSettings_v2.4.json
+
 '''
 
 if __name__ == '__main__':
@@ -30,36 +35,37 @@ if __name__ == '__main__':
     only imported by another script'''
 
     # Import packages and functions
-    from os.path import join
-    from os import getcwd
     import sys
     import json
+    from os.path import join
 
-    proj_path = getcwd()  # should be /../dyskinesia_neurophys
+    from utils.utils_fileManagement import get_project_path
 
-    ft_path = join(proj_path, 'code/lfpecog_features')
-    sys.path.append(ft_path)
+    proj_path = get_project_path()
+    code_path = get_project_path('code')
+    sys.path.append(code_path)
 
     # Import own functions
-    import preproc_data_management as dataMng
-    import preproc_artefacts as artefacts
-    import preproc_filters as fltrs
-    import preproc_resample as resample
-    import preproc_reref as reref
-    import preproc_get_mne_data as loadData
-    import preproc_plotting as plotting
+    import lfpecog_preproc.preproc_data_management as dataMng
+    import lfpecog_preproc.preproc_artefacts as artefacts
+    import lfpecog_preproc.preproc_filters as fltrs
+    import lfpecog_preproc.preproc_resample as resample
+    import lfpecog_preproc.preproc_reref as reref
+    import lfpecog_preproc.preproc_get_mne_data as loadData
+    import lfpecog_preproc.preproc_plotting as plotting
 
 
     # open argument (json file) defined in command (line)
-    with open(sys.argv[1], 'r') as json_data:
+    json_folder = join(proj_path, 'data', 'preprocess_jsons')
+    json_path = join(json_folder, sys.argv[1])
+
+    with open(json_path, 'r') as json_data:
     
         mainSettings = json.load(json_data)  # gets dir
     
     for sub in mainSettings['subs_include']:
 
-        sub_runs = dataMng.get_sub_runs(
-            sub, proj_path,
-        )
+        sub_runs = dataMng.get_sub_runs(sub)
 
         for run in list(sub_runs.values()):
         
@@ -156,7 +162,7 @@ if __name__ == '__main__':
             dataMng.save_dict(
                 dataDict=dataDict,
                 namesDict=chNameDict,
-                FsDict = Fs_dict,
+                FsDict=Fs_dict,
                 runInfo=runInfo,
             )
             

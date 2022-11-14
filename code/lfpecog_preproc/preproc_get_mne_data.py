@@ -7,7 +7,7 @@ import numpy as np
 from datetime import timedelta
 
 # Import own functions
-import preproc_plotting as plotting
+import lfpecog_preproc.preproc_plotting as plotting
 
 def get_data_and_channels(
     rawRun, runInfo, Fs: int, to_plot: bool=False,

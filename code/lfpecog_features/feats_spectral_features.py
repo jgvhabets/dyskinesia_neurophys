@@ -15,7 +15,7 @@ import os
 import numpy as np
 from scipy import signal
 
-import feats_spectral_helpers as specHelpers
+import lfpecog_features.feats_spectral_helpers as specHelpers
 
 or_wd = os.getcwd()  # get original working directory
 
@@ -23,7 +23,7 @@ or_wd = os.getcwd()  # get original working directory
 if or_wd.split('/')[-1] == 'dyskinesia_neurophys':
     os.chdir(os.path.join(or_wd, 'code/PAC/tensorpac'))
 # import functions for Phase-Amplitude-Coupling
-from tensorpac import Pac
+# from tensorpac import Pac
 
 os.chdir(or_wd)  # set back work dir
 

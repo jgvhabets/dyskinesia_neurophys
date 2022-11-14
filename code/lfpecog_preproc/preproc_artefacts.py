@@ -4,7 +4,7 @@ import numpy as np
 from itertools import compress
 
 # Import own functions
-import preproc_plotting as plotting
+import lfpecog_preproc.preproc_plotting as plotting
 from lfpecog_features.feats_helper_funcs import nan_array
 
 

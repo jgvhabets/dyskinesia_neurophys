@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 
 # Import own functions
-from tapping_feat_calc import nan_array
+from lfpecog_features.feats_helper_funcs import nan_array
 
 
 def LeadLevels():
