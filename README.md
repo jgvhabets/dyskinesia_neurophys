@@ -17,16 +17,20 @@ from prof. Neumann.
 To use the repo in its best structure, a project folder has to be created with
 a specific file-organisation.
 This repo has to be cloned within the desired folder containing other research projects.
+Do this via git-GUI-software (GitLab/ GitKraken), or clone as follows:
+- change your working directory in the terminal to the general research folder
+- give terminal command: git clone https://github.com/jgvhabets/dyskinesia_neurophys.git
+- now this repo is cloned and the folders below which are part of the repo are created
 
 |-- General Research folder
 
-|-- |-- dyskinesia_neurophys (this repo's main folder)
+|-- |-- dyskinesia_neurophys (created as described above; this repo's main folder)
 
 |-- |-- |-- code (the code-folder in this repo)
 
-|-- |-- |-- data (ignored by this repo)
+|-- |-- |-- data (ignored by this repo, added manually)
 
-|-- |-- |-- figures (ignored by this repo)
+|-- |-- |-- figures (ignored by this repo, added manually)
 
 To use the repo in it's current functionality, it should be possible to retrieve the
 raw-bids-data via a synced (OneDrive-) folder. 
