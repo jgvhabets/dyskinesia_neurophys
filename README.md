@@ -7,7 +7,7 @@ from prof. Neumann.
 
 ### Requirements:
 - python environment created over conda:
- `conda env create --ENVNAME python==3.9 numpy pandas scipy scikit-learn mne`
+ `conda create --ENVNAME python==3.9 numpy pandas scipy scikit-learn jupyter matplotlib h5py`
 - additional packages installed:
   - `conda install mne`
   - `conda install mne-bids`
@@ -16,13 +16,17 @@ from prof. Neumann.
 ### Code and Files Structure
 To use the repo in its best structure, a project folder has to be created with
 a specific file-organisation.
-\PROJECT_FOLDER
-\\\ CODE (containing this repo)
-\\\\\ this repo
-\\\ DATA
+This repo has to be cloned within the desired folder containing other research projects.
 
-\\\ FIGURES
-\\\\\
-\\\\\
- 
- Parallel, the raw-data are retrieved from a synced Drive-folder 
+|-- General Research folder
+
+|-- |-- dyskinesia_neurophys (this repo's main folder)
+
+|-- |-- |-- code (the code-folder in this repo)
+
+|-- |-- |-- data (ignored by this repo)
+
+|-- |-- |-- figures (ignored by this repo)
+
+To use the repo in it's current functionality, it should be possible to retrieve the
+raw-bids-data via a synced (OneDrive-) folder. 
