@@ -7,8 +7,11 @@ import matplotlib.pyplot as plt
 
 
 def filters_for_dict(
-    dataDict: dict, chNamesDict:dict,
-    settings:dict, filtertype:str
+    dataDict: dict,
+    chNamesDict: dict,
+    settings: dict,
+    Fs: int,
+    filtertype: str
 ):
     """
     Use bp_filter() and notch_filter()
@@ -30,7 +33,7 @@ def filters_for_dict(
             dataDict[group] = bp_filter(
                 data=dataDict[group],
                 n_timeRows=n_timerows,
-                Fs=settings[dtype]['orig_Fs'],
+                Fs=Fs,
                 l_freq=settings[dtype]['bandpass'][0],
                 h_freq=settings[dtype]['bandpass'][1],
                 method='iir',
@@ -41,7 +44,7 @@ def filters_for_dict(
             dataDict[group] = notch_filter(
                 data=dataDict[group],
                 n_timeRows=n_timerows,
-                Fs=settings[dtype]['orig_Fs'],
+                Fs=Fs,
                 transBW=settings[dtype]['transitionWidth'],
                 notchW=settings[dtype]['notchWidth'],
                 method='fir',

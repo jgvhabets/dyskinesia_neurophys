@@ -45,10 +45,10 @@ def get_onedrive_path(
     Device and OS independent function to find
     the synced-OneDrive folder where data is stored
 
-    Folder has to be in ['onedrive', 'figures', 'rawdata']
+    Folder has to be in ['onedrive', 'figures', 'bids_rawdata']
     """
     folder_options = [
-        'onedrive', 'figures', 'rawdata',
+        'onedrive', 'figures', 'bids_rawdata', 'data'
     ]
     if folder.lower() not in folder_options:
         raise ValueError(
@@ -66,11 +66,14 @@ def get_onedrive_path(
         ) 
     ]
     path = os.path.join(path, onedrive_f[0])
-    path = os.path.join(path, 'BIDS_Berlin_ECOG_LFP')
+    bidspath = os.path.join(path, 'BIDS_Berlin_ECOG_LFP')
 
-    if folder == 'onedrive': return path
-    
-    else:  # must be rawdata or figures
-        return os.path.join(path, folder.lower())
+    if folder == 'onedrive': return bidspath
+
+    elif folder == 'bids_rawdata':
+        return os.path.join(bidspath, 'rawdata')
+
+    else:  # must be data or figures
+        return os.path.join(path, 'dysk_ecoglfp', folder.lower())
 
 

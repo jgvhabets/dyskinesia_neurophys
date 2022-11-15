@@ -39,7 +39,7 @@ if __name__ == '__main__':
     import json
     from os.path import join
 
-    from utils.utils_fileManagement import get_project_path
+    from utils.utils_fileManagement import get_project_path, get_onedrive_path
 
     proj_path = get_project_path()
     code_path = get_project_path('code')
@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
 
     # open argument (json file) defined in command (line)
-    json_folder = join(proj_path, 'data', 'preprocess_jsons')
+    json_folder = join(get_onedrive_path('data'), 'preprocess_jsons')
     json_path = join(json_folder, sys.argv[1])
 
     with open(json_path, 'r') as json_data:
@@ -106,19 +106,28 @@ if __name__ == '__main__':
 
             # BandPass-Filtering
             dataDict = fltrs.filters_for_dict(
-                dataDict, chNameDict, mainSettings,
-                'bandpass',
+                dataDict=dataDict,
+                chNamesDict=chNameDict,
+                settings=mainSettings,
+                Fs=rawRun.bids.info['sfreq'],
+                filtertype='bandpass',
             )
 
             # Notch-Filtering
             dataDict = fltrs.filters_for_dict(
-                dataDict, chNameDict, mainSettings,
-                'notch'
+                dataDict=dataDict,
+                chNamesDict=chNameDict,
+                settings=mainSettings,
+                Fs=rawRun.bids.info['sfreq'],
+                filtertype='notch',
             )
 
             # Resampling
             dataDict, Fs_dict = resample.resample_for_dict(
-                dataDict, chNameDict, mainSettings
+                dataDict=dataDict,
+                chNamesDict=chNameDict,
+                settings=mainSettings,
+                orig_Fs=rawRun.bids.info['sfreq']
             )  # new resampled sample-freqs can vary between datatypes
         
             if mainSettings['report_plots']:

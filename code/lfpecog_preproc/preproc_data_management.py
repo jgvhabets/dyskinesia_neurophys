@@ -28,15 +28,15 @@ def get_sub_runs(
     """
     Extract which runs to preprocess
     """
-    data_path = get_project_path('data')
-    sub_path = join(
-        data_path,
+    onedrive_data_path = get_onedrive_path('data')
+    sub_json_path = join(
+        onedrive_data_path,
         'preprocess_jsons',
         f'runInfo_{sub}.json'
     )
     sub_runs = {}
         
-    with open(sub_path) as f:
+    with open(sub_json_path) as f:
 
         try:
             sub_json = json.load(f, )  # list of runinfo-dicts
@@ -44,7 +44,7 @@ def get_sub_runs(
         except json.decoder.JSONDecodeError:
             print(
                 '\n\t json.decoder.JSONDecodeError ERROR'
-                f' while reading {sub_path}'
+                f' while reading {sub_json_path}'
             )
             print(
                 'If JSON-file looks correct, try writing '
@@ -52,10 +52,10 @@ def get_sub_runs(
                 )
     
     assert sub_json, print('\n JSON FILE COULDNOT BE LOADED')
-
+    print(sub_json)
     scans_df = read_csv(
         join(
-            get_onedrive_path('rawdata'),
+            get_onedrive_path('bids_rawdata'),
             f'sub-EL{sub}',
             f'ses-{sub_json["ses"]}',
             f'sub-EL{sub}_ses-{sub_json["ses"]}_scans.tsv'
@@ -81,7 +81,7 @@ def get_sub_runs(
             'tasks_excl': sub_json["tasks_exclude"],
             'data_include': sub_json["data_include"],
             'lead_type': sub_json["lead_type"],
-            'raw_path': get_onedrive_path('rawdata')
+            'raw_path': get_onedrive_path('bids_rawdata')
         }
     
     return sub_runs
@@ -95,7 +95,7 @@ class RunInfo:
     project_path: str
 
     def __post_init__(self,):  # is called after initialization
-        self.rawdata_path = get_onedrive_path('rawdata')
+        self.rawdata_path = get_onedrive_path('bids_rawdata')
         
         self.bidspath = mne_bids.BIDSPath(
             subject=f'EL{self.runDict["sub"]}',

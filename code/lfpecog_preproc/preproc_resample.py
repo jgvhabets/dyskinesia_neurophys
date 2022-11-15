@@ -6,7 +6,10 @@ import mne
 
 
 def resample_for_dict(
-    dataDict, chNamesDict, settings
+    dataDict,
+    chNamesDict,
+    settings,
+    orig_Fs
 ):
     """
     Run resample() for data dictionaries
@@ -33,7 +36,7 @@ def resample_for_dict(
         dataDict[group] = resample(
             data=dataDict[group],
             n_timeRows=n_timerows,
-            Fs_orig=settings[dtype]['orig_Fs'],
+            Fs_orig=orig_Fs,
             Fs_new=settings[dtype]['resample_Fs'],
         )
         # new freq sample can vary between datatypes
