@@ -192,8 +192,11 @@ def reref_common_average(
 
 
 def reref_segm_levels(
-    data: array, lead: Any, 
-    timerowNames, report='',
+    data: array,
+    lead: Any, 
+    timerowNames,
+    ephys_type: str,
+    report='',
 ):
     """
     Function to aggregate/sum all segmented electrode contacts
@@ -206,6 +209,7 @@ def reref_segm_levels(
         - lead (Class): class with info of segmented contacts
         per level
         - timerowNames: list with 1 or 2 time col-names
+        - ephys_type: LFP or ECOG
         - report_file  (str -> path): file incl directory where rereferencing
         notes are written to
 
@@ -303,9 +307,14 @@ def reref_segm_levels(
         f'rows in leveldata-array'
     )
     
-    rerefdata, names = reref_neighb_levels_subtract(
-        leveldata=leveldata, present_levels=present_levels,
-        side=lead.side, timerowNames=timerowNames,
+    rerefdata, names, report = reref_neighb_levels_subtract(
+        leveldata=leveldata,
+        present_lfp_levels=present_levels,
+        present_ecog_contacts=None,
+        side=lead.side,
+        timerowNames=timerowNames,
+        ephys_type=ephys_type,
+        report=report,
     )
     assert rerefdata.shape[-2] == len(names), print(
         'Rereferenced #-ROWs in ARRAY NOT EQUAL to #-NAMES'
@@ -318,8 +327,13 @@ def reref_segm_levels(
 
 
 def reref_neighb_levels_subtract(
-    leveldata: array, present_levels: list, side: str,
+    leveldata: array,
+    present_lfp_levels: list,
+    present_ecog_contacts: list,
+    side: str,
     timerowNames: list,
+    ephys_type: str,
+    report = '',
 ):
     """
     Function to calculate differences between neighbouring
@@ -330,8 +344,8 @@ def reref_neighb_levels_subtract(
     Arguments:
         - level (array): 2d or 3d array containing
             [(windows), times- and levels-rows, samples]
-        - present_levels (list): list with present level-
-            numbers
+        - present_lfp_levels (list): list with present
+            LFP level-numbers
         - side (str): L or R for recorded hemisphere
         - timerowNames: list with 1 or 2 time col-names
 
@@ -353,14 +367,12 @@ def reref_neighb_levels_subtract(
             leveldata.shape[2],
         ])  # create nan array to fill
 
-        newdata[
-            :, :len(timerowNames), :] = leveldata[
-                :, :len(timerowNames), :
+        newdata[:, :len(timerowNames), :] = leveldata[
+            :, :len(timerowNames), :
         ]  # copy time rows
         
-        newdata[  # subtract neighbour-level for all levels w/ neighbour 
-            :, len(timerowNames):, :
-        ] = np.subtract(
+        # subtract neighbour-level for all levels w/ neighbour 
+        newdata[:, len(timerowNames):, :] = np.subtract(
             leveldata[:, len(timerowNames):-1, :],
             leveldata[:, len(timerowNames) + 1:, :]
         )
@@ -372,25 +384,48 @@ def reref_neighb_levels_subtract(
             leveldata.shape[1]
         ])  # create nan array to fill
 
-        newdata[
-            :len(timerowNames), :] = leveldata[
+        # copy time rows
+        newdata[:len(timerowNames), :] = leveldata[
             :len(timerowNames), :
-        ]  # copy times
-
+        ]
+        # subtract the level above one level from every level
         newdata[len(timerowNames):, :] = np.subtract(
             leveldata[len(timerowNames):-1, :],
             leveldata[len(timerowNames) + 1:, :]
-        )  # subtract the level above one level from every level
+        )
 
-    for i, level in enumerate(present_levels[:-1]):
+    # create corresponding names
+    if ephys_type == 'LFP':
+        for i, level in enumerate(present_lfp_levels[:-1]):
 
-        sig_names.append(f'LFP_{side}_{level}_{present_levels[i + 1]}')
+            sig_names.append(f'LFP_{side}_{level}_{present_lfp_levels[i + 1]}')
+    
+    elif ephys_type == 'ECOG':
+        
+        for con1, con2 in zip(
+            present_ecog_contacts[:-1],
+            present_ecog_contacts[1:]
+        ):
+            sig_names.append(f'ECOG_{side}_{con1}_{con2}')
 
-    return newdata, sig_names
+        if report:
+
+            report += (
+                f'\nNeighbour Rereferencing: ECoG {side}:\n\t'
+                f'raw present ECoG ephys contact numbers:'
+                f'{present_ecog_contacts},\n\t'
+                f'new signals names after reref: {sig_names}'
+            )
+
+
+    return newdata, sig_names, report
 
 
 def reref_segm_contacts(
-    data: array, lead: Any, timerowNames,
+    data: array,
+    lead: Any,
+    timerowNames,
+    ephys_type: str,
     report: str='',
 ):
     """
@@ -492,19 +527,22 @@ def reref_segm_contacts(
 
 
 def main_rereferencing(
-    dataDict: dict, chNameDict, runInfo: Any,
-    lfp_reref: str, reportPath: str='',
+    dataDict: dict,
+    chNameDict,
+    runInfo: Any,
+    reref_setup: dict,
+    reportPath: str='',
 ):
     """
     Function to execute rereferencing of LFP and ECoG data.
     
     Arguments:
-        - data: 2d or 3d-array, containing dict w/ groups
+        - dataDict: containing dict w/ groups
+        - chNameDict: dict with lists per group with
+            clean channels after artefact removal (incl times)
         - runInfo: class containing runInfolead_type:
             abbreviation for lead given in
             data class RunInfo (e.g. BSX, MTSS)
-        - chs_clean = list with clean channels after
-            artefact removal
         - lfp_reref: indicates string-name of reref-
             method: taking together one level, or re-
             referencing single segmented contacts
@@ -526,7 +564,10 @@ def main_rereferencing(
 
     for group in dataDict.keys():
 
-        if group[:3] not in ['lfp', 'eco']:
+        if np.logical_and(
+            'lfp' not in group.lower(),
+            'ecog' not in group.lower()
+        ):
             
             report += f'\n Skip REREFERENCING for {group}\n'
 
@@ -538,32 +579,52 @@ def main_rereferencing(
         else:
             report += f'\n START REREFERENCING for {group.upper()}'
         
-        timerow_sel = ['time' in name for name in chNameDict[group]]
-        timerowNames = list(compress(chNameDict[group], timerow_sel))
+        timerowNames = [name for name in chNameDict[group] if 'time' in name]
+        ephys_rowNames = [name for name in chNameDict[group] if 'time' not in name]
 
-        if group[:4] == 'ecog':
-            
-            rerefData[group], rerefNames[group], report = reref_common_average(
-                data=dataDict[group], ch_names=chNameDict[group],
-                group=group, report=report, timeRows=timerowNames,
-            )
+        if 'left' in group: side = 'L'
+        elif 'right' in group: side = 'R'
 
-        elif group[:3] == 'lfp':
+        if 'ecog' in group.lower():
+
+            ephys_type = 'ECOG'
             
-            if group[4:] == 'left': side = 'L'
-            if group[4:] == 'right': side = 'R'
+            if reref_setup[ephys_type] == 'common-average':
+                rerefData[group], rerefNames[group], report = reref_common_average(
+                    data=dataDict[group], ch_names=chNameDict[group],
+                    group=group, report=report, timeRows=timerowNames,
+                )
+            elif reref_setup[ephys_type] == 'bip-neighbour':
+                ecog_contact_nrs = [
+                    cName.split('_')[2] for cName in ephys_rowNames
+                ]  # take ecog contact numbers (eg 01) from name (eg ECOG_L_01)
+                rerefData[group], rerefNames[group], report = reref_neighb_levels_subtract(
+                    leveldata=dataDict[group],
+                    present_lfp_levels=None,
+                    present_ecog_contacts=ecog_contact_nrs,
+                    side=side,
+                    timerowNames=timerowNames,
+                    ephys_type=ephys_type,
+                )
+
+        elif 'lfp' in group.lower():
+            
+            ephys_type = 'LFP'
 
             lead_type = runInfo.lead_type
             lead = Segm_Lead_Setup(lead_type, side, chNameDict[group])
             
-            if lfp_reref == 'levels': reref_function = reref_segm_levels
-            elif lfp_reref == 'segments': reref_function = reref_segm_contacts
+            if reref_setup[ephys_type] == 'levels':
+                reref_function = reref_segm_levels
+            elif reref_setup[ephys_type] == 'segments':
+                reref_function = reref_segm_contacts
 
             rerefData[group], rerefNames[group], report = reref_function(
                 data=dataDict[group],
                 lead=lead,
                 timerowNames=timerowNames,
                 report=report,
+                ephys_type='LFP',
             )
 
         rerefData[group], rerefNames[group], report = removeNaNchannels(
