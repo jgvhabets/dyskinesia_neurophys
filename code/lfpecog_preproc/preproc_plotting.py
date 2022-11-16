@@ -113,7 +113,8 @@ def plot_groupChannels(
         size=20, x=.5, y=.95, ha='center',
     )
 
-    fname = f'{runInfo.store_str}_{groupName}_{moment_strings[moment]["fname"]}'
+    fname = (f'{runInfo.store_str}_{groupName}_'
+             f'{moment_strings[moment]["fname"]}_v3')
     print(f'\n\n\tFIGURE TO BE SAVED: {fname}')
     plt.savefig(
         join(save_path, fname),
