@@ -13,10 +13,17 @@ def artf_removal_dict(
     Fs_dict: dict,
     namesDict: dict,
     runInfo,
+    edge_removal_sec: int=5,
 ):
     """
     Performs artefact selection and removal
     functions for all data arrays in dict
+
+    Inputs:
+        - ...
+        - edge_removal_sec: number of seconds that will
+            be removed at beginning and end of every
+            recording, if 0, no removal performed
     """
     for group in dataDict.keys():
         
@@ -34,6 +41,7 @@ def artf_removal_dict(
             group=group,
             runInfo=runInfo,
             to_plot=runInfo.mainSettings['report_plots'],
+            edge_removal_sec=edge_removal_sec,
         )
 
     return dataDict, namesDict
@@ -48,7 +56,7 @@ def artf_removal_array(
     runInfo,
     win_len = 1,
     ch_nan_limit=.5,
-    remove_edge_secs=5,
+    edge_removal_sec=5,
     to_plot: bool=False,
 ):
     '''
@@ -81,17 +89,18 @@ def artf_removal_array(
     sd_cut = runInfo.mainSettings['ephys']['artf_sd']
     
     # remove edges
-    data = data[:, int(remove_edge_secs * Fs):-int(remove_edge_secs * Fs):]
+    if edge_removal_sec > 0:
+        data = data[:, int(edge_removal_sec * Fs):
+                       -int(edge_removal_sec * Fs)]
 
     w_samples = win_len * Fs
     n_wins = int(data.shape[-1] / w_samples)
 
-    clean_data = data[:, :int(n_wins * w_samples)].copy()
+    clean_data = data[:, :int(n_wins * w_samples)].copy()  # delete redundant end not falling in window
     artf_data = nan_array(list(clean_data.shape))  # for plotting
     artf_data[:2, :] = clean_data[:2, :]
 
-    timerow_sel = ['time' in name for name in names]
-    timerowNames = list(compress(names, timerow_sel))
+    timerowNames = [name for name in names if 'time' in name]
     
     group_nans = {}
 
@@ -103,12 +112,12 @@ def artf_removal_array(
         group_nans[ch] = []
 
         ### DEFINE if artf removal is necessary
-        sig_mean = np.nanmean(abs(data[ch, :]))
+        sig_absmedian = np.nanmedian(abs(data[ch, :]))
         sig_sd_thr = sd_cut * np.nanstd(data[ch, :])
-        sd_ratio = sig_sd_thr / sig_mean
+        sd_ratio = sig_sd_thr / sig_absmedian
         print(f'ARTEFACT REMOVAL CHECK: ratio SD-cutoff/absmean: {sd_ratio}')
 
-        if sd_ratio < .99:
+        if sd_ratio < 2:
             print(f'artefact removal skipped for {ch}')
             # dont change channel row in clean_data
             continue
