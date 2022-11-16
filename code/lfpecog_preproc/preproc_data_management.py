@@ -52,7 +52,7 @@ def get_sub_runs(
                 )
     
     assert sub_json, print('\n JSON FILE COULDNOT BE LOADED')
-    print(sub_json)
+
     scans_df = read_csv(
         join(
             get_onedrive_path('bids_rawdata'),
@@ -64,12 +64,20 @@ def get_sub_runs(
     )
     
     for i in range(scans_df.shape[0]):
+        skip_file = False
         run_string = scans_df['filename'][i]
         splits = run_string.split(sep='_')
 
-        if splits[2][5:] in sub_json["tasks_exclude"]: continue
-        if splits[3][4:] in sub_json["acq_exclude"]: continue
+        for task_ex in sub_json["tasks_exclude"]:
+            if task_ex.lower() in splits[2].lower():
+                skip_file = True
 
+        for acq_ex in sub_json["acq_exclude"]:
+            if acq_ex.lower() in splits[3].lower():
+                skip_file = True
+
+        if skip_file: continue
+        # if skip_file is not set True, then include file in sub_runs
         sub_runs[i] = {
             'sub': sub,
             'ses': sub_json["ses"],

@@ -147,6 +147,7 @@ if __name__ == '__main__':
                 Fs_dict=Fs_dict,
                 namesDict=chNameDict,
                 runInfo=runInfo,
+                edge_removal_sec=5,
             )
 
             # Rereferencing with clean, corrected signals
@@ -154,7 +155,7 @@ if __name__ == '__main__':
                 dataDict=dataDict,
                 chNameDict=chNameDict,
                 runInfo=runInfo,
-                lfp_reref=mainSettings['lfp_reref'],
+                reref_setup=mainSettings['reref_setup'],
                 reportPath=runInfo.reportTxt_path,
             )
 
