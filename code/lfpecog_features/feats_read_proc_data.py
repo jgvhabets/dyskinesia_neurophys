@@ -188,27 +188,14 @@ class mergedDfs_perTask:
                 f'sub{sub}',
                 df
             )
-        
-
-# def filter_df_on_ACC(
-#     df, acc_filter
-#  ):
-#     """
-#     TODO: write selection function based on 
-#     column representing detected Accelerometer-
-#     activity
-#     """
-
-    # sel = df['no_move'] == True
-    # df = df[sel]
-
-    # return df
 
 
 
 @dataclass(init=True, repr=True, )
 class subjectData:
     """
+    COPIED TO OWN .PY
+
     Creates Class with all data of one subject,
     stored per datatype. Data is preprocessed and
     ordered by relative time to L-Dopa-intake.
@@ -300,7 +287,7 @@ def find_proc_data(
     '''
     sub_proc_path = os.path.join(
         project_path, 
-        'data/preprocessed_data',
+        'data', 'preprocessed_data',
         f'sub-{sub}',
         version,
     )
