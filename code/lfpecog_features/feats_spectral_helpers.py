@@ -142,6 +142,9 @@ def SSD_on_array(
 
     Based on mne.Decoding.SDD:
     (https://mne.tools/stable/generated/mne.decoding.SSD.html#mne.decoding.SSD)
+
+    TODO: discuss why timeseries is still identical, only
+    larger order of magnitude?
     
     Input:
         - array to transform: should be without nans
@@ -181,6 +184,7 @@ def SSD_on_array(
                                l_trans_bandwidth=1, h_trans_bandwidth=1),
     )
     # perform SSD
-    ssd_array = ssd.fit_transform(array)
+    ssd.fit(array)
+    ssd_array = ssd.transform(array)
 
     return ssd_array
