@@ -12,6 +12,7 @@ __pycache__
 admin/
 figures/
 data/
+code/hackathon_mne_mvc
 code/pte/
 code/py_neuromodulation/
 code/matlab
