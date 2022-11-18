@@ -18,7 +18,7 @@ def add_detected_acc_states(
 
     Inputs:
         - df (dataframe): dataframe from one
-            ephys group (.data in subData)
+            ephys group (e.g. .data in subData)
         - detectedMoves (list): subject specific
             lists of detected taps and moves
     
@@ -27,11 +27,25 @@ def add_detected_acc_states(
             for tap/move left/right and one
             last column for 'no_move', if all
             4 move-columns are negative.
+    
+    Raises:
+        - KeyError if 'dopa_time' is no column-
+            name, nor index
     """
-    dat = df.set_index('dopa_time')
-    datkeys = list(dat.keys())
-    dattime = dat.index.values
-    dat = dat.values
+    try:
+        dat = df.set_index('dopa_time')
+        datkeys = list(dat.keys())
+        dattime = dat.index.values
+        dat = dat.values
+    except KeyError:
+        if df.index.name == 'dopa_time':
+            datkeys = list(df.keys())
+            dattime = df.index.values
+            dat = df.values
+        else:
+            raise KeyError('dopa_time not in keys, nor index')
+
+    print('... adding move states to DataFrame ... -> takes a bit...')
 
     move_keys = [
         'left_tap',
@@ -42,7 +56,6 @@ def add_detected_acc_states(
 
     for key in move_keys:
 
-        print(f'Start converting {key} to binary column')
         # empty array to fill
         key_col = np.zeros((dat.shape[0], 1))
 
@@ -61,13 +74,13 @@ def add_detected_acc_states(
     
     # add no-movement column
     no_move = np.nansum(dat[:, -4:], axis=1) == 0
-    no_move = no_move.reshape(len(no_move), 1)
+    no_move = np.array([no_move]).T  #.reshape(len(no_move), 1)
     dat = np.concatenate([dat, no_move], axis=1)
     datkeys += ['no_move']
 
     # new_df = pd.DataFrame(data=dat, columns=datkeys, index=dattime)  # dopa time as index
     # dopa time as first column, no index set
-    dattime = dattime.reshape(len(dattime), 1)
+    dattime = np.array([dattime]).T  # make 2d array for concatenate
     dat = np.concatenate([dattime, dat], axis=1)
     datkeys = ['dopa_time'] + datkeys
     new_df = pd.DataFrame(data=dat, columns=datkeys,)
