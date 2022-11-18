@@ -15,8 +15,8 @@ import numpy as np
 from scipy.signal import welch, cwt, morlet2
 
 # Import own functions
-from lfpecog_features.feats_read_proc_data import subjectData
-import lfpecog_features.feats_spectral_baseline as baseLine
+from lfpecog_features.run_mergeDataClass import subjectData
+# import lfpecog_features.feats_spectral_baseline as baseLine
 import lfpecog_features.feats_ftsExtr_Classes as ftClasses
 import lfpecog_features.feats_helper_funcs as ftHelpers
 
@@ -67,14 +67,14 @@ class create_dopaTimed_ftSpace:
                 project_path=self.project_path,
             )
 
-        if self.subBaseline == None:
+        # if self.subBaseline == None:
 
-            self.subBaseline = baseLine.createBaseline(
-                    subData=self.subData,
-                    nSec_blWins=self.window_len,
-                    nSec_Seg=self.nSec_Seg,
-                    n_bl_minutes=self.n_bl_minutes,
-                )
+        #     self.subBaseline = baseLine.createBaseline(
+        #             subData=self.subData,
+        #             nSec_blWins=self.window_len,
+        #             nSec_Seg=self.nSec_Seg,
+        #             n_bl_minutes=self.n_bl_minutes,
+        #         )
 
         for dType in self.subData.dtypes:
 

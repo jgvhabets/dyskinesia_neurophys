@@ -4,89 +4,15 @@ data (LFP and ECOG) in ReTune's Dyskinesia Project
 '''
 
 # Import general packages and functions
-from array import array
 import os
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass, field
-from typing import Any, List
 import csv
 
 # import own functions
 import utils.utils_fileManagement as fileMng
 
-
-def load_stored_sub_df(
-    sub: str,
-    float_convert: bool = True
-):
-    data_path = fileMng.get_project_path('data')
-    # set subject-spec pathbase
-    pathbase = os.path.join(
-        data_path,
-        'preprocessed_data',
-        'merged_sub_dfs',
-        f'{sub}_mergeDf_'
-    )
-
-    # load data from npy array
-    dat_arr = np.load(
-        pathbase + 'data.npy', allow_pickle=True,
-    )
-    # IMPORTANT NOTE: floats are imported as python float
-    # this can cause errors in spectral feature extraction
-    # correct only later due to strings
-    # consider later to correct here only for float-columns
-
-
-    # load indices from npy array
-    time_arr = np.load(
-        pathbase + 'timeIndex.npy', allow_pickle=True,
-    )
-
-    # load column-names from txt
-    col_names = np.loadtxt(
-        pathbase + 'columnNames.csv',
-        dtype=str, delimiter=','
-    )
-
-    sub_df = pd.DataFrame(
-        data=dat_arr,
-        index=time_arr,
-        columns=col_names,
-    )
-
-    if float_convert:
-
-        sub_df = convert_to_npfloats(sub_df)
-
-    return sub_df
-
-
-def convert_to_npfloats(df):
-    """
-    Convert LFP and ECOG signals from py
-    floats to np.float64's. This for better
-    spectral decomposition function
-    """
-    for key in df.keys():
-        # skip non ephys channels
-        if not np.logical_or(
-            'lfp' in key.lower(), 
-            'ecog' in key.lower()
-        ):
-            continue
-        # find first value without nan
-        i = 0
-        while np.isnan(df.iloc[i][key]):
-            i += 1
-
-        # convert if columns contains py floats
-        if type(df.iloc[i][key]) == float:
-            
-            df[key] = np.float64(df[key])
-    
-    return df
 
 
 @dataclass(init=True, repr=True, )
@@ -113,7 +39,9 @@ class main_loadMergedSubDfs:
             is given
     """
     list_of_subs: list
-    tasks: List = field(default_factory=lambda: ['all', 'rest'])
+    data_version: str
+    float_convert: bool = True
+    tasks: list = field(default_factory=lambda: ['all', 'rest'])
     # filter_on_ACC: str/list
 
     def __post_init__(self,):
@@ -131,10 +59,13 @@ class main_loadMergedSubDfs:
                 self,
                 task,
                 mergedDfs_perTask(
-                    self.list_of_subs,
-                    task
+                    list_of_subs=self.list_of_subs,
+                    task=task,
+                    data_version=self.data_version,
+                    float_convert=self.float_convert
                 )
             )        
+
 
 @dataclass(repr=True, init=True,)
 class mergedDfs_perTask:
@@ -161,7 +92,9 @@ class mergedDfs_perTask:
     """
     list_of_subs: list
     task: str
+    data_version: str
     acc_filter: str = None
+    float_convert: bool = True
 
     def __post_init__(self,):
 
@@ -171,7 +104,10 @@ class mergedDfs_perTask:
                 f'\tloading Sub {sub} ({self.task})'
             )
 
-            df = load_stored_sub_df(sub)
+            df = load_stored_sub_df(
+                sub=sub,
+                data_version=self.data_version,
+                float_convert=self.float_convert)
 
             if self.task == 'rest':  # select only rest-data
                 
@@ -189,55 +125,93 @@ class mergedDfs_perTask:
                 df
             )
 
+            print(f'{sub} FINISHED')
 
 
-@dataclass(init=True, repr=True, )
-class subjectData:
+
+def load_stored_sub_df(
+    sub: str,
+    data_version,
+    float_convert: bool = True
+):
+    data_path = fileMng.get_project_path('data')
+    # set subject-spec pathbase
+    pathbase = os.path.join(
+        data_path,
+        'merged_sub_dfs',
+        data_version,
+        f'{sub}_mergedDf_'
+    )
+    print(pathbase)
+    # load data from npy array
+    print('load data')
+    dat_arr = np.load(
+        pathbase + 'data.npy', allow_pickle=True,
+    )
+    # IMPORTANT NOTE: floats are imported as python float
+    # this can cause errors in spectral feature extraction
+    # correct only later due to strings
+    # consider later to correct here only for float-columns
+
+    print('load indices')
+
+    # load indices from npy array
+    time_arr = np.load(
+        pathbase + 'timeIndex.npy', allow_pickle=True,
+    )
+
+    print('load col names')
+
+    # load column-names from txt
+    col_names = np.loadtxt(
+        pathbase + 'columnNames.csv',
+        dtype=str, delimiter=','
+    )
+
+    sub_df = pd.DataFrame(
+        data=dat_arr,
+        index=time_arr,
+        columns=col_names,
+    )
+    print(f'resulting DF has shape {sub_df.shape}, and columns: {sub_df.keys()}')
+
+    if float_convert:
+        print('correct npy floats')
+        sub_df = convert_to_npfloats(sub_df)
+
+    return sub_df
+
+
+def convert_to_npfloats(df):
     """
-    COPIED TO OWN .PY
-
-    Creates Class with all data of one subject,
-    stored per datatype. Data is preprocessed and
-    ordered by relative time to L-Dopa-intake.
-
-    Input:
-        - sub (str): subject code
-        - data_version (str): e.g. v2.2
-        - project_path (str): main project-directory
-            where data is stored 
+    Convert LFP and ECOG signals from py
+    floats to np.float64's. This for better
+    spectral decomposition function
     """
-    sub: str
-    data_version: str
-    project_path: str
-    dType_excl: list = field(default_factory=lambda: [])
+    for key in df.keys():
+        # skip non ephys channels
+        if not np.logical_or(
+            'lfp' in key.lower(), 
+            'ecog' in key.lower()
+        ):
+            continue
+        print(f'consider {key}')
 
-    def __post_init__(self,):
+        if np.isnan(list(df[key])).all():
+            print('skip: ALL NaNs')
+            continue
 
-        self.dtypes, self.nameFiles, self.dataFiles, sub_path = find_proc_data(
-            sub=self.sub,
-            version=self.data_version,
-            project_path=self.project_path
-        )
+        # find first value without nan
+        i = 0
+        while np.isnan(df.iloc[i][key]):
+            i += 1
 
-        if len(self.dType_excl) > 0:
-            dType_remove = []
-            for dType in self.dtypes:
-                if dType in self.dType_excl:
-                    dType_remove.append(dType)
-            [self.dtypes.remove(d) for d in dType_remove]
-        
-        for dType in self.dtypes:
-
-            setattr(
-                self,
-                dType,
-                dopaTimedDf(
-                    dType,
-                    self.nameFiles,
-                    self.dataFiles,
-                    sub_path,
-                )
-            )
+        # convert if columns contains py floats
+        if type(df.iloc[i][key]) == float:
+            
+            df[key] = np.float64(df[key])
+    
+    return df
 
 
 @dataclass(init=True, repr=True, )
@@ -252,6 +226,8 @@ class dopaTimedDf:
 
     In case a dataype should be skipped this
     should be defined in dType_excl.
+
+    Applied in SubjectData() (run_mergeDataClass())
 
     Input:
     dType (str): specific datatype to handle (acc, lfp, ecog)

@@ -14,10 +14,9 @@ from typing import Any
 import numpy as np
 from scipy.signal import welch, cwt, morlet2, csd
 
-from lfpecog_features.feats_read_proc_data import subjectData
 import lfpecog_features.moveDetection_preprocess as movePrep
 import lfpecog_features.feats_ftsExtr_Classes as ftClasses
-import lfpecog_features.feats_spectral_features as spec_feats
+# import lfpecog_features.feats_spectral_features as spec_feats
 
 @dataclass(init=True, repr=True,)
 class createBaseline:

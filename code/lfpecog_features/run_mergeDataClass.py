@@ -2,8 +2,6 @@
 
 """
 Run Merging data frames
-
-HERE ONLY EPHYS; NO ACC MERGING YET
 """
 
 # import public functions
@@ -79,7 +77,7 @@ if __name__ == '__main__':
     """
     Calling subjectData from command line, creates
     and potentially saves merged dataframes with all
-    data per subject.
+    data per subject (repo/data/...).
 
     To exclude accelerometer-data, or to NOT save the created
     dataframes, add "no_acc", or "no_save" resp. as a variable
@@ -88,6 +86,9 @@ if __name__ == '__main__':
     Running (from repo_folder/code):
         python -m lfpecog_features.run_mergeDataClass "012" "v3.0" (opt: "no_acc" "no_save")
 
+    Output:
+        - dataframe data/ index/ columnnames stored
+            in path: data/merged_sub_dfs/DATAVERSION/
     """
     ### get and check variables out of run-command
     sub = sys.argv[1]
@@ -127,9 +128,8 @@ if __name__ == '__main__':
         save_dfs(
             df=merged_df,
             folder_path=join(
-                get_project_path(),
-                'data',
-                'merged_sub_dfs'
+                get_project_path(), 'data',
+                'merged_sub_dfs', f'{data_version}'
             ),
             filename_base=f'{sub}_mergedDf',
         )

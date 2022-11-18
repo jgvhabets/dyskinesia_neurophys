@@ -96,7 +96,8 @@ def save_dfs(
             with data / timeIndex / columnNames,
             e.g.: 'sub000_mergedDf'
     """
-    # check if folder exists, if not make folder
+    # check if (parent)folder exists, if not make folder
+    if not exists(dirname(folder_path)): mkdir(dirname(folder_path))
     if not exists(folder_path): mkdir(folder_path)
 
     # save data as npy array with numpy's save function

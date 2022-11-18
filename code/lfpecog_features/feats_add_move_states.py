@@ -55,7 +55,7 @@ def add_detected_acc_states(
     ]
 
     for key in move_keys:
-
+        print('\t...start', key)
         # empty array to fill
         key_col = np.zeros((dat.shape[0], 1))
 
@@ -67,7 +67,7 @@ def add_detected_acc_states(
                 dattime < times[-1]
             )
             key_col[sel] = 1  # set to 1
-                
+   
         # add move-state column values and key
         dat = np.concatenate([dat, key_col], axis=1)
         datkeys += [key]
@@ -77,6 +77,7 @@ def add_detected_acc_states(
     no_move = np.array([no_move]).T  #.reshape(len(no_move), 1)
     dat = np.concatenate([dat, no_move], axis=1)
     datkeys += ['no_move']
+    print('\t...added NO MOVE column')
 
     # new_df = pd.DataFrame(data=dat, columns=datkeys, index=dattime)  # dopa time as index
     # dopa time as first column, no index set
@@ -84,5 +85,7 @@ def add_detected_acc_states(
     dat = np.concatenate([dattime, dat], axis=1)
     datkeys = ['dopa_time'] + datkeys
     new_df = pd.DataFrame(data=dat, columns=datkeys,)
+
+    print('\t...created new df')
 
     return new_df
