@@ -46,15 +46,15 @@ def pausedTapDetector(
     ]
 
     assert len(acc_sides) == 2, print(
-        f'\n\t{len(acc_sides)} ACC sides found for sub '
-        f'{subdat.sub}, Class-keys: {vars(subdat).keys()}'
+        f'\n\t{len(acc_sides)} ACC ATTRIBUTES found in '
+        f'{subdat.sub}, Class-Attr keys: {vars(subdat).keys()}'
     )
 
     out_lists = {}  # store output
 
     for side in acc_sides:
         print(
-            'start movement detection sub '
+            '... detecting movement states for sub '
             f'{subdat.sub} {side} side'
         )
         # empty lists to store final outputs
@@ -159,7 +159,7 @@ def pausedTapDetector(
                                 continue  # skip where nan is left bcs of no border
                             
                             except IndexError:
-                                print('TAP:',temp_tap)  # PM: exclusion of real-taps?
+                                # print('TAP:', temp_tap)  # PM: check if exclusion is correct, end of recording?
                                 continue
                 
                 # exclude small Peaks close to Tapping-Peaks
@@ -214,6 +214,7 @@ def pausedTapDetector(
             out_lists[f'{side}_tap_i'].extend(tap_i_list)
             out_lists[f'{side}_move_t'].extend(move_t_list)
             out_lists[f'{side}_move_i'].extend(move_i_list)
+        
 
     return out_lists
 

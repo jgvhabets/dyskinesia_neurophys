@@ -387,7 +387,7 @@ def merge_ephys_sources(
             'ecog' in s, 'lfp' in s
         )
     ]
-
+    print('... merging dataframes from different data-sources')
     merge_df = getattr(
         subdat, sources[0]
     ).data.set_index('dopa_time')
