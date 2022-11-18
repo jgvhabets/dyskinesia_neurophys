@@ -480,16 +480,15 @@ def reref_segm_contacts(
 
     reref_names = time_rowNames
 
-    for l in lead.levels_str.keys():  # loop over level
+    for ind_l, l in enumerate(lead.levels_str.keys()):  # loop over level
 
-        level_chs = lead.levels_str[l]  # row numbers of channels
+        level_chs = lead.levels_str[l]  # channelnames in row
         # skip if not consisting any channel
         if len(level_chs) == 0: continue
 
-        # take one level higher as level to reref with
-        if l < len(lead.levels_str) - 1: ref_level = l + 1
         # for most upper level, take lowest level to reref with
-        elif l == len(lead.levels_str) - 1: ref_level = 0
+        if ind_l == (len(lead.levels_str) - 1): ref_level = 0
+        else: ref_level = l + 1  # take one level higher as level to reref with
 
         # INTRA-LEVEL REREF
         if len(level_chs) > 1:  # if more than one present segment on level

@@ -9,7 +9,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # import own functions
-import lfpecog_features.feats_main as ftsMain
 import lfpecog_features.feats_spectral_helpers as specHelpers
 import lfpecog_features.featsExtract_perSegment as getFtsSegm
 import lfpecog_preproc.preproc_import_scores_annotations as importClin

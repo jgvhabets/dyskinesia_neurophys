@@ -7,19 +7,28 @@ import matplotlib.pyplot as plt
 from scipy.signal import periodogram, welch
 
 # import own functions
-import lfpecog_preproc.preproc_filters as fltrs
+from utils.utils_fileManagement import get_project_path
 
 
 def plot_act_per_window(
-    classData, winlength, fig_dir
+    classData, winlength,
 ):
+    savepath = os.path.join(
+        get_project_path('figures'),
+        'ft_exploration', 'rest',
+    )
+    if not os.path.exists(savepath): os.makedirs(savepath)
 
     plt.figure(figsize=(12, 6))
 
     for sub in classData.list_of_subs:
         tempdata = getattr(classData.rest, f'sub{sub}')
-        sec_first = np.round(tempdata.iloc[0]['dopa_time'], 0)
-        sec_last = np.round(tempdata.iloc[-1]['dopa_time'], 0)
+
+        if tempdata.index.name != 'dopa_time':
+            tempdata.set_index('dopa_time')
+
+        sec_first = np.round(tempdata.index[0], 0)
+        sec_last = np.round(tempdata.index[-1], 0)
 
         act_list, sec_list = [], []
 
@@ -42,7 +51,7 @@ def plot_act_per_window(
     plt.tight_layout()
     fname = f'act_perc_per_sub_{winlength}s_windows'
     plt.savefig(
-        os.path.join(fig_dir, 'ft_exploration', 'rest', fname),
+        os.path.join(savepath, fname),
         dpi=150, facecolor='w',)
     plt.close()
 
