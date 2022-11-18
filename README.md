@@ -36,7 +36,26 @@ All sub-folders within repo/data and repo/figures in which figures and processed
 are stored are created automatically by the functions.
 
 To use the repo in it's current functionality, it should be possible to retrieve the
-raw-bids-data via a synced (OneDrive-) folder. 
+raw-bids-data via a synced (OneDrive-) folder.
+
+
+### Workflow and Main-Files
+To use this repo as efficient as possible, the following main-files are
+running the different processing phases of the workflow. Details on
+terminal commands are given within the functions. 
+
+- Preprocessing raw-bids-data
+    - main file to run: ´code/lfpecog_preproc/run_lfpecog_preproc.py´
+    - supporting files as command-arguments: ´preprocSettings_v2.4.json´
+
+- Transforming preprocessed data into merged-dataframes (ephys + ACC)
+    - main file to run: ´code/lfpecog_features.run_mergeDataClass.py´
+    - supporting strings as command-arguments: ´ "012" "v3.0"´
+
+- Feature Extraction based on merged-dataframes
+    - main file to run: ...
+    - supporting string-infos to run as arguments: ...
+
 
 ### Specifications of functions and settings
 
