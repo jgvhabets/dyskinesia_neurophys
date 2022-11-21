@@ -41,6 +41,7 @@ def add_detected_acc_states(
         if df.index.name == 'dopa_time':
             datkeys = list(df.keys())
             dattime = df.index.values
+            # memory error if notebook has large active memory opened
             dat = df.values
         else:
             raise KeyError('dopa_time not in keys, nor index')

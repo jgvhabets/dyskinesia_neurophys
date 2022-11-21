@@ -16,9 +16,6 @@ import lfpecog_features.moveDetection_run as run_tap_detect
 from lfpecog_features.feats_add_move_states import add_detected_acc_states as add_moveStates
 
 
-# import other functions
-import hackathon_mne_mvc as multiVarConn
-
 
 @dataclass(init=True, repr=True, )
 class subjectData:
@@ -83,7 +80,7 @@ if __name__ == '__main__':
     dataframes, add "no_acc", or "no_save" resp. as a variable
     to the command line call.
     
-    Running (from repo_folder/code):
+    Running on WIN (from repo_folder/code):
         python -m lfpecog_features.run_mergeDataClass "012" "v3.0" (opt: "no_acc" "no_save")
 
     Output:
@@ -116,7 +113,7 @@ if __name__ == '__main__':
     )
 
     ### Merge dataframes of different data-groups
-    merged_df = read_data_funcs.merge_ephys_sources(data)
+    merged_df, fs = read_data_funcs.merge_ephys_sources(data)
 
     ### Optionally add Accelerometer
     if incl_acc:
@@ -131,7 +128,5 @@ if __name__ == '__main__':
                 get_project_path(), 'data',
                 'merged_sub_dfs', f'{data_version}'
             ),
-            filename_base=f'{sub}_mergedDf',
+            filename_base=f'{sub}_mergedDf_{fs}Hz',
         )
-
-    print(vars(multiVarConn).keys())

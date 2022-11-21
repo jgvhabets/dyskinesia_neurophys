@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from dataclasses import dataclass, field
 import csv
+from array import array
 
 # import own functions
 import utils.utils_fileManagement as fileMng
@@ -16,7 +17,7 @@ import utils.utils_fileManagement as fileMng
 
 
 @dataclass(init=True, repr=True, )
-class main_loadMergedSubDfs:
+class main_loadMergedData:
     """
     Main class to run to load merged dataframes per subject,
     takes merged dataframes from already preprocessed
@@ -28,7 +29,13 @@ class main_loadMergedSubDfs:
         - list_of_subs: list of subject to include,
             every sub coded as '001', '002', etc.
         - tasks: list of tasks for which a merged-
-            df is created, can be ['all', 'rest']  
+            df is created, can be ['all', 'rest']
+        - data_version: of preprocesing e.g. 'v0.1'
+        - float_convert: convert py-floats to np.float64
+        - data_as_df: subXXX attribute is pandas DF,
+            if false: subXXX attr is class with
+            separate data_arr (array), fs (int), col_names (list),
+            and time_index (array)
     
     Returns:
         - class containing merged dataframes, sorted
@@ -42,6 +49,7 @@ class main_loadMergedSubDfs:
     data_version: str
     float_convert: bool = True
     tasks: list = field(default_factory=lambda: ['all', 'rest'])
+    data_as_df: bool = True
     # filter_on_ACC: str/list
 
     def __post_init__(self,):
@@ -54,21 +62,22 @@ class main_loadMergedSubDfs:
                     f'task ("{task}") not "all", or "rest"'
                     f', TODO: change input tasks ({self.tasks})')
 
-            print(f'start loading {task} DataFrames')
+            print(f'start loading {task} Data')
             setattr(
                 self,
                 task,
-                mergedDfs_perTask(
+                get_mergedData_perTask(
                     list_of_subs=self.list_of_subs,
                     task=task,
                     data_version=self.data_version,
-                    float_convert=self.float_convert
+                    float_convert=self.float_convert,
+                    return_as_df=self.data_as_df,
                 )
             )        
 
 
 @dataclass(repr=True, init=True,)
-class mergedDfs_perTask:
+class get_mergedData_perTask:
     """
     Class to store merged dataframes of
     different subject, one class of this
@@ -81,6 +90,11 @@ class mergedDfs_perTask:
             include
         - task: task code to include, must be
             in ['all', 'rest',]
+        - data_version: of preprocesing e.g. 'v0.1'
+        - float_convert: convert py-floats to np.float64
+        - return_as_df: return as pandas DF, or return
+            separate dat_arr (np), col_names (list),
+            and time_arr (floats)
         - acc_filter: defaults to None, if
             defined: data is also filtered
             on a specifc detected-ACC-state
@@ -93,8 +107,10 @@ class mergedDfs_perTask:
     list_of_subs: list
     task: str
     data_version: str
-    acc_filter: str = None
     float_convert: bool = True
+    return_as_df: bool = True
+    acc_filter: str = None
+    
 
     def __post_init__(self,):
 
@@ -103,115 +119,160 @@ class mergedDfs_perTask:
             print(
                 f'\tloading Sub {sub} ({self.task})'
             )
-
-            df = load_stored_sub_df(
+            # LOAD DATA
+            df = load_stored_merged_data(
                 sub=sub,
                 data_version=self.data_version,
-                float_convert=self.float_convert)
-
+                float_convert=self.float_convert,
+                return_as_df=self.return_as_df,
+                )
+            if not self.return_as_df:  # unpack tuple if necessary
+                dat_arr, fs, col_names, time_arr = df
+            
+            # SELECT ON TASK
             if self.task == 'rest':  # select only rest-data
                 
-                sel = df['task'] == 'rest'
-                df = df[sel]
-            
+                if self.return_as_df:
+                    sel = df['task'] == 'rest'
+                    df = df[sel]
+                # for non-df return this happens in class-function
+
             # Add ACC-selection here
             # if self.acc_filter in []:
                 # df = filter_df_on_ACC(df, self.acc_filter)
             
-            # add all/selected data to class
-            setattr(
-                self,
-                f'sub{sub}',
-                df
-            )
-
+            # SET AS ATTRIBUTE (dataframe or class)
+            if self.return_as_df:
+                setattr(
+                    self,
+                    f'sub{sub}',  # name is subXXX
+                    df
+                )
+            
+            else:
+                setattr(
+                    self,
+                    f'sub{sub}',
+                    subData_asArrays(
+                        data_arr=dat_arr,
+                        fs=fs,
+                        col_names=col_names,
+                        time_index=time_arr,
+                        task_sel=self.task,
+                    )
+                )
+                
             print(f'{sub} FINISHED')
 
 
+@dataclass(init=True, repr=True, )
+class subData_asArrays:
+    data_arr: array
+    fs: int
+    col_names: list
+    time_index: array
+    task_sel: str = field(default_factory='')
 
-def load_stored_sub_df(
+    def __post_init__(self,):
+
+        if len(self.task_sel) > 1:
+
+            i_task = np.where(self.col_names == 'task')[0][0]
+            sel = self.data_arr[:, i_task] != 'rest'
+            self.data_arr = self.data_arr[sel]
+            self.time_index = self.time_index[sel]
+        
+
+
+def load_stored_merged_data(
     sub: str,
     data_version,
-    float_convert: bool = True
+    float_convert: bool = True,
+    return_as_df: bool = False,
 ):
+    """
+    Loads stored array with all merged data
+    from a patient, currently all ephys and
+    aggregated ACC-states
+
+    Inputs:
+        - sub: string code of subject, e.g. '001'
+        - data_version: e.g. 'v0.1'
+        - float_convert: set True to convert from
+            python-floats to np.float64's, important
+            for scipy/fft compatibility
+        - return_as_df: set True to return pandas DF,
+            else data-array (np), fs (int), col_names (list),
+            and indices (floats) are returned
+        
+    """
     data_path = fileMng.get_project_path('data')
     # set subject-spec pathbase
-    pathbase = os.path.join(
+    path = os.path.join(
         data_path,
         'merged_sub_dfs',
         data_version,
-        f'{sub}_mergedDf_'
     )
-    print(pathbase)
-    # load data from npy array
-    print('load data')
-    dat_arr = np.load(
-        pathbase + 'data.npy', allow_pickle=True,
-    )
-    # IMPORTANT NOTE: floats are imported as python float
-    # this can cause errors in spectral feature extraction
-    # correct only later due to strings
-    # consider later to correct here only for float-columns
+    files = os.listdir(path)
+    files = [f for f in files if sub in f]
 
-    print('load indices')
+    print(f'-> loading sub {sub} data from {path}')
+    # load data from npy array
+    data_file = [f for f in files if 'data' in f][0]
+    dat_arr = np.load(os.path.join(path, data_file),
+                      allow_pickle=True,)
+    print('\t...data loaded')
 
     # load indices from npy array
-    time_arr = np.load(
-        pathbase + 'timeIndex.npy', allow_pickle=True,
-    )
-
-    print('load col names')
+    index_file = [f for f in files if 'timeIndex' in f][0]
+    time_arr = np.load(os.path.join(path, index_file),
+                       allow_pickle=True,)
 
     # load column-names from txt
-    col_names = np.loadtxt(
-        pathbase + 'columnNames.csv',
-        dtype=str, delimiter=','
-    )
-
-    sub_df = pd.DataFrame(
-        data=dat_arr,
-        index=time_arr,
-        columns=col_names,
-    )
-    print(f'resulting DF has shape {sub_df.shape}, and columns: {sub_df.keys()}')
+    names_file = [f for f in files if 'columnNames' in f][0]
+    col_names = np.loadtxt(os.path.join(path, names_file),
+                           dtype=str, delimiter=',')
+    
+    fs_string = data_file.split('Hz')[0]
+    fs = int(fs_string.split('_')[-1])
 
     if float_convert:
-        print('correct npy floats')
-        sub_df = convert_to_npfloats(sub_df)
+        print('\t...correct npy floats')
+        dat_arr = convert_to_npfloats(dat_arr, col_names)
 
-    return sub_df
+    if return_as_df:
+        sub_df = pd.DataFrame(
+            data=dat_arr,
+            index=time_arr,
+            columns=col_names,
+        )
+        print(
+            f'--> ...resulting DF has shape {sub_df.shape}, Fs: {fs}'
+            f' and columns: {sub_df.keys()}')
+
+        return sub_df
+    
+    else:
+        print('--> ...return data as np.array, fs, col_names, and indices')
+        return dat_arr, fs, col_names, time_arr
 
 
-def convert_to_npfloats(df):
+def convert_to_npfloats(dat_arr, col_names):
     """
     Convert LFP and ECOG signals from py
-    floats to np.float64's. This for better
-    spectral decomposition function
+    floats to np.float64's. This for
+    spectral decomposition functions
     """
-    for key in df.keys():
+    for col, key in enumerate(col_names):
         # skip non ephys channels
-        if not np.logical_or(
+        if np.logical_or(
             'lfp' in key.lower(), 
             'ecog' in key.lower()
         ):
-            continue
-        print(f'consider {key}')
 
-        if np.isnan(list(df[key])).all():
-            print('skip: ALL NaNs')
-            continue
-
-        # find first value without nan
-        i = 0
-        while np.isnan(df.iloc[i][key]):
-            i += 1
-
-        # convert if columns contains py floats
-        if type(df.iloc[i][key]) == float:
-            
-            df[key] = np.float64(df[key])
+            dat_arr[:, col] = dat_arr[:, col].astype(np.float64)
     
-    return df
+    return dat_arr
 
 
 @dataclass(init=True, repr=True, )
@@ -341,11 +402,7 @@ def create_dopa_timed_array(
             )
             rec_data['task'] = [task] * rec_data.shape[0]
 
-            data_out = pd.concat(
-                [
-                    data_out,
-                    rec_data
-                ])  # vertical adding of empty rows
+            data_out = pd.concat([data_out, rec_data])  # vertical adding of empty rows
 
 
     data_out = data_out.sort_values(
@@ -368,19 +425,31 @@ def merge_ephys_sources(
         subdat, sources[0]
     ).data.set_index('dopa_time')
     
-    merge_df = merge_df.join(getattr(
-        subdat, sources[1]
-    ).data.set_index('dopa_time'), rsuffix='_DUPL')
+    for i in np.arange(1, len(sources)):
 
-    merge_df = merge_df.join(
-        getattr(subdat, sources[-1]
-    ).data.set_index('dopa_time'), rsuffix='_DUPL')
+        merge_df = merge_df.join(
+            getattr(subdat, sources[i]).data.set_index(
+                'dopa_time'), rsuffix='_DUPL'
+        )
 
     # remove duplicate columns (task/move-states)
     cols_del = [c for c in merge_df.columns if 'DUPL' in c ]
     merge_df = merge_df.drop(columns=cols_del)
 
-    return merge_df
+    # include sample frequencies
+    fs = getattr(subdat, sources[0]).fs
+    # check if EPHYS has same FS
+    for i in np.arange(1, len(sources)):
+        fs2 = getattr(subdat, sources[i]).fs
+        if fs2 != fs:
+            raise ValueError(
+                'Preprocessed Ephys-Loading Error: '
+                'Unequal Sampling Freqs for: '
+                f'{fs} -> {sources[0]} vs '
+                f'{fs2} -> {sources[i]}'
+            )
+
+    return merge_df, fs
 
 
 
