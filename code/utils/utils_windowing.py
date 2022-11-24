@@ -5,22 +5,26 @@ processing
 """
 # Import public packages
 import numpy as np
+from pandas import DataFrame, isna
 from dataclasses import dataclass, field
 from array import array
 from typing import Any
 
 
 def get_windows(
-    sigDf,
+    data,
     fs,
+    col_names = None,
+    time_index = None,
     winLen_sec=180,
-    part_winOverlap=.0,
+    part_winOverlap=.5,
     min_winPart_present=.66,
+    remove_nan_timerows: bool = True,
     movement_part_acceptance: float = 1.,
     return_as_class=False,
 ):
     """
-    Select from one channel windows with size nWin * Fs,
+    Select windows with size nWin * Fs,
     exclude windows with nan's, and save corresponding
     dopa-times to included windows.
     Function selects windows based on dopa-times using
@@ -30,8 +34,9 @@ def get_windows(
     B: for getting data nd-array
 
     Inputs:
-        - sigDg (dataframe)
+        - data: dataframe or array
         - fs (int): sample freq
+        - col_names, time_index: needed if data is given as array
         - win_len: length of window in seconds
         - part_winOverlap (float): part of window used as overlap
             between consecutive windows
@@ -49,18 +54,40 @@ def get_windows(
         - win_arr (arr): 2d array of n-windows x n-samples
         - win_times (list): corresponding times of window
             start dopa-times
-    """ 
-    try:  # if dopa-time is as column
-        times = np.around(sigDf['dopa_time'], 6).values
-        sigDf['dopa_time'] = times
+    """
+    if isinstance(data, DataFrame):
+        try:  # if dopa-time is as column
+            times = np.around(data['dopa_time'], 6).values
+            data['dopa_time'] = times
 
-    except:  # if dopa is df-index
-        times = np.around(sigDf.index.values, 6)
-        sigDf.insert(loc=0, column='dopa_time', value=times)
+        except:  # if dopa is df-index
+            times = np.around(data.index.values, 6)
+            data.insert(loc=0, column='dopa_time', value=times)
+        
+        arr_keys = data.keys()
+    
+    elif isinstance(data, np.ndarray):
+        
+        if data.shape[1] != len(col_names):
+            data = data.T
+        if data.shape[1] != len(col_names):
+            raise ValueError(
+                'get_windows() DATA ARRAY SHAPE DOESNT MATCH COL_NAMES'
+            )
+            
+        times_col = np.where(col_names == 'dopa_time')[0][0]
+        times = data[:, times_col]
+        # times = time_index   # CURRENTLY NUMERICAL INDEX !!!
+        arr_keys = col_names
+
+    else:
+        raise ValueError('data inserted in get_windows() has wrong datatype')
+
+
 
     nWin = int(fs * winLen_sec)  # n samples within a full window
 
-    # define seconds after which a new window starts (incl overlap)
+    # define time (in seconds) after which a new window starts (incl overlap)
     if part_winOverlap > 0:
         sec_hop = winLen_sec * part_winOverlap
     else:
@@ -76,20 +103,34 @@ def get_windows(
     for win0_sec in np.arange(
         tStart, times[-1], sec_hop
     ):
+        # SELECT ROWS WITHIN TIME WINDOW
+        if isinstance(data, DataFrame):
+            wintemp = data.loc[win0_sec:win0_sec + winLen_sec]
 
-        wintemp = sigDf.loc[win0_sec:win0_sec + winLen_sec]
-        
-        # skip window if smaller than given presence-threshold
+        elif isinstance(data, np.ndarray):
+            sel = np.logical_and(
+                win0_sec < times, times < (win0_sec + winLen_sec)
+            )
+            wintemp = data[sel]
+            
+            if remove_nan_timerows:
+                nansel = isna(wintemp).any(axis=1)
+                wintemp = wintemp[~nansel]
+
+        ### INCLUDE FILTERING ON PRESENT DATA
+        # (skip window if less data present than defined threshold)
         if wintemp.shape[0] < (nWin * min_winPart_present): continue
 
-        move_part = 1 - (sum(wintemp['no_move']) / wintemp.shape[0])
-        # skip window if it contains too many movement samples
-        if move_part > movement_part_acceptance:
-            print(f'\t window skipped due to MOVEMENT ({win0_sec} s)')
-            continue
+        ### INCLUDE ACCELEROMETER ACTIVITY FILTERING
+        if movement_part_acceptance < 1:  # 1 is default and means no filtering
+            move_part = 1 - (sum(wintemp['no_move']) / wintemp.shape[0])
+            # skip window if it contains too many movement samples
+            if move_part > movement_part_acceptance:
+                print(f'\t window skipped due to MOVEMENT ({win0_sec} s)')
+                continue
 
-        # nan-pad windows which are not completely present
-        elif wintemp.shape[0] < (winLen_sec * fs):
+        # NaN-PAD WINDOWS NOT FULLY PRESENT (to fit 3d-array shape)
+        if wintemp.shape[0] < nWin:
 
             rows_pad = nWin - wintemp.shape[0]
             nanpad_arr = np.array(
@@ -101,12 +142,11 @@ def get_windows(
         else:
             # no nan-padding necessary
             arr_times_sec.append(win0_sec)
-        
 
-        arr_list.append(wintemp)
+        arr_list.append(wintemp)  # list with 2d arrays
     
-    win_array = np.array(arr_list)
-    arr_keys = sigDf.keys()
+    win_array = np.array(arr_list)  # create 3d array
+    
 
 
     if return_as_class:
