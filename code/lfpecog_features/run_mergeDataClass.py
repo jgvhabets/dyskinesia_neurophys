@@ -126,7 +126,7 @@ if __name__ == '__main__':
             df=merged_df,
             folder_path=join(
                 get_project_path(), 'data',
-                'merged_sub_dfs', f'{data_version}'
+                'merged_sub_data', f'{data_version}'
             ),
             filename_base=f'{sub}_mergedDf_{fs}Hz',
         )

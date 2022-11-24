@@ -1,6 +1,12 @@
 '''
-Functions to read in and organize pre-processed neurophysiology
-data (LFP and ECOG) in ReTune's Dyskinesia Project
+Functions to create/sotre and read/load merged-data
+consisting of preprocessed ephys data and accelero-
+meter based movement states
+
+Both functionalitites (create and load) are called
+from main functions in:
+- main_run_ftExctraction (load)
+- run_mergeDataClass (create and store)
 '''
 
 # Import general packages and functions
@@ -210,7 +216,7 @@ def load_stored_merged_data(
     # set subject-spec pathbase
     path = os.path.join(
         data_path,
-        'merged_sub_dfs',
+        'merged_sub_data',
         data_version,
     )
     files = os.listdir(path)

@@ -5,12 +5,15 @@ Run Feature Extraction
 # import public functions
 import sys
 import time
-from os.path import join
+from os.path import join, dirname
 from dataclasses import dataclass, field
-
+from os import getcwd, chdir
+# print(getcwd())
+# chdir(dirname(getcwd()))
+print(getcwd())
 # import own functions
-from lfpecog_features import feats_read_proc_data as read_data
 from utils.utils_fileManagement import get_project_path, save_dfs
+from lfpecog_features import feats_read_proc_data as read_data
 
 # import other functions
 import hackathon_mne_mvc as multiVarConn
@@ -19,7 +22,7 @@ if __name__ == '__main__':
 
     """
     Running on WIN (from repo_folder/code):
-        python -m lfpecog_features.main_run_ftExtraction ["012",]
+        python -m lfpecog_features.main_run_ftExtraction "012"
     """
     starttime = time.time()
 
