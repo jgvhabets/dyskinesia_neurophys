@@ -56,9 +56,10 @@ def get_onedrive_path(
         raise ValueError(
             f'given folder: {folder} is incorrect, '
             f'should be {folder_options}')
-        
+
     path = getcwd()
-    while dirname(path)[-5:] != 'Users':
+
+    while dirname(path)[-5:].lower() != 'users':
         path = dirname(path)
     # path is now Users/username
     onedrive_f = [
