@@ -13,6 +13,13 @@ from prof. Neumann.
   - `conda install mne-bids`
 
 
+- on Charité environments:
+    run in terminal command line:
+    - set HTTPS_PROXY=http://proxy.charite.de:8080
+    - set HTTP_PROXY=http://proxy.charite.de:8080
+    - git config --global http.proxy http://proxy.charite.de:8080
+
+
 ### Code and Files Structure
 To use optimally use this repo, a project folder has to be created with
 a specific file-structure.
