@@ -51,8 +51,10 @@ def get_windows(
             or as separate variable (tuple)
     
     Returns:
-        - win_arr (arr): 2d array of n-windows x n-samples
-        - win_times (list): corresponding times of window
+        - win_array: 2d array of n-windows x n-samples
+        - fs: int
+        - arr_keys: names of columns
+        - arr_times_sec: corresponding times of window
             start dopa-times
     """
     if isinstance(data, DataFrame):
@@ -152,13 +154,16 @@ def get_windows(
     if return_as_class:
         
         windows = windowedData(
-            win_array, arr_keys, arr_times_sec
+            data=win_array,
+            fs=fs,
+            keys=arr_keys,
+            win_starttimes=arr_times_sec
         )
         return windows
 
     else:
         
-        return win_array, arr_keys, arr_times_sec
+        return win_array, fs, arr_keys, arr_times_sec
 
 
 @dataclass(repr=True, init=True,)
@@ -169,6 +174,7 @@ class windowedData:
     get_windows() above.
     """
     data: array
+    fs: int
     keys: list
     win_starttimes: list
 
