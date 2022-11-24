@@ -11,6 +11,9 @@ from prof. Neumann.
 - additional packages installed:
   - `conda install mne`
   - `conda install mne-bids`
+  - `conda install mne_connectivity`
+  - clone mne multivariate repo (hackathon_mne_mvc by tsbinns)
+    for import functionality: `sys.path.append(os.path.join(codepath, "hackathon_mne_mvc"))`
 
 
 - on Charité environments:
