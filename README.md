@@ -11,14 +11,18 @@ from prof. Neumann.
 - additional packages installed:
   - `conda install mne`
   - `conda install mne-bids`
-  - `conda install mne_connectivity`
+  - `conda install mne_connectivity` (NOT FOR MULTIVARIATE CONN ANALYSES)
 
   for the mne mvc analyses:
-  - new env: without mne_connectivity
+  - use an env: without general installed mne_connectivity
   - conda install --channel=conda-forge mne-base
+  - conda isntall xarray
   - clone mne multivariate repo (hackathon_mne_mvc by tsbinns)
-    for import functionality: `sys.path.append(os.path.join(codepath, "hackathon_mne_mvc"))`
+    run: `sys.path.append(os.path.join(codepath, "hackathon_mne_mvc"))`
   - clone mvc mne fork: https://github.com/vss245/mne-connectivity
+    run (in fork-repo): `pip install --proxy=http://proxy.charite.de:8080 -e .`
+        (--proxy necessary behind Charite Firewall), `pip install -e .`
+    run: `sys.path.append(os.path.join(codepath, "mne-connectivity"))`
 
 
 - on Charité environments:
