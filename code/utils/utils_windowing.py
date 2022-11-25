@@ -179,6 +179,57 @@ class windowedData:
     win_starttimes: list
 
 
+def window_to_epochs(
+    win_array,
+    fs,
+    epochLen_sec,
+    remove_nan: bool = True,
+    mne_format: bool = True,
+):
+    """
+    Takes 2d array of one window (e.g. 60 seconds)
+    with shape n-samples-per-window x n-columns,
+    and divides windows in smaller epochs (eg for
+    mne-multi-variate connectivity analyses).
+    Resulting array has shape
+    [n-epochs x n-samples-per-epoch x n-columns]
+    """
+    assert len(win_array.shape) == 2, (
+        f'win_array needs to be 2d, got shape {win_array.shape}'
+    )
+    # check shape of input array
+    if win_array.shape[0] < win_array.shape[1]:
+        win_array = win_array.T
+    n_channels = win_array.shape[1]
+    
+    if remove_nan:
+        nan_sel = isna(win_array).any(axis=1)
+        win_array = win_array[~nan_sel]
+    
+    # define number of epochs fitting in array
+    epoch_samples = int(fs * epochLen_sec)
+    n_epochs = int(win_array.shape[0] / epoch_samples)
+    
+    # removing redundant samples not fitting in epoch at end
+    samples_to_incl = n_epochs * epoch_samples
+    win_array = win_array[:samples_to_incl]
+
+    epoched_array = win_array.reshape(
+        (n_epochs, epoch_samples, n_channels),
+        order='C',
+    )  # in format n_epochs, n_samples, n_channels (columns)
+
+    if mne_format:  # requires n_epochs, n_channels, n_samples
+        epoched_array = np.array(
+            [e.T for e in epoched_array]
+        )
+
+    assert ~ isna(epoched_array).any(), (
+        "resulting epoched 3d-array has NaN's"
+    )
+
+    return epoched_array
+
 
 def get_noNanSegm_from_singleWindow(
     windat,
