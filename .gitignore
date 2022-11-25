@@ -12,6 +12,8 @@ __pycache__
 admin/
 figures/
 data/
+code/.vscode/
+code/mne-connectivity
 code/hackathon_mne_mvc
 code/pte/
 code/py_neuromodulation/
