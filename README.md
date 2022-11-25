@@ -12,8 +12,13 @@ from prof. Neumann.
   - `conda install mne`
   - `conda install mne-bids`
   - `conda install mne_connectivity`
+
+  for the mne mvc analyses:
+  - new env: without mne_connectivity
+  - conda install --channel=conda-forge mne-base
   - clone mne multivariate repo (hackathon_mne_mvc by tsbinns)
     for import functionality: `sys.path.append(os.path.join(codepath, "hackathon_mne_mvc"))`
+  - clone mvc mne fork: https://github.com/vss245/mne-connectivity
 
 
 - on Charité environments:
