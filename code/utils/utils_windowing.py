@@ -215,8 +215,7 @@ def window_to_epochs(
     win_array = win_array[:samples_to_incl]
 
     epoched_array = win_array.reshape(
-        (n_epochs, epoch_samples, n_channels),
-        order='C',
+        (n_epochs, epoch_samples, n_channels), order='C',
     )  # in format n_epochs, n_samples, n_channels (columns)
 
     if mne_format:  # requires n_epochs, n_channels, n_samples
@@ -229,6 +228,61 @@ def window_to_epochs(
     )
 
     return epoched_array
+
+
+from mne import create_info, EpochsArray
+
+def create_mne_epochs(
+    epoched_windows, fs, ch_names,
+    only_ephys: bool = True,
+):
+    """
+    Create MNE-Objects (Epoched) from all
+    3d-arrays (n_epochs, n_channels, n_times)
+    per window, for all epoched windows in list
+
+    Input:
+        - epoched_window_list: list with 3d-array
+            arrays per window
+        - fs
+        - ch_names: corresponding with 2nd axis of
+            3d arrays
+    """
+    assert len(ch_names) == epoched_windows[0].shape[1], (
+        'length of ch_names and n_channels in epoched '
+        'window 3d-arrays does not match'
+    )
+    # only include ephys data in mne-Epochs
+    if only_ephys:
+        ephys_sel = [
+            np.logical_or('ECOG' in col, 'LFP' in col)
+            for col in ch_names
+        ]
+        ch_names = ch_names[ephys_sel]
+        epoched_windows = [
+            e[:, ephys_sel, :] for e in epoched_windows
+        ]
+    
+    # create obligatory mne-info
+    mne_info = create_info(
+        ch_names=list(ch_names),
+        sfreq=fs,
+        ch_types=['eeg'] * len(ch_names)
+    )
+    # convert np-arrays into mne Epoched Arrays
+    mne_epochs = []
+    for epochs_arr in epoched_windows:
+        # loop over all 3d array within list
+        new_arr = EpochsArray(
+            epochs_arr,
+            info=mne_info,
+            verbose=False,
+            # events=events,
+            # event_id={'arbitrary': 1}
+        )
+        mne_epochs.append(new_arr)
+    
+    return mne_epochs
 
 
 def get_noNanSegm_from_singleWindow(
