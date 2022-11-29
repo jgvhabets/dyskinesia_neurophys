@@ -51,7 +51,11 @@ def get_windows(
             or as separate variable (tuple)
     
     Returns:
-        - win_array: 2d array of n-windows x n-samples
+        - win_array: 3d array of n-windows x n-samples x n-channels
+            windows can have different sizes of present data,
+            therefore windows are nan-padded at the end, to make
+            them all fit the same 3d array (nan-rows are deleted
+            in later ft-extraction functions)
         - fs: int
         - arr_keys: names of columns
         - arr_times_sec: corresponding times of window
@@ -234,7 +238,7 @@ from mne import create_info, EpochsArray
 
 def create_mne_epochs(
     epoched_windows, fs, ch_names,
-    only_ephys: bool = True,
+    pick_only_ephys: bool = True,
 ):
     """
     Create MNE-Objects (Epoched) from all
@@ -253,7 +257,7 @@ def create_mne_epochs(
         'window 3d-arrays does not match'
     )
     # only include ephys data in mne-Epochs
-    if only_ephys:
+    if pick_only_ephys:
         ephys_sel = [
             np.logical_or('ECOG' in col, 'LFP' in col)
             for col in ch_names

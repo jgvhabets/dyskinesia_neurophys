@@ -3,10 +3,11 @@ General utilisation functions
 """
 
 # import public packages and functions
-from os import getcwd, listdir, mkdir
+from os import getcwd, listdir, makedirs
 from os.path import join, exists, dirname
 from numpy import logical_and, save
 from csv import writer
+import pickle
 
 
 def get_project_path(
@@ -98,8 +99,7 @@ def save_dfs(
             e.g.: 'sub000_mergedDf'
     """
     # check if (parent)folder exists, if not make folder
-    if not exists(dirname(folder_path)): mkdir(dirname(folder_path))
-    if not exists(folder_path): mkdir(folder_path)
+    if not exists(folder_path): makedirs(folder_path)
 
     # save data as npy array with numpy's save function
     save(
@@ -126,3 +126,53 @@ def save_dfs(
         f'\n\tDataFrame ({filename_base}) '
         f' is stored to {folder_path}\n'
     )
+
+
+def save_class_pickle(
+    class_to_save,
+    path,
+    filename,
+    extension='.P',
+):
+
+    if not exists(path): makedirs(path)
+    
+    pickle_path = join(
+        path, filename + extension
+    )
+
+    with open(pickle_path, 'wb') as f:
+        pickle.dump(class_to_save, f)
+        f.close()
+
+    return print(f'inserted class saved as {pickle_path}')
+
+
+def load_class_pickle(
+    file_to_load,
+):
+    """
+    Loads saved Classes. When running this code
+    the class-definitions have to be called before
+    executign this code.
+    
+    So, for example:
+    from utils.utils_windowing import windowedData
+
+    loaded_class = utils_fileMng.load_class_pickle(os.path.join(deriv_path, 'classFileName.P'))
+    
+    Input:
+        - file_to_load: string including path,
+            filename, and extension
+    
+    Returns:
+        - output: variable containing the class
+    """
+
+    with open(file_to_load, 'rb') as f:
+        output = pickle.load(f)
+        f.close()
+
+    return output
+
+

@@ -30,6 +30,7 @@ class main_loadMergedData:
     and stored data
 
     TODO: include filtering on ACC-state
+    TODO: get rid of task, sub subclasses
 
     Input:
         - list_of_subs: list of subject to include,
@@ -55,7 +56,7 @@ class main_loadMergedData:
     data_version: str
     float_convert: bool = True
     tasks: list = field(default_factory=lambda: ['all', 'rest'])
-    data_as_df: bool = True
+    data_as_df: bool = False
     # filter_on_ACC: str/list
 
     def __post_init__(self,):
