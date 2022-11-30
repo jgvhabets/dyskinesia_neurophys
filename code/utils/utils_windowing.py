@@ -9,6 +9,7 @@ from pandas import DataFrame, isna
 from dataclasses import dataclass, field
 from array import array
 from typing import Any
+from itertools import compress
 
 
 def get_windows(
@@ -251,6 +252,9 @@ def create_mne_epochs(
         - fs
         - ch_names: corresponding with 2nd axis of
             3d arrays
+    
+    Returns:
+        - list_mne_epochs: list with mne-EpochedArray
     """
     assert len(ch_names) == epoched_windows[0].shape[1], (
         'length of ch_names and n_channels in epoched '
@@ -262,7 +266,7 @@ def create_mne_epochs(
             np.logical_or('ECOG' in col, 'LFP' in col)
             for col in ch_names
         ]
-        ch_names = ch_names[ephys_sel]
+        ch_names = list(compress(ch_names, ephys_sel))
         epoched_windows = [
             e[:, ephys_sel, :] for e in epoched_windows
         ]
@@ -274,8 +278,8 @@ def create_mne_epochs(
         ch_types=['eeg'] * len(ch_names)
     )
     # convert np-arrays into mne Epoched Arrays
-    mne_epochs = []
-    for epochs_arr in epoched_windows:
+    list_mne_epochs = []
+    for e, epochs_arr in enumerate(epoched_windows):
         # loop over all 3d array within list
         new_arr = EpochsArray(
             epochs_arr,
@@ -284,9 +288,11 @@ def create_mne_epochs(
             # events=events,
             # event_id={'arbitrary': 1}
         )
-        mne_epochs.append(new_arr)
+        list_mne_epochs.append(new_arr)
+        if e % 10 == 0:
+            print(f'...added MNE Epoch #{e}')
     
-    return mne_epochs
+    return list_mne_epochs
 
 
 def get_noNanSegm_from_singleWindow(
