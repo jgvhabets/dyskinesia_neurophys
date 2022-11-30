@@ -2,6 +2,10 @@
 Run Feature Extraction of (multi-
 variate) Connectivity based on
 epoched windows of data
+
+TODO: dont save all in between steps,
+only save final class-pickle of epoched-
+arrays due to computational speed
 """
 
 # import public functions
@@ -57,9 +61,32 @@ if __name__ == '__main__':
         )
         epoch_dirname = f'list_of_epochs_{int(epochLen_sec * 1000)}ms'
         epoch_path = join(windowed_class_path, epoch_dirname)
+
+        pickled_epochs_path = join(
+            windowed_class_path,
+            f'{sub}_mneEpochs_{task}_{data_version}.P'
+        )
         
+        # define list (final mne-input) here, for if-loop later
+        list_mneEpochArrays = []  # if not defined in beginning, defined at end
+
+        # load mne-Epochs saved as pickle Class
+        if exists(pickled_epochs_path):
+            print('...loading pickled mneEpochs (from: '
+                  f'{pickled_epochs_path})')
+
+            from utils.utils_pickle_mne import pickle_EpochedArrays
+
+            class_mne_epochs = load_class_pickle(pickled_epochs_path)
+            list_mneEpochArrays = class_mne_epochs.list_mne_objects
+
+            print(f'...loaded list with {len(list_mneEpochArrays)}'
+                  ' mneEpochedArrays is loaded')
+
         # load aimed epochs if they exist
-        if exists(epoch_path):
+        elif exists(epoch_path):
+            # TODO: CONSIDER THIS WHOLE epochClass creation in seprate script
+
             print('...load pickled list of epochs')
             epoched_windows_list = []
 
@@ -189,23 +216,39 @@ if __name__ == '__main__':
                     f.close()
         
         # transform epoched array into mne-EpochedArray
-        from utils.utils_windowing import create_mne_epochs
-        mne_starttime = time.time()
-        print(f'start MNE transform with # {len(epoched_windows_list)}')
-        list_mne_epochs = create_mne_epochs(
-            epoched_windows_list,
-            fs=fs, ch_names=ch_names,
-            pick_only_ephys=True,
-        )
-        mne_stoptime = time.time()
-        print(f'MNE transform took: {mne_stoptime - mne_starttime} seconds')
+        
+        # only perform when mne epochs are not already loaded as pickle
+        if len(list_mneEpochArrays) == 0:
+            
+            from utils.utils_windowing import create_mne_epochs
+            mne_starttime = time.time()
+            print(f'start MNE transform with # {len(epoched_windows_list)}')
+            list_mneEpochArrays = create_mne_epochs(
+                epoched_windows_list,
+                fs=fs, ch_names=ch_names,
+                pick_only_ephys=True,
+            )
+            mne_stoptime = time.time()
+            print(f'MNE transform took: {mne_stoptime - mne_starttime} seconds')
+            
+            from utils.utils_pickle_mne import pickle_EpochedArrays
+
+            class_mne_epochs = pickle_EpochedArrays(
+                list_mne_objects = list_mneEpochArrays
+            )
+            save_class_pickle(
+                class_to_save=class_mne_epochs,
+                path=windowed_class_path,
+                filename=f'{sub}_mneEpochs_{task}_{data_version}',
+                extension='.P',
+            )
 
     MAIN_stoptime = time.time()
 
     print(f'FULL prep-SCRIPT TOOK: {round((MAIN_stoptime - MAIN_starttime) / 60, 1)} minutes')
 
     mne_starttime = time.time()
-    run_mne_MVC(list_mneEpochArrays=list_mne_epochs)
+    run_mne_MVC(list_mneEpochArrays=list_mneEpochArrays)
     mne_stoptime = time.time()
     print(f'MNE SCRIPT TOOK: {round((mne_stoptime - mne_starttime) / 60, 1)} minutes')
 
