@@ -16,7 +16,7 @@ from prof. Neumann.
   for the mne mvc analyses:
   - use an env: without general installed mne_connectivity
   - conda install --channel=conda-forge mne-base
-  - conda isntall xarray
+  - conda install xarray
   - clone mne multivariate repo (hackathon_mne_mvc by tsbinns)
     run: `sys.path.append(os.path.join(codepath, "hackathon_mne_mvc"))`
   - clone mvc mne fork: https://github.com/vss245/mne-connectivity
