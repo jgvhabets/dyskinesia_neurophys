@@ -248,7 +248,10 @@ if __name__ == '__main__':
     print(f'FULL prep-SCRIPT TOOK: {round((MAIN_stoptime - MAIN_starttime) / 60, 1)} minutes')
 
     mne_starttime = time.time()
-    mvc_results, last_window = run_mne_MVC(list_mneEpochArrays=list_mneEpochArrays)
+    mvc_results, last_window = run_mne_MVC(
+        list_mneEpochArrays=list_mneEpochArrays,
+        
+    )
     # return list of mne_connectivity.base.SpectralConnectivity per epoched-window in list
     mne_stoptime = time.time()
     print(f'MNE SCRIPT TOOK: {round((mne_stoptime - mne_starttime) / 60, 1)} minutes')
