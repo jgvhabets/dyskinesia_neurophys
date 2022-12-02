@@ -87,15 +87,11 @@ def run_mne_MVC(
     # COMPUTE FEATURES, run mne mvc code
     indices = multivar_seed_target_indices(settings["seeds"], settings["targets"])
     
+    mvc_result_list = []  # store results per window in a list
     for n_win, epoch_array in enumerate(list_mneEpochArrays):
         
         print(f'\n...start analysis for window #{n_win}')
         print(f'...array shape: {epoch_array.get_data().shape}')
-        # print(f'total ch_names are: {ch_names}')
-        # print(f'seeds: {settings["seeds"]}')
-        # print(f'targets: {settings["targets"]}')
-        # print('...data in array containing NaNs = '
-        #     f'{isnan(epoch_array.get_data()).any()}')
         
         win_results = multivar_spectral_connectivity_epochs(
             data=epoch_array,
@@ -119,7 +115,8 @@ def run_mne_MVC(
             block_size=settings["block_size"],
             verbose=settings["verbose"]
         )
+        # returns mne_connectivity.base.SpectralConnectivity
+        mvc_result_list.append(win_results)
 
-        print(type(win_results))
-        print(win_results)
+    return mvc_result_list
 

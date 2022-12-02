@@ -35,7 +35,7 @@ if __name__ == '__main__':
     Loads full dataframe per subject, with selected tasks, if
     
     Running on WIN (from repo_folder/code):
-        python -m lfpecog_features.main_run_ftExtraction "012"
+        python -m lfpecog_features.main_run_epochedConnFts "012"
     """
     sub = sys.argv[1]
     
@@ -248,8 +248,14 @@ if __name__ == '__main__':
     print(f'FULL prep-SCRIPT TOOK: {round((MAIN_stoptime - MAIN_starttime) / 60, 1)} minutes')
 
     mne_starttime = time.time()
-    run_mne_MVC(list_mneEpochArrays=list_mneEpochArrays)
+    mvc_results, last_window = run_mne_MVC(list_mneEpochArrays=list_mneEpochArrays)
+    # return list of mne_connectivity.base.SpectralConnectivity per epoched-window in list
     mne_stoptime = time.time()
     print(f'MNE SCRIPT TOOK: {round((mne_stoptime - mne_starttime) / 60, 1)} minutes')
+
+    print(f'NUMBER OF RESULTS WINDOWS {len(mvc_results)}')
+    print(last_window)
+
+ 
 
 
