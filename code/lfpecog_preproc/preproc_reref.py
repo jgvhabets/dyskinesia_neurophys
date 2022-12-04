@@ -417,6 +417,21 @@ def reref_neighb_levels_subtract(
 def reref_two_contacts(
     name1, name2, array_names, data_array
 ):
+    """Create rereferenced signal and name
+    from two original channels
+    
+    Inputs:
+        - name1: name of first orignal channel
+        - name2: name of second original channel
+        - array_names: names of all channels 
+            present in data_array
+        - data_array: 2d array containing all
+            original channels
+    
+    Returns:
+        - rerefd_ch: resulting rereferenced array
+        - rerefd_name: resulting rereferenced ch name
+    """
     index1 = np.where([name1 in n for n in array_names])[0][0]
     data1 = data_array[index1, :]
     index2 = np.where([name2 in n for n in array_names])[0][0]
@@ -510,10 +525,16 @@ def reref_segm_contacts(
         # INTER-LEVEL REREF (always use level above as ref)
         if len(level_chs) > 1:  # if more than one present segment on level
             for c, chname in enumerate(level_chs):
+                # skip contact of no contacts above are available
+                if len(lead.levels_str[ref_level]) == 0: continue
 
                 try:
                     ref_ch = lead.levels_str[ref_level][c]
-                except IndexError:  # if segment directly vertical not present 
+                except IndexError:  # if segment directly vertical not present
+                    # print(f'og channel: {chname}')
+                    # print(f'og channel i: {c}')
+                    # print(f'full string: {lead.levels_str}')
+                    # print(f'ref level: {ref_level}')
                     ref_ch = lead.levels_str[ref_level][0]
                 
                 rerefd_ch, rerefd_name = reref_two_contacts(
