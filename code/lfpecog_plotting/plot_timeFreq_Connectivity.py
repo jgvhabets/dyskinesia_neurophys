@@ -1,12 +1,60 @@
 """Plot time-frequency Plots for connectivity measures"""
 
 # import
-from os.path import join
+from os.path import join, exists
+from os import makedirs
 import numpy as np
 import matplotlib.pyplot as plt
 
 import lfpecog_preproc.preproc_import_scores_annotations as importClin
 import lfpecog_features.feats_spectral_helpers as specHelpers
+from utils.utils_fileManagement import get_project_path
+
+def plot_mvc(
+    sub, plot_data, plot_freqs, plot_times,
+    fs=16, cmap='viridis',
+    to_save=False, save_path=None, fname=None,
+):
+
+    fig, ax = plt.subplots(1, 1, figsize=(16, 8))
+
+    # plot colormap
+    im = ax.imshow(
+        plot_data.T,
+        cmap=cmap, vmin=0, vmax=.6,
+        aspect=.5
+    )
+
+    # plot colorbar
+    fig.colorbar(im, ax=ax)#axes.ravel().tolist())
+
+    # set correct frequencies on Y-axis
+    ytickhop = 8
+    ax.set_ylim(0, plot_data.shape[1])
+    ax.set_yticks(range(plot_data.shape[1])[::ytickhop])
+    ax.set_yticklabels(plot_freqs[::ytickhop])
+    ax.set_ylabel('Frequency (Hz)', size=fs + 2)
+    # set correct times on X-axis
+    xtickhop = 7
+    xticklabs = np.array(plot_times[::xtickhop], dtype=float)
+    ax.set_xticks(np.linspace(0, plot_data.shape[0] - 1, len(xticklabs)))
+    ax.set_xticklabels(np.around(xticklabs / 60, 1))
+    ax.set_xlabel('Time after LDopa (minutes)', size=fs + 2)
+
+    ax.set_title(
+        f'sub-{sub}  -  abs. imaginary-Coherence (multivariate)',
+        size=fs + 6)
+
+    plt.tick_params(axis='both', labelsize=fs, size=fs,)
+    plt.tight_layout()
+    
+    if to_save:
+        if not exists(save_path): makedirs(save_path)
+
+        plt.savefig(join(save_path, fname),
+                    dpi=150, facecolor='w',)
+
+    plt.close()
 
 
 def plot_timeFreq_Coherence(
