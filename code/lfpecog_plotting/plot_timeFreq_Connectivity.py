@@ -15,6 +15,7 @@ def plot_mvc(
     fs=16, cmap='viridis',
     to_save=False, save_path=None, fname=None,
 ):
+    ### TODO: INSERT 3 EMPTY ROWS ON TIME_JUMP MOMENTS TO INSERT GRAY BAR
 
     fig, ax = plt.subplots(1, 1, figsize=(16, 8))
 
@@ -35,7 +36,7 @@ def plot_mvc(
     ax.set_yticklabels(plot_freqs[::ytickhop])
     ax.set_ylabel('Frequency (Hz)', size=fs + 2)
     # set correct times on X-axis
-    xtickhop = 7
+    xtickhop = int(len(plot_times) / 9)
     xticklabs = np.array(plot_times[::xtickhop], dtype=float)
     ax.set_xticks(np.linspace(0, plot_data.shape[0] - 1, len(xticklabs)))
     ax.set_xticklabels(np.around(xticklabs / 60, 1))

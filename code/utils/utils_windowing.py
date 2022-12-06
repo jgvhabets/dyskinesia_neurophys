@@ -92,15 +92,16 @@ def get_windows(
     # remove channels with too many NaNs to prevent deletion of all data
     # this happens due to different missing channels in different recordings
     if remove_nan_timerows:
-        good_cols = [sum(isna(data[:, i])) < 10000 for i in range(data.shape[1])]
-        bad_cols = [sum(isna(data[:, i])) > 10000 for i in range(data.shape[1])]
+        max_nan_samples = 30 * fs
+        good_cols = [sum(isna(data[:, i])) < max_nan_samples for i in range(data.shape[1])]
+        bad_cols = [sum(isna(data[:, i])) > max_nan_samples for i in range(data.shape[1])]
         good_col_names = list(compress(arr_keys, good_cols))
         bad_col_names = list(compress(arr_keys, bad_cols))
 
         print([f'{arr_keys[i]}: {sum(isna(data[:, i]))} NaNs'
                for i in range(data.shape[1])])
         print(f'\n\n\tDELETED bad cols: {bad_col_names} due to >> NaNs')
-        print(f'\n\n\tINCLUDED good cols: {good_col_names} due to >> NaNs')
+        print(f'\n\n\tINCLUDED good cols: {good_col_names}')
 
         data = data[:, good_cols]
         arr_keys = list(compress(arr_keys, good_cols))

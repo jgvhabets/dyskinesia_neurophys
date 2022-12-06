@@ -148,17 +148,14 @@ if __name__ == '__main__':
                     float_convert=True,
                     data_as_df=data_as_df,
                 )  # data consists full unwindowed data
-                endtime = time.time()
-
-                print(f'\tcreating took {endtime - starttime} seconds')    
                 
-                print('...included', sub, task)
+                print('...data loaded')
 
                 # TODO: get rid of sub task subclasses
                 
                 mergedData_class = getattr(data, task)
                 mergedData_class = getattr(mergedData_class, f'sub{sub}')
-                
+                print('...start windowing')
                 windows_class = get_windows(
                     data=mergedData_class.data_arr,
                     fs=mergedData_class.fs,
@@ -168,6 +165,8 @@ if __name__ == '__main__':
                     return_as_class=True,
                 )
                 print('...windowed the data into windowedData() Class')
+                endtime = time.time()
+                print(f'\tcreating took {round(endtime - starttime)} seconds')    
 
                 save_class_pickle(
                     class_to_save=windows_class,
