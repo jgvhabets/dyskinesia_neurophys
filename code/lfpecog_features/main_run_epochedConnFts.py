@@ -60,8 +60,8 @@ if __name__ == '__main__':
             f'sub-{sub}',
             task,
         )
-        epoch_dirname = f'list_of_epochs_{int(epochLen_sec * 1000)}ms'
-        epoch_path = join(windowed_class_path, epoch_dirname)
+        # epoch_dirname = f'list_of_epochs_{int(epochLen_sec * 1000)}ms'
+        # epoch_path = join(windowed_class_path, epoch_dirname)
 
         pickled_epochs_path = join(
             windowed_class_path,
@@ -119,20 +119,20 @@ if __name__ == '__main__':
             # pickle name of windowed data class
             pickle_fname = f'{sub}_windows_{task}_{data_version}'
             # load data if windowed data class exists
-            if exists(windowed_class_path):
+            if exists(join(windowed_class_path, pickle_fname)):
                 
-                if f'{pickle_fname}.P' in listdir(windowed_class_path):
+                # if f'{pickle_fname}.P' in listdir(windowed_class_path):
 
-                    print(f'...load existing pickled windowed class for sub-{sub}')
-                    starttime = time.time()
-                    
-                    from utils.utils_windowing import windowedData
-                    windows_class = load_class_pickle(
-                        join(windowed_class_path, f'{pickle_fname}.P')
-                    )
-                    endtime = time.time()
+                print(f'...load existing pickled windowed class for sub-{sub}')
+                starttime = time.time()
+                
+                from utils.utils_windowing import windowedData
+                windows_class = load_class_pickle(
+                    join(windowed_class_path, f'{pickle_fname}.P')
+                )
+                endtime = time.time()
 
-                    print(f'\tloading took {endtime - starttime} seconds')  
+                print(f'\tloading took {endtime - starttime} seconds')  
             # create windowed data class if it doesnt exist yet
             else:
                 
@@ -177,14 +177,16 @@ if __name__ == '__main__':
                 )
             
             # create epochs based on windowed data class (loaded or created)
-            makedirs(epoch_path)
-            print('...create list of epochs')
+            # makedirs(epoch_path)
+            # print('...create list of epochs')
+            
             from utils.utils_windowing import window_to_epochs
             
             epoched_windows_list = []
             # define fs and ch_names in variables for mne transform
             fs = windows_class.fs
             ch_names = windows_class.keys
+            window_times = windows_class.win_starttimes
 
             for n, win in enumerate(windows_class.data):
 
@@ -229,10 +231,10 @@ if __name__ == '__main__':
             print(f'MNE transform took: {mne_stoptime - mne_starttime} seconds')
             
             from utils.utils_pickle_mne import pickle_EpochedArrays
-            # add window_starttimes as attr
 
             class_mne_epochs = pickle_EpochedArrays(
-                list_mne_objects = list_mneEpochArrays
+                list_mne_objects=list_mneEpochArrays,
+                window_times=window_times,
             )
             save_class_pickle(
                 class_to_save=class_mne_epochs,
@@ -272,7 +274,7 @@ if __name__ == '__main__':
         sub=sub,
         plot_data=mvc_results_arr,
         plot_freqs=mvc_results[0].freqs,
-        plot_times=windows_class.win_starttimes,
+        plot_times=class_mne_epochs.window_times,
         fs=16,
         cmap='viridis',
         to_save=True,

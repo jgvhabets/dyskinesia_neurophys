@@ -82,6 +82,8 @@ def run_mne_MVC(
         )
     )]
 
+    print(f'\n\n\tSEED indices: {seed_idx}\n\tTARGET indices: {target_idx}')
+
     print('...settings are set')
 
     # COMPUTE FEATURES, run mne mvc code
@@ -113,7 +115,7 @@ def run_mne_MVC(
             gc_n_lags=settings["gc_n_lags"],
             n_jobs=settings["n_jobs"],
             block_size=settings["block_size"],
-            verbose=settings["verbose"]
+            verbose=False,  # settings["verbose"]
         )
         # returns mne_connectivity.base.SpectralConnectivity
         mvc_result_list.append(win_results)

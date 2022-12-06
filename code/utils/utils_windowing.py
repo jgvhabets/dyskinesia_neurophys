@@ -93,14 +93,18 @@ def get_windows(
     # this happens due to different missing channels in different recordings
     if remove_nan_timerows:
         good_cols = [sum(isna(data[:, i])) < 10000 for i in range(data.shape[1])]
-        # print(good_cols)
-        
-        # print(data.shape)
-        # print(len(arr_keys))
-        # print(len(good_cols))
+        bad_cols = [sum(isna(data[:, i])) > 10000 for i in range(data.shape[1])]
+        good_col_names = list(compress(arr_keys, good_cols))
+        bad_col_names = list(compress(arr_keys, bad_cols))
+
+        print([f'{arr_keys[i]}: {sum(isna(data[:, i]))} NaNs'
+               for i in range(data.shape[1])])
+        print(f'\n\n\tDELETED bad cols: {bad_col_names} due to >> NaNs')
+        print(f'\n\n\tINCLUDED good cols: {good_col_names} due to >> NaNs')
+
         data = data[:, good_cols]
         arr_keys = list(compress(arr_keys, good_cols))
-
+        
 
     nWin = int(fs * winLen_sec)  # n samples within a full window
 
@@ -129,13 +133,11 @@ def get_windows(
                 win0_sec < times, times < (win0_sec + winLen_sec)
             )
             wintemp = data[sel]
-            print(win0_sec)
-            print(wintemp.shape)
-            
+                        
             if remove_nan_timerows:
                 nansel = isna(wintemp).any(axis=1)
                 wintemp = wintemp[~nansel]
-                print('after nan remove', wintemp.shape)
+                # print('after nan remove', wintemp.shape)
 
         ### INCLUDE FILTERING ON PRESENT DATA
         # (skip window if less data present than defined threshold)

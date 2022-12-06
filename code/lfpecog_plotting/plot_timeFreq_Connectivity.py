@@ -51,7 +51,7 @@ def plot_mvc(
     if to_save:
         if not exists(save_path): makedirs(save_path)
 
-        plt.savefig(join(save_path, fname),
+        plt.savefig(join(save_path, f'{fname}.png'),
                     dpi=150, facecolor='w',)
 
     plt.close()

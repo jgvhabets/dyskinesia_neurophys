@@ -18,6 +18,7 @@ class pickle_EpochedArrays:
 
     mne_object: Any = None
     list_mne_objects: list = field(default_factory=list)
+    window_times: list = field(default_factory=list)
     
     def __post_init__(self,):
 
