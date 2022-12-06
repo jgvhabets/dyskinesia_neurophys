@@ -44,7 +44,7 @@ if __name__ == '__main__':
 
     # variables (set into cfg.json later)
     tasks = ['rest']
-    data_version = 'v3.0'
+    data_version = 'v3.1'
     winLen_sec = 60
     part_winOverlap = 0.5
     mne_format = True
@@ -278,7 +278,7 @@ if __name__ == '__main__':
         to_save=True,
         save_path=join(get_project_path('figures'),
                     'ft_exploration', 'rest', 'mvc'),
-        fname=f'{sub}_mvc_absICOH_{task}_'
+        fname=f'{sub}_mvc_absICOH_{task}_{data_version}'
     )
  
 

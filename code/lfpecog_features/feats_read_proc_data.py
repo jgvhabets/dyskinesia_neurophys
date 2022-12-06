@@ -225,6 +225,10 @@ def load_stored_merged_data(
 
     print(f'-> loading sub {sub} data from {path}')
     # load data from npy array
+    if len(files) == 0:
+        raise ValueError('No merged data files found for '
+            f'sub {sub} in data version {data_version}')
+    
     data_file = [f for f in files if 'data' in f][0]
     dat_arr = np.load(os.path.join(path, data_file),
                       allow_pickle=True,)
@@ -243,7 +247,6 @@ def load_stored_merged_data(
     # extract time for data array
     i_time = np.where(col_names == 'dopa_time')[0][0]
     time_arr = dat_arr[:, i_time]
-    print(f'extracted times: {time_arr[:5]}')
     
     fs_string = data_file.split('Hz')[0]
     fs = int(fs_string.split('_')[-1])
@@ -265,7 +268,7 @@ def load_stored_merged_data(
         return sub_df
     
     else:
-        print('--> ...return data as np.array, fs, col_names, and indices')
+
         return dat_arr, fs, col_names, time_arr
 
 

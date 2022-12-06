@@ -83,13 +83,23 @@ def get_windows(
             
         times_col = np.where(col_names == 'dopa_time')[0][0]
         times = data[:, times_col]
-        print('times :10', times[:10])
         # times = time_index   # CURRENTLY NUMERICAL INDEX !!!
         arr_keys = col_names
 
     else:
         raise ValueError('data inserted in get_windows() has wrong datatype')
-
+    
+    # remove channels with too many NaNs to prevent deletion of all data
+    # this happens due to different missing channels in different recordings
+    if remove_nan_timerows:
+        good_cols = [sum(isna(data[:, i])) < 10000 for i in range(data.shape[1])]
+        # print(good_cols)
+        
+        # print(data.shape)
+        # print(len(arr_keys))
+        # print(len(good_cols))
+        data = data[:, good_cols]
+        arr_keys = list(compress(arr_keys, good_cols))
 
 
     nWin = int(fs * winLen_sec)  # n samples within a full window
