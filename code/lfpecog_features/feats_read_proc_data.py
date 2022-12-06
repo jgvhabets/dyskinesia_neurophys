@@ -136,12 +136,11 @@ class get_mergedData_perTask:
             if not self.return_as_df:  # unpack tuple if necessary
                 dat_arr, fs, col_names, time_arr = df
             
-            # SELECT ON TASK
-            if self.task == 'rest':  # select only rest-data
+            # SELECT ON TASK (if returned as df)
+            if self.return_as_df:
                 
-                if self.return_as_df:
-                    sel = df['task'] == 'rest'
-                    df = df[sel]
+                sel = df['task'] == self.task
+                df = df[sel]
                 # for non-df return this happens in class-function
 
             # Add ACC-selection here
@@ -183,9 +182,10 @@ class subData_asArrays:
     def __post_init__(self,):
 
         if len(self.task_sel) > 1:
-
+            # find task column
             i_task = np.where(self.col_names == 'task')[0][0]
-            sel = self.data_arr[:, i_task] != 'rest'
+            # select on performed task
+            sel = self.data_arr[:, i_task] == self.task_sel
             self.data_arr = self.data_arr[sel]
             self.time_index = self.time_index[sel]
         
@@ -230,15 +230,20 @@ def load_stored_merged_data(
                       allow_pickle=True,)
     print('\t...data loaded')
 
-    # load indices from npy array
-    index_file = [f for f in files if 'timeIndex' in f][0]
-    time_arr = np.load(os.path.join(path, index_file),
-                       allow_pickle=True,)
+    # # load indices from npy array
+    # index_file = [f for f in files if 'timeIndex' in f][0]
+    # time_arr = np.load(os.path.join(path, index_file),
+    #                    allow_pickle=True,)
 
     # load column-names from txt
     names_file = [f for f in files if 'columnNames' in f][0]
     col_names = np.loadtxt(os.path.join(path, names_file),
                            dtype=str, delimiter=',')
+    
+    # extract time for data array
+    i_time = np.where(col_names == 'dopa_time')[0][0]
+    time_arr = dat_arr[:, i_time]
+    print(f'extracted times: {time_arr[:5]}')
     
     fs_string = data_file.split('Hz')[0]
     fs = int(fs_string.split('_')[-1])
@@ -363,10 +368,11 @@ def create_dopa_timed_array(
     Extract corresponding Fs, includes behavioral task
     label per data row.
 
-    dType (str): specific datatype to handle (acc, lfp, ecog)
-    allNames (list): all name-files corresponding to subj
-    allData (list): all data-files corresponding to subj
-    sub_proc_path (str): path where data/name files are stored
+    Input:
+        - dType (str): specific datatype to handle (acc, lfp, ecog)
+        - allNames (list): all name-files corresponding to subj
+        - allData (list): all data-files corresponding to subj
+        - sub_proc_path (str): path where data/name files are stored
     """
     nameFiles = [f for f in allNames if dType in f]
     dataFiles = [f for f in allData if dType in f]
@@ -377,7 +383,7 @@ def create_dopa_timed_array(
         nameFile = [f for f in nameFiles if rec in f][0]
         names = list(pd.read_csv(os.path.join(
             sub_proc_path, nameFile
-        )))[1:]  # exclude run_time
+        )))[1:]  # exclude run_time  # TODO. hardcoded -> change
 
         task = datFile.split('_')[2]
         if 'rest' in task.lower(): task = 'rest'
@@ -396,7 +402,7 @@ def create_dopa_timed_array(
                 columns=names
             )
             data_out['task'] = [task] * data_out.shape[0]
-
+            
         
         else:
 
@@ -424,7 +430,7 @@ def merge_ephys_sources(
 ):
     sources = [
         s for s in subdat.dtypes if np.logical_or(
-            'ecog' in s, 'lfp' in s
+            'ecog' in s.lower(), 'lfp' in s.lower()
         )
     ]
     print('... merging dataframes from different data-sources')

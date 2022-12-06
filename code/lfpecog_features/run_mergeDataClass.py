@@ -1,5 +1,3 @@
-
-
 """
 Run Merging data frames
 """
@@ -92,6 +90,7 @@ if __name__ == '__main__':
     assert len(sub)==3, print('WRONG INPUT: '
         f'subject code (1st variable: {sub}) incorrect e.g.:"001"'
     )
+
     data_version = sys.argv[2]
     assert data_version[0]=='v', print('WRONG INPUT: '
         f'data_version (2nd variable: {data_version}) incorrect, e.g.: "v0.1"'
@@ -104,7 +103,6 @@ if __name__ == '__main__':
     else: to_save = True
 
     
-    
     ### create dataclass with data sorted per source (lfp-L/R / ecog / acc-L/R)
     data = subjectData(
         sub=sub,
@@ -115,12 +113,20 @@ if __name__ == '__main__':
     ### Merge dataframes of different data-groups
     merged_df, fs = read_data_funcs.merge_ephys_sources(data)
 
+    from pandas import isna
+    print('\n\tCHECK MISSINGS', merged_df.shape)
+    for col in list(merged_df.keys()):
+        sumnan = sum(isna(merged_df[col]))
+        print(f'{col}: {sumnan} nans')
+    
+    
     ### Optionally add Accelerometer
     if incl_acc:
         accStates = run_tap_detect.runTapDetection(data)
         merged_df = add_moveStates(merged_df, accStates)
 
-    ### Store dataframe (in data.npy, index.npy, columnNames.csv)
+    
+    ### Store dataframe (in data.npy, index.npy, columnNames.csv)    
     if to_save:
         save_dfs(
             df=merged_df,

@@ -16,7 +16,6 @@ def get_windows(
     data,
     fs,
     col_names = None,
-    time_index = None,
     winLen_sec=180,
     part_winOverlap=.5,
     min_winPart_present=.66,
@@ -84,6 +83,7 @@ def get_windows(
             
         times_col = np.where(col_names == 'dopa_time')[0][0]
         times = data[:, times_col]
+        print('times :10', times[:10])
         # times = time_index   # CURRENTLY NUMERICAL INDEX !!!
         arr_keys = col_names
 
@@ -119,10 +119,13 @@ def get_windows(
                 win0_sec < times, times < (win0_sec + winLen_sec)
             )
             wintemp = data[sel]
+            print(win0_sec)
+            print(wintemp.shape)
             
             if remove_nan_timerows:
                 nansel = isna(wintemp).any(axis=1)
                 wintemp = wintemp[~nansel]
+                print('after nan remove', wintemp.shape)
 
         ### INCLUDE FILTERING ON PRESENT DATA
         # (skip window if less data present than defined threshold)

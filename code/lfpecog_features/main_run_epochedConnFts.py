@@ -14,7 +14,7 @@ import time
 from os.path import join, exists
 from os import listdir, makedirs
 import csv
-from numpy import save, load
+from numpy import save, load, array
 
 
 # import own functions
@@ -35,6 +35,7 @@ if __name__ == '__main__':
     Loads full dataframe per subject, with selected tasks, if
     
     Running on WIN (from repo_folder/code):
+        (activate conda environment with custom mne_connectivity)
         python -m lfpecog_features.main_run_epochedConnFts "012"
     """
     sub = sys.argv[1]
@@ -67,8 +68,8 @@ if __name__ == '__main__':
             f'{sub}_mneEpochs_{task}_{data_version}.P'
         )
         
-        # define list (final mne-input) here, for if-loop later
-        list_mneEpochArrays = []  # if not defined in beginning, defined at end
+        # # define list (final mne-input) here, for if-loop later
+        # list_mneEpochArrays = []  # if not defined in beginning, defined at end
 
         # load mne-Epochs saved as pickle Class
         if exists(pickled_epochs_path):
@@ -83,33 +84,33 @@ if __name__ == '__main__':
             print(f'...loaded list with {len(list_mneEpochArrays)}'
                   ' mneEpochedArrays is loaded')
 
-        # load aimed epochs if they exist
-        elif exists(epoch_path):
-            # TODO: CONSIDER THIS WHOLE epochClass creation in seprate script
+        # # load aimed epochs if they exist
+        # elif exists(epoch_path):
+        #     # TODO: CONSIDER THIS WHOLE epochClass creation in seprate script
 
-            print('...load pickled list of epochs')
-            epoched_windows_list = []
+        #     print('...load pickled list of epochs')
+        #     epoched_windows_list = []
 
-            arr_names = [f for f in listdir(epoch_path) if f[-3:] == 'npy']
-            arr_names = sorted(arr_names)
+        #     arr_names = [f for f in listdir(epoch_path) if f[-3:] == 'npy']
+        #     arr_names = sorted(arr_names)
 
-            for f_arr in arr_names:
-                # print('...load', f_arr)
-                epochs_win = load(join(epoch_path, f_arr), allow_pickle=True)
-                epoched_windows_list.append(epochs_win)
+        #     for f_arr in arr_names:
+        #         # print('...load', f_arr)
+        #         epochs_win = load(join(epoch_path, f_arr), allow_pickle=True)
+        #         epoched_windows_list.append(epochs_win)
             
-            print(f'...loaded list with {len(epoched_windows_list)} epoched windows')
+        #     print(f'...loaded list with {len(epoched_windows_list)} epoched windows')
             
-            # load fs from stored arrays
-            hz_string = f_arr.split('Hz')[0]
-            fs = int(hz_string.split('_')[-1])
-            # load ch_names of stored arrays
-            csv_content = []
-            with open(join(epoch_path, 'ch_names.csv'),) as f:
-                file = csv.reader(f, delimiter=',')
-                for r in file:
-                    csv_content.append(r)
-            ch_names = csv_content[0]
+        #     # load fs from stored arrays
+        #     hz_string = f_arr.split('Hz')[0]
+        #     fs = int(hz_string.split('_')[-1])
+        #     # load ch_names of stored arrays
+        #     csv_content = []
+        #     with open(join(epoch_path, 'ch_names.csv'),) as f:
+        #         file = csv.reader(f, delimiter=',')
+        #         for r in file:
+        #             csv_content.append(r)
+        #     ch_names = csv_content[0]
 
 
         # if aimed epochs are not existing yet
@@ -196,30 +197,26 @@ if __name__ == '__main__':
                 )
                 epoched_windows_list.append(epochs)
                 
-                # save array as npy file
-                save(
-                    join(
-                        epoch_path,
-                        f'epoched_win{str(n).zfill(3)}_{windows_class.fs}Hz.npy'
-                    ),  # save with three digit padding (for later sorting on name)
-                    epochs
-                )
+                # # save array as npy file
+                # save(
+                #     join(
+                #         epoch_path,
+                #         f'epoched_win{str(n).zfill(3)}_{windows_class.fs}Hz.npy'
+                #     ),  # save with three digit padding (for later sorting on name)
+                #     epochs
+                # )
                 
-                with open(join(epoch_path, 'ch_names.csv'), 'w') as f:
-                    write = csv.writer(f)
-                    write.writerow(windows_class.keys)
-                    f.close()
+                # with open(join(epoch_path, 'ch_names.csv'), 'w') as f:
+                #     write = csv.writer(f)
+                #     write.writerow(windows_class.keys)
+                #     f.close()
                 
-                with open(join(epoch_path, 'window_times.csv'), 'w') as f:
-                    write = csv.writer(f)
-                    write.writerow(windows_class.win_starttimes)
-                    f.close()
+                # with open(join(epoch_path, 'window_times.csv'), 'w') as f:
+                #     write = csv.writer(f)
+                #     write.writerow(windows_class.win_starttimes)
+                #     f.close()
         
-        # transform epoched array into mne-EpochedArray
-        
-        # only perform when mne epochs are not already loaded as pickle
-        if len(list_mneEpochArrays) == 0:
-            
+            # transform epoched array into mne-EpochedArray
             from utils.utils_windowing import create_mne_epochs
             mne_starttime = time.time()
             print(f'start MNE transform with # {len(epoched_windows_list)}')
@@ -232,6 +229,7 @@ if __name__ == '__main__':
             print(f'MNE transform took: {mne_stoptime - mne_starttime} seconds')
             
             from utils.utils_pickle_mne import pickle_EpochedArrays
+            # add window_starttimes as attr
 
             class_mne_epochs = pickle_EpochedArrays(
                 list_mne_objects = list_mneEpochArrays
@@ -248,17 +246,40 @@ if __name__ == '__main__':
     print(f'FULL prep-SCRIPT TOOK: {round((MAIN_stoptime - MAIN_starttime) / 60, 1)} minutes')
 
     mne_starttime = time.time()
-    mvc_results, last_window = run_mne_MVC(
-        list_mneEpochArrays=list_mneEpochArrays,
-        
+    mvc_results = run_mne_MVC(
+        list_mneEpochArrays=list_mneEpochArrays
     )
     # return list of mne_connectivity.base.SpectralConnectivity per epoched-window in list
     mne_stoptime = time.time()
     print(f'MNE SCRIPT TOOK: {round((mne_stoptime - mne_starttime) / 60, 1)} minutes')
 
     print(f'NUMBER OF RESULTS WINDOWS {len(mvc_results)}')
-    print(last_window)
 
+
+
+    ### PLOT RESULTS ###
+    from lfpecog_plotting.plot_timeFreq_Connectivity import plot_mvc
+    # make 2d array of mvc results of several windows
+    mvc_results_arr = array([
+        mvc_results[i].get_data()[0]
+        for i in range(len(mvc_results))
+    ])
+    # take absolute imag coh
+    mvc_results_arr = abs(mvc_results_arr)
+
+    # Run Plotting
+    plot_mvc(
+        sub=sub,
+        plot_data=mvc_results_arr,
+        plot_freqs=mvc_results[0].freqs,
+        plot_times=windows_class.win_starttimes,
+        fs=16,
+        cmap='viridis',
+        to_save=True,
+        save_path=join(get_project_path('figures'),
+                    'ft_exploration', 'rest', 'mvc'),
+        fname=f'{sub}_mvc_absICOH_{task}_'
+    )
  
 
 
