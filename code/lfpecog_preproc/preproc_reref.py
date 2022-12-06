@@ -190,6 +190,7 @@ def reref_segm_levels(
     ephys_rowNames: list,
     ephys_type: str,
     report='',
+    alternative_stn_naming: bool = True,
 ):
     """
     Function to aggregate/sum all segmented electrode contacts
@@ -451,6 +452,7 @@ def reref_segm_contacts(
     ephys_rowNames: list,
     ephys_type: str,
     report: str = '',
+    alternative_stn_naming: bool = False,
 ):
     """
     Function for local spatial specific rereferencing
@@ -462,8 +464,9 @@ def reref_segm_contacts(
         - lead: class with info of segmented contacts
         per level
         - timerowNames: list with 1 or 2 time col-names
-        - report_file (str -> path): file incl directory where rereferencing
-        notes are written to
+        - report (str): string to put in report file
+        - alternative_stn_naming: if True relative channel
+            -rereferencing coding is used
 
     Returns:
         - reref_data (array): rereferenced signals
@@ -477,33 +480,38 @@ def reref_segm_contacts(
             'inter- AND intra-level (segment or ring)\n\n'
             f'present segment per level: {lead.levels_str}\n'
         )
+    
+    if alternative_stn_naming: alt_name = True
+    else: alt_name = False
 
     print(f'\n SEGMENTED REREFFF {lead.name} ({lead.side})')
 
     array_names = time_rowNames + ephys_rowNames
-    # every contact gets it rereferenced output
-    # reref_data = nan_array(list(data.shape))
 
     # START reref data with time-rows
     if len(data.shape) == 3:
         reref_data = data[
-            :, :len(time_rowNames), :]  # copy time row(s)  [:, :len(time_rowNames), :]
+            :, :len(time_rowNames), :]
 
     if len(data.shape) == 2:
         reref_data = data[
-            :len(time_rowNames), :]  # copy time row(s)   [:len(time_rowNames), :]
+            :len(time_rowNames), :]
 
     reref_names = time_rowNames
+    abc = ['a', 'b', 'c']  # helper strings for alternative naming
 
     for ind_l, l in enumerate(lead.levels_str.keys()):  # loop over level
-
+        print(ind_l, l)
         level_chs = lead.levels_str[l]  # channelnames in row
+        
+        if report: report += (f'\nRereferencing level {l}, containing {level_chs}')
+        
         # skip if not consisting any channel
         if len(level_chs) == 0: continue
 
         # for most upper level, take lowest level to reref with
         if ind_l == (len(lead.levels_str) - 1): ref_level = 0
-        else: ref_level = l + 1  # take one level higher as level to reref with
+        else: ref_level = ind_l + 1  # take one level higher as level to reref with
 
         # INTRA-LEVEL REREF
         if len(level_chs) > 1:  # if more than one present segment on level
@@ -511,16 +519,25 @@ def reref_segm_contacts(
             rerefd_ch, rerefd_name = reref_two_contacts(
                 level_chs[0], level_chs[1], array_names, data)
             reref_data = np.vstack([reref_data, rerefd_ch])
+            if alt_name: rerefd_name = f'{level_chs[0][:5]}_{l}a_LAT'
             reref_names.append(rerefd_name)
+
+            if report: report += (f'\n\t{level_chs[0]} vs {level_chs[1]}'
+                f' --> {rerefd_name}')
  
-        if len(level_chs) > 2:  # if three channels avail on level
-            for name1, name2 in zip(
+        if len(level_chs) == 3:  # if three channels avail on level
+            for rep, (name1, name2) in enumerate(zip(
                 level_chs[1:], [level_chs[2], level_chs[0]]
-            ):  # reref second vs third, and third vs first
+            )):  # reref second vs third, and third vs first
                 rerefd_ch, rerefd_name = reref_two_contacts(
                     name1, name2, array_names, data)
                 reref_data = np.vstack([reref_data, rerefd_ch])
+                if alt_name: rerefd_name = (
+                    f'{level_chs[0][:5]}_{l}{abc[rep + 1]}_LAT')
                 reref_names.append(rerefd_name)
+
+                if report: report += (f'\n\t{name1} vs '
+                    f'{name2} --> {rerefd_name}')
 
         # INTER-LEVEL REREF (always use level above as ref)
         if len(level_chs) > 1:  # if more than one present segment on level
@@ -531,27 +548,39 @@ def reref_segm_contacts(
                 try:
                     ref_ch = lead.levels_str[ref_level][c]
                 except IndexError:  # if segment directly vertical not present
-                    # print(f'og channel: {chname}')
-                    # print(f'og channel i: {c}')
-                    # print(f'full string: {lead.levels_str}')
-                    # print(f'ref level: {ref_level}')
                     ref_ch = lead.levels_str[ref_level][0]
                 
                 rerefd_ch, rerefd_name = reref_two_contacts(
                     chname, ref_ch, array_names, data)
                 reref_data = np.vstack([reref_data, rerefd_ch])
+                if alt_name: rerefd_name = (
+                    f'{level_chs[0][:5]}_{l}{abc[c]}_SUPa')
                 reref_names.append(rerefd_name)
+
+                if report: report += (f'\n\t{chname} vs '
+                    f'{ref_ch} --> {rerefd_name}')
         
         elif len(level_chs) == 1:
+            # if only one channel is present on current level, can be
+            # lower or upper ring, or segmented level with 2 missing channels
+            # lower ring is reref'd against all (three) upper segments
+            # upper ring against lower ring, and single-segment against
+            # one segment above
 
             chname = level_chs[0]
             
-            for ref_ch in lead.levels_str[ref_level]:
+            for rep, ref_ch in enumerate(lead.levels_str[ref_level]):
+                if rep > 0 and ind_l > 0: continue  # repeat only lowest ring with upper segments
 
                 rerefd_ch, rerefd_name = reref_two_contacts(
                     chname, ref_ch, array_names, data)
                 reref_data = np.vstack([reref_data, rerefd_ch])
+                if alt_name: rerefd_name = (
+                    f'{level_chs[0][:5]}_{l}a_SUP{abc[rep]}')
                 reref_names.append(rerefd_name)
+
+                if report: report += (f'\n\t{chname} vs '
+                    f'{ref_ch} --> {rerefd_name}')
 
             
     if report:
@@ -570,6 +599,7 @@ def main_rereferencing(
     runInfo: Any,
     reref_setup: dict,
     reportPath: str='',
+    alternative_stn_naming: bool = False,
 ):
     """
     Function to execute rereferencing of LFP and ECoG data.
@@ -581,9 +611,13 @@ def main_rereferencing(
         - runInfo: class containing runInfolead_type:
             abbreviation for lead given in
             data class RunInfo (e.g. BSX, MTSS)
-        - lfp_reref: indicates string-name of reref-
-            method: taking together one level, or re-
-            referencing single segmented contacts
+        - reref_setup: indicates reref-method for
+            both lfp and ecog
+        - reportPath: dir of report file
+        - alternative_stn_naming: if True, only the level
+            and either parallel or superior is used for
+            naming. This is introduced to prevent large
+            missing data blocks (and NaNs) in the mne mvc
     
     Returns:
         - datareref: 3d array of rereferenced data of
@@ -652,10 +686,6 @@ def main_rereferencing(
 
             lead_type = runInfo.lead_type
             lead = Segm_Lead_Setup(lead_type, side, chNameDict[group])
-            # print(lead.levels_num)
-            # print(lead.levels_str)
-            # print(dataDict[group].shape, time_rowNames, ephys_rowNames)
-            # break
             
             if reref_setup[ephys_type] == 'levels':
                 reref_function = reref_segm_levels
@@ -669,6 +699,7 @@ def main_rereferencing(
                 ephys_rowNames=ephys_rowNames,
                 report=report,
                 ephys_type='LFP',
+                alternative_stn_naming=reref_setup['LFP_alt_naming'],
             )
 
         rerefData[group], rerefNames[group], report = removeNaNchannels(
