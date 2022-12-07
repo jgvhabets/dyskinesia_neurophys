@@ -54,6 +54,7 @@ def plot_mvc(
 
         plt.savefig(join(save_path, f'{fname}.png'),
                     dpi=150, facecolor='w',)
+        print(f'...Figure {fname} saved to {save_path}')
 
     plt.close()
 
