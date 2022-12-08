@@ -133,7 +133,8 @@ class get_mergedData_perTask:
                 float_convert=self.float_convert,
                 return_as_df=self.return_as_df,
                 )
-            if not self.return_as_df:  # unpack tuple if necessary
+            # unpack tuple if not returning as df
+            if not self.return_as_df:
                 dat_arr, fs, col_names, time_arr = df
             
             # SELECT ON TASK (if returned as df)
@@ -143,9 +144,6 @@ class get_mergedData_perTask:
                 df = df[sel]
                 # for non-df return this happens in class-function
 
-            # Add ACC-selection here
-            # if self.acc_filter in []:
-                # df = filter_df_on_ACC(df, self.acc_filter)
             
             # SET AS ATTRIBUTE (dataframe or class)
             if self.return_as_df:
@@ -168,7 +166,7 @@ class get_mergedData_perTask:
                     )
                 )
                 
-            print(f'{sub} FINISHED')
+            print(f'...data merged for sub-{sub}')
 
 
 @dataclass(init=True, repr=True, )
@@ -223,33 +221,43 @@ def load_stored_merged_data(
     files = os.listdir(path)
     files = [f for f in files if sub in f]
 
-    print(f'-> loading sub {sub} data from {path}')
-    # load data from npy array
-    if len(files) == 0:
-        raise ValueError('No merged data files found for '
-            f'sub {sub} in data version {data_version}')
-    
-    data_file = [f for f in files if 'data' in f][0]
-    dat_arr = np.load(os.path.join(path, data_file),
-                      allow_pickle=True,)
-    print('\t...data loaded')
+    print(f'-> loading stored merged data for sub {sub} data\n\tfrom {path}')
 
-    # # load indices from npy array
-    # index_file = [f for f in files if 'timeIndex' in f][0]
-    # time_arr = np.load(os.path.join(path, index_file),
-    #                    allow_pickle=True,)
+    # load pickle if present
+    if f'{sub}_mergedDataClass_{data_version}.P' in files:
+        from utils.utils_fileManagement import mergedData, load_class_pickle
+        print('...load pickled mergedData Class')
+        merged_data = load_class_pickle(os.path.join(
+            path, f'{sub}_mergedDataClass_{data_version}.P'
+        ))
+        dat_arr = merged_data.data_array
+        fs = merged_data.fs
+        col_names = merged_data.data_colnames
+        time_arr = np.array(merged_data.data_times)
 
-    # load column-names from txt
-    names_file = [f for f in files if 'columnNames' in f][0]
-    col_names = np.loadtxt(os.path.join(path, names_file),
-                           dtype=str, delimiter=',')
-    
-    # extract time for data array
-    i_time = np.where(col_names == 'dopa_time')[0][0]
-    time_arr = dat_arr[:, i_time]
-    
-    fs_string = data_file.split('Hz')[0]
-    fs = int(fs_string.split('_')[-1])
+
+    else:
+        # load DATA from npy array
+        if len(files) == 0:
+            raise ValueError('No merged data files found for '
+                f'sub {sub} in data version {data_version}')
+        
+        data_file = [f for f in files if 'data' in f][0]
+        dat_arr = np.load(os.path.join(path, data_file),
+                        allow_pickle=True,)
+        print('\t...data loaded')
+        
+        # load COLUMN-NAMES from txt
+        names_file = [f for f in files if 'columnNames' in f][0]
+        col_names = np.loadtxt(os.path.join(path, names_file),
+                            dtype=str, delimiter=',')
+        
+        # extract TIMES for data array
+        i_time = np.where(col_names == 'dopa_time')[0][0]
+        time_arr = dat_arr[:, i_time]
+        
+        fs_string = data_file.split('Hz')[0]
+        fs = int(fs_string.split('_')[-1])
 
     if float_convert:
         print('\t...correct npy floats')
@@ -431,6 +439,14 @@ def create_dopa_timed_array(
 def merge_ephys_sources(
     subdat
 ):
+    """
+    Merges ephys and acc-data from one subject
+
+    Input:
+        - subdat: class from subjectData(), containing
+            all data per datatype (see lfpecog_features/
+            run_mergeDataClass.py)
+    """
     sources = [
         s for s in subdat.dtypes if np.logical_or(
             'ecog' in s.lower(), 'lfp' in s.lower()
@@ -494,164 +510,4 @@ def read_ieeg_file(npy_f, fdir):
 
     return data, names
 
-
-# def read_files(fsel, groups, fdir):
-#     '''
-#     OBSOLETE????
-    
-#     Function which reads the saved preprocessed 3d-ararys and lists
-#     with channel-names again into Python Objects.
-
-#     Arguments:
-#         - runInfo: class contains the location where the files of the defined
-#         ft-version are saved
-
-#     Returns:
-#         - data (dict): dict with a 3d array of processed data, per group
-#         (e.g. lfp-l, lfp-r, ecog)
-#         - names (dict): dict containing the corresponding row-names
-#         belonging to the data groups (incl 'time', 'LFP_L_01', etc)
-#     '''
-#     data = {}  # dict to store processed data arrays
-#     names = {}  # dict to store corresponding names
-#     for g in groups:
-#         # for matching files with defined group
-#         g_files = [f for f in fsel if g in f]
-#         print(g_files)
-#         for f in g_files:
-#             csv_f = f'{f[:-8]}rownames.csv'
-#             # TODO: CURRENTLY FILES ARE OVERWRITING EACH OTHER
-#             # MAKE DATA CLASS HERE, WITH STRUCTURE
-#             # CLASS PER PT (SESSION?)
-#             #   ACQ/TASK
-#             #       GROUP
-#             #           - DATA
-#             #           - NAMES
-#             data[g] = np.load(os.path.join(fdir, f))
-#             print('\n', f, 'loaded,\nshape: ', data[g].shape)
-#             names[g] = []
-#             try:
-#                 with open(os.path.join(fdir, csv_f),
-#                         newline='') as csvfile:
-#                     reader = csv.reader(csvfile, delimiter=',')
-#                     for row in reader:
-#                         names[g] = row
-#             except:
-#                 print('fill except...')
-        
-#         # Data vs names check
-#         s1 = data[g].shape[-2]
-#         s2 = len(names[g])
-#         assert s1 == s2, ('# rows not equal for data (npy)'
-#                          f'and names (csv) in {g}')
-
-#     return data, names
-
-
-
-# @dataclass(init=True, repr=True, )
-# class RunData:
-#     '''
-#     Creates dataclass containing all data from one specific
-#     run.
-#     Function is called within SessionData, and will be set
-#     to a dict in SessionData.
-#     Every RunData consists the requested and available data-
-#     types. Every datatype has its own RunData-Class containing
-#     the data-array (2d or 3d), rownames, current sample freq.
-#     '''
-#     npy_files: list
-#     fdir: str
-#     sub: str
-#     ses: str
-#     task: str
-#     acq: str
-#     run: int
-#     proc_version: str
-#     run_string: str
-#     # lfp  -> consider to make extra DataClass type per
-#     # data source containing array/names/Fs/... ?
-#     lfp_left_arr: array = np.array(0)  # std empty fields
-#     lfp_left_names: list = field(default_factory=list)
-#     lfp_left_Fs: int = field(default_factory=int)
-#     lfp_right_arr: array = np.array(0)
-#     lfp_right_names: list = field(default_factory=list)
-#     lfp_right_Fs: int = field(default_factory=int)
-#     # ecog
-#     ecog_arr: array = np.array(0)
-#     ecog_names: list = field(default_factory=list)
-#     ecog_Fs: int = field(default_factory=int)
-#     # acc
-#     acc_left_arr: array = np.array(0)
-#     acc_left_names: list = field(default_factory=list)
-#     acc_left_Fs: int = field(default_factory=int)
-#     acc_right_arr: array = np.array(0)
-#     acc_right_names: list = field(default_factory=list)
-#     acc_right_Fs: int = field(default_factory=int)
-#     present_datatypes: list = field(default_factory=list)
- 
-#     def __post_init__(self, ):
-#         # fill present and available ieeg datatypes of given run
-#         ### TODO: check whether dataclass variables can be initialized
-#         ## right away within loop with setattr()
-#         for dtype in [
-#             'LFP_LEFT', 'LFP_RIGHT', 'ECOG', 'ACC_LEFT', 'ACC_RIGHT'
-#         ]:
-#             if (f'{self.run_string}_{dtype}_PREPROC_data.npy' not in
-#                     self.npy_files):  # check if dtype exist in files
-#                 continue
-
-#             arr, names = read_ieeg_file(
-#                 f'{self.run_string}_{dtype}_PREPROC_data.npy', self.fdir
-#             )  # set datatype array, names, current sample freq
-#             setattr(self, f'{dtype.lower()}_arr', arr)  # set to fields
-#             setattr(self, f'{dtype.lower()}_names', names)
-#             if len(arr.shape) == 3: timediff = arr[0, 0, 1] - arr[0, 0, 0]
-#             if len(arr.shape) == 2: timediff = arr[0, 1] - arr[0, 0]
-#             Fs = int(1 / timediff)
-#             setattr(self, f'{dtype.lower()}_Fs', Fs)
-#             # add dtype to list
-#             self.present_datatypes.append(dtype)
-
-
-
-# @dataclass(init=True, repr=True, )
-# class SessionData:
-#     '''Stores different RunData classes from the same Session'''
-#     npy_files: list
-#     fdir: str
-#     runs: dict = field(default_factory=dict)
-#     runs_incl: list = field(default_factory=list)
-#     ses_name: str = field(default_factory=str)
-
-#     def __post_init__(self,):  # is called after initialization
-#         for n, f in enumerate(self.npy_files):
-#             split_f = f.split('_')
-#             sub = split_f[0]
-#             ses = split_f[1]
-#             task = split_f[2]
-#             acq = split_f[3]
-#             run = split_f[4]
-#             proc_version = f'{split_f[5]}_{split_f[6]}'
-#             run_shortname = f'{task}_{acq}'
-#             run_str = f'{sub}_{ses}_{task}_{acq}_{run}_{proc_version}'
-
-#             if n == 0:
-#                 self.ses_name = f'{sub}_{ses}'
-
-#             if run_shortname in self.runs_incl:
-#                 continue  # skip run if already incl
-
-#             self.runs[run_shortname] = RunData(
-#                 npy_files=self.npy_files,
-#                 fdir=self.fdir,
-#                 sub=sub,
-#                 ses=ses,
-#                 task=task,
-#                 acq=acq,
-#                 run=run,
-#                 proc_version=proc_version,
-#                 run_string=run_str,
-#             )
-#             self.runs_incl.append(run_shortname)
 

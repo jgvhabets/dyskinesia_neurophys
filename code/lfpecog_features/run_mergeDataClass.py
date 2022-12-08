@@ -6,12 +6,16 @@ Run Merging data frames
 import sys
 from os.path import join
 from dataclasses import dataclass, field
+from numpy import ndarray
 
 # import own functions
 from lfpecog_features import feats_read_proc_data as read_data_funcs
-from utils.utils_fileManagement import get_project_path, save_dfs
+from utils.utils_fileManagement import (
+    get_project_path, save_dfs,
+    mergedData, save_class_pickle)
 import lfpecog_features.moveDetection_run as run_tap_detect
-from lfpecog_features.feats_add_move_states import add_detected_acc_states as add_moveStates
+from lfpecog_features.feats_add_move_states import (
+    add_detected_acc_states as add_moveStates)
 
 
 
@@ -31,7 +35,7 @@ class subjectData:
         - sub (str): subject code
         - data_version (str): e.g. v2.2
         - project_path (str): main project-directory
-            where data is stored 
+            where data is stored
     """
     sub: str
     data_version: str
@@ -99,8 +103,14 @@ if __name__ == '__main__':
     if "no_acc" in sys.argv: incl_acc = False 
     else: incl_acc = True
 
-    if "no_save" in sys.argv: to_save = False 
-    else: to_save = True
+    if "no_save" in sys.argv:
+        to_save = False 
+    else:
+        to_save = True
+        save_as_pickle = True
+        if "no_pickle" in sys.argv:
+            save_as_pickle = False
+
 
     
     ### create dataclass with data sorted per source (lfp-L/R / ecog / acc-L/R)
@@ -126,13 +136,34 @@ if __name__ == '__main__':
         merged_df = add_moveStates(merged_df, accStates)
 
     
-    ### Store dataframe (in data.npy, index.npy, columnNames.csv)    
+    ### Store dataframe
     if to_save:
-        save_dfs(
-            df=merged_df,
-            folder_path=join(
-                get_project_path(), 'data',
-                'merged_sub_data', f'{data_version}'
-            ),
-            filename_base=f'{sub}_mergedDf_{fs}Hz',
-        )
+        if save_as_pickle:
+            merged_class = mergedData(
+                sub=sub,
+                data_version=data_version,
+                data_array=merged_df.values,
+                data_colnames=list(merged_df.keys()),
+                data_times=list(merged_df.index.values),
+                fs=fs,
+            )
+            save_class_pickle(
+                class_to_save=merged_class,
+                path=join(get_project_path(), 'data',
+                         'merged_sub_data', f'{data_version}'),
+                filename=f'{sub}_mergedDataClass_{data_version}',
+            )
+
+        else:  # save as data.npy, index.npy, columnNames.csv
+            save_dfs(
+                df=merged_df,
+                folder_path=join(
+                    get_project_path(), 'data',
+                    'merged_sub_data', f'{data_version}'
+                ),
+                filename_base=f'{sub}_mergedDf_{fs}Hz',
+            )
+
+
+
+

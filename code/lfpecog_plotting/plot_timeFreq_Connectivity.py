@@ -36,7 +36,7 @@ def plot_mvc(
     ax.set_yticklabels(plot_freqs[::ytickhop])
     ax.set_ylabel('Frequency (Hz)', size=fs + 2)
     # set correct times on X-axis
-    xtickhop = int(len(plot_times) / 9)
+    xtickhop = 6  #int(len(plot_times) / 9)
     xticklabs = np.array(plot_times[::xtickhop], dtype=float)
     ax.set_xticks(np.linspace(0, plot_data.shape[0] - 1, len(xticklabs)))
     ax.set_xticklabels(np.around(xticklabs / 60, 1))

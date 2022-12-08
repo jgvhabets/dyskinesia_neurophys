@@ -22,10 +22,10 @@ Instructions to run and keep Git-Sync to repo:
 - set work dir: cd /.../dyskinesia_neurophys/
 
 - run file MacOS: python3 code/lfpecog_preproc/run_lfpecog_preproc.py
-    - add json as argument for sys: preprocSettings_v2.4.json
+    - add json as argument for sys: preprocSettings_v1.1.json
 
 - run file Windows (from cwd ...\code): python -m lfpecog_preproc.run_lfpecog_preproc
-    - add json filename as argument for sys, eg: preprocSettings_v2.4.json
+    - add json filename as argument for sys, eg: preprocSettings_v1.1.json
 
 '''
 

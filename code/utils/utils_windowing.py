@@ -27,11 +27,8 @@ def get_windows(
     Select windows with size nWin * Fs,
     exclude windows with nan's, and save corresponding
     dopa-times to included windows.
-    Function selects windows based on dopa-times using
-    .loc function within a pd.DataFrame.
+    Function selects windows based on dopa-times.
 
-    TODO: make function hybrid, A: for getting times only,
-    B: for getting data nd-array
 
     Inputs:
         - data: dataframe or array
@@ -140,8 +137,7 @@ def get_windows(
                 wintemp = wintemp[~nansel]
                 # print('after nan remove', wintemp.shape)
 
-        ### INCLUDE FILTERING ON PRESENT DATA
-        # (skip window if less data present than defined threshold)
+        # skip window if less data present than defined threshold
         if wintemp.shape[0] < (nWin * min_winPart_present): continue
 
         ### INCLUDE ACCELEROMETER ACTIVITY FILTERING
@@ -155,9 +151,9 @@ def get_windows(
         # NaN-PAD WINDOWS NOT FULLY PRESENT (to fit 3d-array shape)
         if wintemp.shape[0] < nWin:
 
-            rows_pad = nWin - wintemp.shape[0]
+            rows_to_pad = nWin - wintemp.shape[0]
             nanpad_arr = np.array(
-                [[np.nan] * wintemp.shape[1]] * rows_pad
+                [[np.nan] * wintemp.shape[1]] * rows_to_pad
             )
             wintemp = np.concatenate([wintemp, nanpad_arr], axis=0)
             arr_times_sec.append(win0_sec)
@@ -168,9 +164,8 @@ def get_windows(
 
         arr_list.append(wintemp)  # list with 2d arrays
     
+    print(f'\n...# {len(arr_list)} windows found')
     win_array = np.array(arr_list)  # create 3d array
-    
-
 
     if return_as_class:
         

@@ -27,12 +27,20 @@ from mne_connectivity import (
 
 
 def run_mne_MVC(
+    mvc_method: str,
     list_mneEpochArrays,
+    report: bool = False,
+    report_path = None,
 ):
     print('\n\tstart mne mvc function'.upper())
+    # create report string to write out at the end
+    if report: report = '### START OF MNE-MVC ###'
 
     # set/ extract variables
     ch_names = list_mneEpochArrays[0].info.ch_names
+    if report: report += (
+        f'\n\n- original ch_names: {ch_names},')
+
     ecog_side = 'unknown'
     n_name = 0
     while ecog_side == 'unknown':
@@ -58,6 +66,13 @@ def run_mne_MVC(
         for name in ch_names]
     )[0]
 
+    if report: report += (
+        f'\n- selected ch_names: {ch_names},'
+        f'\n- seed indices: {seed_idx},'
+        f'\n- target indices: {target_idx},'
+        f'\n- number of windows: {len(list_mneEpochArrays)}'
+    )
+
 
     # load predefined settings
     with open(
@@ -81,6 +96,13 @@ def run_mne_MVC(
             tol=1e-10,
         )
     )]
+    if report: report += (
+        '\n\n- n seed components: '
+        f'{settings["n_seed_components"]}'
+        '\n\n- n target components (rank):'
+        f' {settings["n_target_components"]}'
+        f'\n\nMVC method to be calculated: {settings["method"]}'
+    )
 
     print(f'\n\n\tSEED indices: {seed_idx}\n\tTARGET indices: {target_idx}')
 
@@ -92,14 +114,14 @@ def run_mne_MVC(
     mvc_result_list = []  # store results per window in a list
     for n_win, epoch_array in enumerate(list_mneEpochArrays):
         
-        print(f'\n...start analysis for window #{n_win}')
-        print(f'...array shape: {epoch_array.get_data().shape}')
+        # print(f'\n...start analysis for window #{n_win}')
+        # print(f'...array shape: {epoch_array.get_data().shape}')
         
         win_results = multivar_spectral_connectivity_epochs(
             data=epoch_array,
             indices=indices,
             names=epoch_array.info["ch_names"],
-            method=settings["method"],
+            method=mvc_method.lower(),
             mode=settings["mode"],
             tmin=settings["tmin"],
             tmax=settings["tmax"],
@@ -119,6 +141,13 @@ def run_mne_MVC(
         )
         # returns mne_connectivity.base.SpectralConnectivity
         mvc_result_list.append(win_results)
+    
+    if report:
+        with open(report_path, 'a') as f:
+
+            f.write(report)
+            f.close()
+
 
     return mvc_result_list
 
