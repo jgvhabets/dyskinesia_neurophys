@@ -12,6 +12,7 @@ __pycache__
 admin/
 figures/
 data/
+results/
 code/.vscode/
 code/mne-connectivity
 code/hackathon_mne_mvc
