@@ -106,31 +106,32 @@ def remove_flatlines_empties(
     if reportPath: report = ''
 
     for g in data:
-        flat_chs = []
+        flat_chs, del_chnames = [], []
         
-        for ch in np.arange(2, data[g].shape[0]):
+        for ch_i, ch_name in enumerate(chNames[g]):
+            
+            if 'time' in ch_name: continue
 
-            sec_starts = np.arange(0, len(data[g][ch]), fs)
+            sec_starts = np.arange(0, len(data[g][ch_i]), fs)
             seconds_array = np.array(
-                [data[g][ch][int(s + 1)] - data[g][ch][int(s)] for s in sec_starts]
+                [data[g][ch_i][int(s + 1)] - data[g][ch_i][int(s)] for s in sec_starts[:-1]]
             )
             count_flats = sum(seconds_array == 0)  # count zeros
 
             if count_flats / len(seconds_array) > thresh:
-                flat_chs.append(ch)
+                flat_chs.append(ch_i)
+                del_chnames.append(ch_name)
 
         if len(flat_chs) > 0:
 
-            del_names = []
-            for f_c in flat_chs: del_names.append(chNames[g][f_c])
-            for c in del_names: chNames[g].remove(c)
+            for c in del_chnames: chNames[g].remove(c)
             print(f'DEL CHECK, shape pre: {data[g].shape}'
-                    f'\n\tchannels to remove: {flat_chs}')
+                    f'\n\tchannels to remove: indices: {flat_chs}, names: {del_chnames}')
             data[g] = np.delete(data[g], flat_chs, axis=0)
             # delete rows (on rownumber) in once, to prevent changing row nrs during deletion!
             print(f'DEL CHECK, shape post: {data[g].shape}')
             
-            report = report + f'\nRemoved from {g}, FLATLINE channels: {del_names}'
+            report = report + f'\nRemoved from {g}, FLATLINE channels: {del_chnames}'
     
     print(f'\n\tREPORT UPDATE: {report}')
 

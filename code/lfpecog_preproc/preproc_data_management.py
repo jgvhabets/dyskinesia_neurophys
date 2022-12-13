@@ -118,7 +118,7 @@ class RunInfo:
         )
 
         self.data_groups = self.runDict["data_include"]
-        print(self.runDict["acq_time"])  # error for sub014 Free
+        print(self.runDict["acq_time"])
         print(type(self.runDict["acq_time"]))
         
         acq_time = datetime.datetime.fromisoformat(
