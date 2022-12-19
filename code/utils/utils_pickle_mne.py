@@ -28,15 +28,3 @@ class pickle_EpochedArrays:
         else:
             self.info = self.mne_object.info
 
-
-@dataclass(repr=True, init=True,)
-class DummyData_Base:
-    """
-    Create Dummy Data
-    e.g. for timeflux testing
-    """
-    stn: np.ndarray
-    stn_name: str
-    ecog: np.ndarray
-    ecog_name: str
-    fs: int
