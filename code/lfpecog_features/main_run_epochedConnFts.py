@@ -266,8 +266,11 @@ if __name__ == '__main__':
     from lfpecog_plotting.plot_timeFreq_Connectivity import plot_mvc
     
     # TODO: merge result dataframes from different tasks
+    add_CDRS = True
+    add_ACC = True
 
-
+    if add_CDRS: print_method += '_cdrs'
+    if add_ACC: print_method += '_acc'
 
     # Run Plotting
     plot_mvc(
@@ -275,12 +278,15 @@ if __name__ == '__main__':
         plot_data=mvc_values_per_task[task],
         plot_freqs=mvc_freqs,
         plot_times=mvc_times,
+        add_CDRS=add_CDRS,
+        add_ACC=add_ACC,
+        data_version=data_version,
         fs=16,
         mvc_method=mvc_method,
         cmap='viridis',
         to_save=True,
         save_path=mvc_figures_dir,
-        fname=(f'{sub}_mvc_{print_method}_plusAct_{task}_{data_version}_'
+        fname=(f'{sub}_mvc_{print_method}_{task}_{data_version}_'
               f'win{winLen_sec}s_overlap{part_winOverlap}'),
     )
  

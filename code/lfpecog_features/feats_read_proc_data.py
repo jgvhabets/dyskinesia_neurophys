@@ -192,8 +192,9 @@ class subData_asArrays:
 def load_stored_merged_data(
     sub: str,
     data_version,
+    return_as: str = 'seperate',
     float_convert: bool = True,
-    return_as_df: bool = False,
+    save_as_pickle: bool = True,
 ):
     """
     Loads stored array with all merged data
@@ -224,16 +225,17 @@ def load_stored_merged_data(
     print(f'-> loading stored merged data for sub {sub} data\n\tfrom {path}')
 
     # load pickle if present
-    if f'{sub}_mergedDataClass_{data_version}.P' in files:
+    pickle_name = f'{sub}_mergedDataClass_{data_version}'
+    if f'{pickle_name}.P' in files:
         from utils.utils_fileManagement import mergedData, load_class_pickle
         print('...load pickled mergedData Class')
-        merged_data = load_class_pickle(os.path.join(
+        mergedData_class = load_class_pickle(os.path.join(
             path, f'{sub}_mergedDataClass_{data_version}.P'
         ))
-        dat_arr = merged_data.data_array
-        fs = merged_data.fs
-        col_names = merged_data.data_colnames
-        time_arr = np.array(merged_data.data_times)
+        dat_arr = mergedData_class.data
+        fs = mergedData_class.fs
+        col_names = mergedData_class.colnames
+        time_arr = np.array(mergedData_class.times)
 
 
     else:
@@ -259,11 +261,42 @@ def load_stored_merged_data(
         fs_string = data_file.split('Hz')[0]
         fs = int(fs_string.split('_')[-1])
 
-    if float_convert:
-        print('\t...correct npy floats')
-        dat_arr = convert_to_npfloats(dat_arr, col_names)
+        if float_convert:
+            print('\t...correct npy floats')
+            dat_arr = convert_to_npfloats(dat_arr, col_names)
+        
+        # convert and save file as pickle for later usage
+        if save_as_pickle:
+            print('...saving pickle')
+            mergedData_class = fileMng.mergedData(
+                sub=sub,
+                data_version=data_version,
+                data=dat_arr,
+                colnames=col_names,
+                times=time_arr,
+                fs=fs,
+            )
+            fileMng.save_class_pickle(
+                class_to_save=mergedData_class,
+                path=path, filename=pickle_name,
+            )
+            # seperate mergedDataClass for none-ephys data
+            sel = ['LFP' not in k and 'ECOG' not in k for k in col_names]
+            mergedData_class = fileMng.mergedData(
+                sub=sub,
+                data_version=data_version,
+                data=dat_arr[:, sel],
+                colnames=col_names[sel],
+                times=time_arr,
+                fs=fs,
+            )
+            fileMng.save_class_pickle(
+                class_to_save=mergedData_class,
+                path=path, filename=f'{pickle_name}_noEphys',
+            )
 
-    if return_as_df:
+
+    if return_as == 'df':
         sub_df = pd.DataFrame(
             data=dat_arr,
             index=time_arr,
@@ -274,6 +307,10 @@ def load_stored_merged_data(
             f' and columns: {sub_df.keys()}')
 
         return sub_df
+    
+    elif return_as == 'class':
+
+        return mergedData_class
     
     else:
 
