@@ -7,12 +7,12 @@ annotations for the dyskinesia-protocol
 # Import public packages and functions
 import os
 import numpy as np
-import pandas as pd
+from pandas import read_excel
 import datetime as dt
 from dataclasses import dataclass
 
 # Import own functions
-
+from utils.utils_fileManagement import get_onedrive_path
 
 def run_import_clinInfo(
     sub: str, verbose=False,
@@ -24,15 +24,14 @@ def run_import_clinInfo(
 
     Input:
         - sub (str): three-number code of sub
-        - onedrive_path (str): local-path where Charite-
-        OneDrive is synced
     
     Returns:
         - scores (df)
         - dopa_taps
         - annot_dict
     """
-    _, data_path = find_onedrive_path()
+    data_path = get_onedrive_path('data')
+    print(data_path)
     
     try:
         annot_dict = read_annotations(sub, data_path)
@@ -57,13 +56,13 @@ def run_import_clinInfo(
 
 
 def read_annotations(
-    sub, clin_fpath,
+    sub, data_path,
 ):
     
     annot_fname = f'sub{sub}_recording_annotations.xlsx'
     
-    annot_dict = pd.read_excel(
-        os.path.join(clin_fpath, annot_fname),
+    annot_dict = read_excel(
+        os.path.join(data_path, 'clinical scores', annot_fname),
         sheet_name=None,  # sheet None gives all tabs as dict
         header=None, index_col=0,
     )
@@ -72,12 +71,12 @@ def read_annotations(
 
 
 def read_clinical_scores(
-    sub, clin_fpath,
+    sub, data_path,
 ):
-    scores_fname = 'dyskinesia_recording_scores.xlsx'
-    scores = pd.read_excel(
-        os.path.join(clin_fpath, scores_fname),
-        sheet_name=f'sub-{sub}'
+    scores_fname = 'dyskinesia_recording_scores_Jeroen.xlsx'
+    scores = read_excel(
+        os.path.join(data_path, 'clinical scores', scores_fname),
+        sheet_name=f'sub-{sub}',
     )
 
     # delete redundant rows with text-explanation
@@ -203,37 +202,21 @@ class lid_timing:
     t_peak: float
 
 
-def find_onedrive_path():
-    """
-    Finds main OneDrive folder and projects'
-    data folder on onedrive
+def get_ecog_side(sub):
 
-    No inputs
+    data_path = get_onedrive_path('data')
+    f = 'recording_mainfile.xlsx'
 
-    Returns:
-        - onedrive_path
-        - data_path
-    """
-        
-    path = os.getcwd()
-    
-    while os.path.dirname(path)[-5:] != 'Users':
-        path = os.path.dirname(path)
-    # path is now Users/username
-    onedrive_f = [
-        f for f in os.listdir(path) if np.logical_and(
-            'onedrive' in f.lower(),
-            'charit' in f.lower()
-        ) 
-    ]  # gives list
-    onedrive_path = os.path.join(path, onedrive_f[0])
-    
-    data_path = os.path.join(
-        onedrive_path,
-        'dysk_ecoglfp',  # adjust this so that it leads to project's data folder
-        'data', 
-    )
-    
-    return onedrive_path, data_path
+    xldat = read_excel(os.path.join(data_path, f),
+                      sheet_name='recording_info',)
+    sub_match = [type(s) == str and sub in s for s in xldat['bids_id'].values]
+    i_sub = np.where(sub_match)[0][0]
+    ecog_side = xldat.iloc[i_sub]['ecog']
 
+    if ecog_side == 1: ecog_side = 'left'
+    elif ecog_side == 2: ecog_side = 'right'
+    else:
+        print(f'No ECoG-side found for sub-{sub}')
+        return None
 
+    return ecog_side

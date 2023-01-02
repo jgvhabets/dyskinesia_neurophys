@@ -175,6 +175,7 @@ if __name__ == '__main__':
                 FsDict=Fs_dict,
                 runInfo=runInfo,
             )
+            # PM TODO: add saving as pickled dataclass
             
             print(f'\nFINISHED PREPROCESSING SUB {sub} Run: {run}\n')
 

@@ -140,27 +140,27 @@ class mergedData:
     Input:
         - sub: string code of sub, e.g. '001'
         - data_version: e.g. 'v0.0'
-        - data_array: np array of merged data
-        - data_colnames: corresponding column names
-        - data_times: corresponding time vs dopa-intake
+        - data: np array of merged data
+        - colnames: corresponding column names
+        - times: corresponding time vs dopa-intake
     """
     sub: str
     data_version: str
-    data_array: ndarray  # numpy array
-    data_colnames: list
-    data_times: list
+    data: ndarray  # numpy array
+    colnames: list
+    times: list
     fs: int
 
     def __post_init__(self,):
-        assert len(self.data_colnames) == self.data_array.shape[1], (
+        assert len(self.colnames) == self.data.shape[1], (
             f'within mergedData (sub {self.sub}), # col_names '
-            f'{len(self.data_colnames)} does not'
-            f'match shape of array {self.data_array}'
+            f'{len(self.colnames)} does not'
+            f'match shape of array {self.data}'
         )
-        assert len(self.data_times) == self.data_array.shape[0], (
+        assert len(self.times) == self.data.shape[0], (
             f'within mergedData (sub {self.sub}), # times '
-            f'{len(self.data_times)} does not'
-            f'match shape of array {self.data_array}'
+            f'{len(self.times)} does not'
+            f'match shape of array {self.data}'
         )
 
 
