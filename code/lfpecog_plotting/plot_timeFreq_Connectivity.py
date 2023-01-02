@@ -14,52 +14,31 @@ def plot_mvc(
     sub, plot_data, plot_freqs, plot_times,
     fs=16, cmap='viridis', mvc_method='mic',
     to_save=False, save_path=None, fname=None,
+    add_CDRS=True, add_ACC=False,
 ):
-    ### TODO: INSERT 3 EMPTY ROWS ON TIME_JUMP MOMENTS TO INSERT GRAY BAR
+    # define general plot settings
+    num_axes = 1
+    if add_CDRS: num_axes += 1
+    if add_ACC: num_axes += 1
+    fig_height = 8 + (4 * (num_axes - 1))
 
-    fig, ax = plt.subplots(1, 1, figsize=(16, 8))
+    fig, axes = plt.subplots(num_axes, 1, figsize=(16, fig_height))
+    
+    # Plot MVC features in subplot
+    fig, axes = subplot_mvc(fig=fig, axes=axes, fs=fs, cmap=cmap,
+                            num_axes=num_axes, plot_values=plot_data,
+                            plot_freqs=plot_freqs,
+                            plot_times=plot_times, mvc_method=mvc_method,)
 
-    # plot colormap
-    im = ax.imshow(
-        plot_data.T,
-        cmap=cmap, vmin=0, vmax=.6,
-        aspect=.5
-    )
+    # Plot clinical LID scores (CDRS) in subplot
+    if add_CDRS:
+        fig, axes = subplot_cdrs(fig=fig, axes=axes, fs=fs,
+                                 sub=sub, plot_times=plot_times)
 
-    # plot colorbar
-    fig.colorbar(im, ax=ax)#axes.ravel().tolist())
-
-    # PLOT WINDOW INDICATORS (gray line where temporal interruption is)
-    for i_pre, x_t in enumerate(plot_times[1:]):
-        # if epochs are more than 5 minutes separated
-        if x_t - plot_times[i_pre] > 300:
-
-            ax.axvline(
-                i_pre + 1,
-                ymin=0, ymax=50, color='lightgray', lw=3, alpha=.8,
-            )
-
-    # set correct frequencies on Y-axis
-    ytickhop = 8
-    ax.set_ylim(0, plot_data.shape[1])
-    ax.set_yticks(range(plot_data.shape[1])[::ytickhop])
-    ax.set_yticklabels(plot_freqs[::ytickhop])
-    ax.set_ylabel('Frequency (Hz)', size=fs + 2)
-    # set correct times on X-axis
-    xtickhop = 6  #int(len(plot_times) / 9)
-    xticklabs = np.array(plot_times[::xtickhop], dtype=float)
-    ax.set_xticks(np.linspace(0, plot_data.shape[0] - 1, len(xticklabs)))
-    ax.set_xticklabels(np.around(xticklabs / 60, 1))
-    ax.set_xlabel('Time after LDopa (minutes)', size=fs + 2)
-
-    if mvc_method.lower() == 'mic':
-        ax.set_title(
-            f'sub-{sub}  -  abs. imaginary-Coherence (multivariate)',
-            size=fs + 6)
-    elif mvc_method.lower() == 'mim':
-        ax.set_title(
-            f'sub-{sub}  -  abs. Multivariate Interaction Measure',
-            size=fs + 6)
+    # Plot Accelerometer features in subplot
+    if add_ACC:
+        fig, axes = subplot_acc(fig=fig, axes=axes,)
+    
 
     plt.tick_params(axis='both', labelsize=fs, size=fs,)
     plt.tight_layout()
@@ -73,6 +52,119 @@ def plot_mvc(
 
     plt.close()
 
+
+def subplot_mvc(
+    fig, axes, num_axes, fs, cmap, mvc_method,
+    plot_values, plot_freqs, plot_times,
+):
+    """
+    Create subplot with Multivariate Connectivity
+    features
+
+    Input:
+        - fig, axes: original fig, axes
+        - cmap: colormap to use
+        - fs: fontsize
+        - plot_values: feature values to plot,
+            as 2d-array [n-times, n-freqs]
+        - plot_freqs, plot_times: corr to values
+            
+    """
+    # define which ax to plot mvc
+    if num_axes == 1: mvc_ax = axes
+    else: mvc_ax = axes[1]
+
+    # plot colormap
+    vmax = .5
+    im = mvc_ax.imshow(plot_values.T, vmin=0, vmax=vmax,
+                       cmap=cmap, aspect=.5)
+    # plot colorbar
+    cbar = fig.colorbar(im, ax=mvc_ax, pad=.01)#axes.ravel().tolist())
+    cbar.ax.set_yticks(np.arange(0, vmax, .1), size=fs)
+    cbar.ax.set_yticklabels(np.around(np.arange(0, vmax, .1), 1), size=fs)
+    if mvc_method.lower() == 'mic':
+        cv_title = 'abs. Max. Imaginary Coherence'
+    elif mvc_method.lower() == 'mim':
+        cv_title = 'Multivariate Interaction Measure'
+    cbar.ax.set_ylabel(cv_title, rotation=270, size=fs + 2)
+    cbar.ax.get_yaxis().labelpad = 20
+
+    # PLOT JUMP IN TIME INDICATORS (gray line where temporal interruption is)
+    for i_pre, x_t in enumerate(plot_times[1:]):
+        # if epochs are more than 5 minutes separated
+        if x_t - plot_times[i_pre] > 300:
+            mvc_ax.axvline(i_pre + 1, ymin=0, ymax=50,
+                       color='lightgray', lw=5, alpha=.8,)
+
+    # set correct frequencies on Y-axis
+    ytickhop = 8
+    mvc_ax.set_ylim(0, plot_values.shape[1])
+    mvc_ax.set_yticks(range(plot_values.shape[1])[::ytickhop])
+    mvc_ax.set_yticklabels(plot_freqs[::ytickhop])
+    mvc_ax.set_ylabel('Frequency (Hz)', size=fs + 2)
+    # set correct times on X-axis
+    xtickhop = 6  #int(len(plot_times) / 9)
+    xticklabs = np.array(plot_times[::xtickhop], dtype=float)
+    mvc_ax.set_xticks(np.linspace(0, plot_values.shape[0] - 1, len(xticklabs)))
+    mvc_ax.set_xticklabels(np.around(xticklabs / 60, 1))
+    mvc_ax.set_xlabel('Time (minutes after LDOPA)', size=fs + 2)
+
+    return fig, axes
+
+
+def subplot_cdrs(fig, axes, fs, sub, plot_times, n_plot_ax=0):
+    """
+    reate subplot with Levodopa Induced Dyskinesia scores
+    rated with the Clinical Dyskinesia Rating Scale
+    
+    In current workflow: always plot in first subplot
+    """
+    ax = axes[n_plot_ax]
+    # Plot CDRS every 10 minutes
+    try:
+        scores, _, _ = importClin.run_import_clinInfo(sub=sub)
+        # get closest CDRS score to epoch_time
+        if type(scores) == type(None):
+            raise ValueError('None scores')
+        epoch_clin_scores = [scores.iloc[
+            np.argmin(abs(m - scores['dopa_time']))
+        ]['CDRS_total'] for m  in (plot_times / 60)]
+
+        ax.plot(epoch_clin_scores, color='orange',
+                     alpha=.6, lw=3,)
+        ax.set_ylim(0, 20)
+        ax.set_ylabel('CDRS (bilateral sum)')
+
+    except FileNotFoundError:
+        print(f'No clin scores found for sub {sub}')
+    
+    # PLOT LID-timings (observed Start and Peak)
+    lid_timings = importClin.get_seconds_of_LID_start()[sub]
+    lid_clrs = {'start': 'green', 'peak': 'orange'}
+    for timing in lid_clrs:
+        lid_i = np.argmin(abs(
+            plot_times -
+            getattr(lid_timings, f"t_{timing}")
+        ))
+        ax.axhline(lid_i, y0=0, y1=20, ls='--', lw=5,
+                        color=lid_clrs[timing], alpha=.5,
+                        label=f'LID-{timing}',
+        )
+    
+    xtickhop = 6
+    xticklabs = np.array(plot_times[::xtickhop], dtype=float)
+    ax.set_xticks(np.linspace(0, len(plot_times) - 1, len(xticklabs)))
+
+    return fig, axes
+
+
+def subplot_acc(fig, axes):
+    """
+    Create subplot with Accelerometer activity
+    """
+
+
+    return fig, axes
 
 def plot_timeFreq_Coherence(
     inputChannels,
@@ -156,11 +248,7 @@ def plot_timeFreq_Coherence(
             freqs=getattr(ch_fts, ft_params[ft_type]['freq_attr']),
             f_min=fmin,
             f_max=fmax
-        )
-        # print(coh_sel.shape, coh_sel,)
-        # print(f_sel.shape, f_sel)
-        # print(ch_fts.epoch_times.shape, ch_fts.epoch_times)
-        # break  
+        ) 
 
         # set correct figure-parameters for ft-type and settings
         if  ft_type == 'Imag-Coherence':
