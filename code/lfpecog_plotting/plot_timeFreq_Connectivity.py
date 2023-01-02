@@ -12,7 +12,7 @@ from utils.utils_fileManagement import get_project_path
 
 def plot_mvc(
     sub, plot_data, plot_freqs, plot_times,
-    fs=16, cmap='viridis',
+    fs=16, cmap='viridis', mvc_method='mic',
     to_save=False, save_path=None, fname=None,
 ):
     ### TODO: INSERT 3 EMPTY ROWS ON TIME_JUMP MOMENTS TO INSERT GRAY BAR
@@ -29,6 +29,16 @@ def plot_mvc(
     # plot colorbar
     fig.colorbar(im, ax=ax)#axes.ravel().tolist())
 
+    # PLOT WINDOW INDICATORS (gray line where temporal interruption is)
+    for i_pre, x_t in enumerate(plot_times[1:]):
+        # if epochs are more than 5 minutes separated
+        if x_t - plot_times[i_pre] > 300:
+
+            ax.axvline(
+                i_pre + 1,
+                ymin=0, ymax=50, color='lightgray', lw=3, alpha=.8,
+            )
+
     # set correct frequencies on Y-axis
     ytickhop = 8
     ax.set_ylim(0, plot_data.shape[1])
@@ -42,9 +52,14 @@ def plot_mvc(
     ax.set_xticklabels(np.around(xticklabs / 60, 1))
     ax.set_xlabel('Time after LDopa (minutes)', size=fs + 2)
 
-    ax.set_title(
-        f'sub-{sub}  -  abs. imaginary-Coherence (multivariate)',
-        size=fs + 6)
+    if mvc_method.lower() == 'mic':
+        ax.set_title(
+            f'sub-{sub}  -  abs. imaginary-Coherence (multivariate)',
+            size=fs + 6)
+    elif mvc_method.lower() == 'mim':
+        ax.set_title(
+            f'sub-{sub}  -  abs. Multivariate Interaction Measure',
+            size=fs + 6)
 
     plt.tick_params(axis='both', labelsize=fs, size=fs,)
     plt.tight_layout()

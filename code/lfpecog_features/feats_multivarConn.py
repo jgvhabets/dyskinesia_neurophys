@@ -9,6 +9,7 @@ without standard mne_connectivity installed
 """
 # import public packages and functions
 from sys import path
+from datetime import date
 from numpy import where, asarray, isnan
 from os.path import join
 import json
@@ -25,6 +26,7 @@ from mne_connectivity import (
     multivar_spectral_connectivity_epochs
 )
 
+today = date.today()
 
 def run_mne_MVC(
     mvc_method: str,
@@ -34,7 +36,8 @@ def run_mne_MVC(
 ):
     print('\n\tstart mne mvc function'.upper())
     # create report string to write out at the end
-    if report: report = '### START OF MNE-MVC ###'
+    if report: report = ('\n\n### START OF MNE-MVC '
+        f'({today.year} {today.month} {today.day}) ###')
 
     # set/ extract variables
     ch_names = list_mneEpochArrays[0].info.ch_names
