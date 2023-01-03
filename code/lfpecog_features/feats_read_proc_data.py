@@ -55,8 +55,9 @@ class main_loadMergedData:
     list_of_subs: list
     data_version: str
     float_convert: bool = True
-    tasks: list = field(default_factory=lambda: ['all', 'rest'])
+    tasks: list = field(default_factory=lambda: ['all', 'rest', 'tap'])
     data_as_df: bool = False
+    data_as_class: bool = False
     # filter_on_ACC: str/list
 
     def __post_init__(self,):
@@ -64,7 +65,7 @@ class main_loadMergedData:
         # create a seperate class per task-selection 
         for task in self.tasks:
 
-            if task not in ['all', 'rest']:
+            if task not in ['all', 'rest', 'tap']:
                 raise ValueError(
                     f'task ("{task}") not "all", or "rest"'
                     f', TODO: change input tasks ({self.tasks})')
@@ -79,6 +80,7 @@ class main_loadMergedData:
                     data_version=self.data_version,
                     float_convert=self.float_convert,
                     return_as_df=self.data_as_df,
+                    return_as_class=self.data_as_class,
                 )
             )        
 
@@ -116,6 +118,7 @@ class get_mergedData_perTask:
     data_version: str
     float_convert: bool = True
     return_as_df: bool = True
+    return_as_class: bool = False
     acc_filter: str = None
     
 
@@ -192,7 +195,8 @@ class subData_asArrays:
 def load_stored_merged_data(
     sub: str,
     data_version,
-    return_as: str = 'seperate',
+    return_as_df: bool = False,
+    return_as_class: bool = False,
     float_convert: bool = True,
     save_as_pickle: bool = True,
 ):
@@ -207,10 +211,12 @@ def load_stored_merged_data(
         - float_convert: set True to convert from
             python-floats to np.float64's, important
             for scipy/fft compatibility
-        - return_as_df: set True to return pandas DF,
-            else data-array (np), fs (int), col_names (list),
-            and indices (floats) are returned
-        
+        - return_as_df: set True to return pandas DF
+        - return_as_class: set True to return
+            mergedData() dataclass
+            PM: if both are False: default return is as
+            separate data-array (np), fs (int),
+            col_names (list), and indices (floats)        
     """
     data_path = fileMng.get_project_path('data')
     # set subject-spec pathbase
@@ -296,7 +302,7 @@ def load_stored_merged_data(
             )
 
 
-    if return_as == 'df':
+    if return_as_df:
         sub_df = pd.DataFrame(
             data=dat_arr,
             index=time_arr,
@@ -308,7 +314,7 @@ def load_stored_merged_data(
 
         return sub_df
     
-    elif return_as == 'class':
+    elif return_as_class:
 
         return mergedData_class
     
