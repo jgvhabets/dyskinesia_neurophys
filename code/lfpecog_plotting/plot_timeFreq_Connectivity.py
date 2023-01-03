@@ -14,9 +14,9 @@ def plot_mvc(
     sub, plot_data, plot_freqs, plot_times,
     fs=16, cmap='viridis', mvc_method='mic',
     to_save=False, save_path=None, fname=None,
-    add_CDRS=True, add_ACC=True, data_version=None,
+    add_CDRS=True, add_ACC=True, add_task=False,
+    data_version=None, mvc_ax=1, winLen_sec=None,
     plot_params={'sharex': False}, grid_params={},
-    mvc_ax=1, winLen_sec=None,
 ):
     # define general plot settings
     num_axes = 1
@@ -54,7 +54,8 @@ def plot_mvc(
         fig, axes = subplot_acc(fig=fig, axes=axes, fs=fs,
                                 sub=sub, plot_times=plot_times,
                                 data_version=data_version,
-                                winLen_sec=winLen_sec,)
+                                winLen_sec=winLen_sec,
+                                plot_task=add_task,)
     
     
     if to_save:
@@ -109,8 +110,8 @@ def subplot_mvc(
     # PLOT JUMP IN TIME INDICATORS (gray line where temporal interruption is)
     for i_pre, x_t in enumerate(plot_times[1:]):
         # if epochs are more than 5 minutes separated
-        if x_t - plot_times[i_pre] > 300:
-            ax.axvline(i_pre + 1, ymin=0, ymax=50,
+        if x_t - plot_times[i_pre] > 180:
+            ax.axvline(i_pre + .5, ymin=0, ymax=50,
                        color='lightgray', lw=5, alpha=.8,)
 
     # set correct frequencies on Y-axis
@@ -161,6 +162,8 @@ def subplot_cdrs(fig, axes, fs, sub, plot_times, i_plot_ax=0):
 
         # get and plot CDRS values (scores in min, plot_times in sec)
         y_values = scores['CDRS_total']
+        # print('plot_times', type(plot_times), plot_times)
+        # print('m', scores['dopa_time'])
         x_times = [np.argmin(abs(m - plot_times))
                    for m in scores['dopa_time'] * 60]
         ax.plot(x_times, y_values, marker='o', alpha=.6,
@@ -179,6 +182,13 @@ def subplot_cdrs(fig, axes, fs, sub, plot_times, i_plot_ax=0):
         ax.axvline(lid_i, ymin=0, ymax=20, ls='--', lw=5,
                    color=lid_clrs[timing], alpha=.5,
                    label=timing,)
+
+    # PLOT JUMP IN TIME INDICATORS (gray line where temporal interruption is)
+    for i_pre, x_t in enumerate(plot_times[1:]):
+        # if epochs are more than 5 minutes separated
+        if x_t - plot_times[i_pre] > 180:
+            ax.axvline(i_pre + 1, ymin=0, ymax=20,
+                       color='lightgray', lw=5, alpha=.8,)
 
     # set subplot settings
     ax.set_ylim(0, 20)
@@ -204,7 +214,7 @@ def subplot_cdrs(fig, axes, fs, sub, plot_times, i_plot_ax=0):
 
 
 def subplot_acc(fig, axes, fs, sub, plot_times, winLen_sec,
-                data_version, i_plot_ax=-1,
+                data_version, i_plot_ax=-1, plot_task=False,
                 colors={'Left': 'darkblue', 'Right': 'green'},
 ):
     """
@@ -234,6 +244,7 @@ def subplot_acc(fig, axes, fs, sub, plot_times, winLen_sec,
     acc_percs = {'Left': {'tap': [], 'move': []},
                  'Right': {'tap': [], 'move': []}}
     base_y = {'Left': 0.5, 'Right': 1.75}
+    task_list = []
     
     for t in plot_times:
         try:
@@ -259,43 +270,72 @@ def subplot_acc(fig, axes, fs, sub, plot_times, winLen_sec,
             # create full timeseries with tap and move borders
             acc_percs[side]['tap'].append(tap_y)
             acc_percs[side]['move'].append(move_y)
+
+        # include most prevalent task label
+        if plot_task:  # prevent double labels
+            icol = np.where(acc.colnames == 'task')[0][0]
+            task_ids, counts = np.unique(
+                win[:, icol], return_counts=True
+            )
+            order = np.argsort(~ counts)  # inverse for largest first
+            task_present = task_ids[order][0]
+            task_list.append(task_present)
+
         # print(f'...CHECK: t: {t}, t-start: {acc.times[i_start]}, t-end: {acc.times[i_end]}')
 
     # Plot activity for both sides
-    for i, side in enumerate(colors.keys()):
+    for side in colors.keys():
         # fill between y-base and tap-values
-        y_base_arr = np.array([base_y[side]] * len(acc_percs[side]['tap']))
-        ax.fill_between(np.arange(.5, .5 + len(acc_percs[side]['tap'])),
+        len_x_ax = len(acc_percs[side]['tap'])
+        y_base_arr = np.array([base_y[side]] * len_x_ax)
+        ax.fill_between(np.arange(.5, .5 + len_x_ax),
                         y_base_arr,
                         acc_percs[side]['tap'],
                         edgecolor=colors[side], alpha=.5,
                         facecolor='w', hatch='///',
                         label=f'Tap {side}',)
         # fill between tapvalues and move-values
-        ax.fill_between(np.arange(.5, .5 + len(acc_percs[side]['tap'])),
+        ax.fill_between(np.arange(.5, .5 + len_x_ax),
                         acc_percs[side]['tap'],
                         acc_percs[side]['move'],
                         color=colors[side], alpha=.2,
                         label=f'Other Move {side}',)
         
-        # set subplot settings
-        ax.legend(frameon=False, ncol=4, fontsize=fs + 2,
-                  bbox_to_anchor=(.5, 0), loc='center',)
-        ax.set_ylim(0, max(base_y.values()) + 1)  # 1 above the highest baseline
-        ax.set_ylabel(f'Movement (ACC)', size=fs + 6)
-        ax.set_yticks(list(base_y.values()), size=fs)
-        ax.set_yticklabels(list(base_y.keys()), size=fs)
+    # PLOT JUMP IN TIME INDICATORS (gray line where temporal interruption is)
+    for i_pre, x_t in enumerate(plot_times[1:]):
+        # if epochs are more than 5 minutes separated
+        if x_t - plot_times[i_pre] > 180:
+            ax.axvline(i_pre + 1, ymin=0.2,
+                        ymax=max(base_y.values()) + 1,
+                        color='lightgray', lw=5, alpha=.8,)
 
-        ax.set_xlim(0, len(plot_times))  # align time axis with main plot (based on time-freq values)
-        xtickhop = 6
-        xticklabs = np.array(plot_times[::xtickhop], dtype=float)
-        ax.set_xticks([])
-        ax.set_xticklabels([])
-        # ax.set_xticks(np.linspace(.5, len(plot_times) - .5, len(xticklabs)))
-        # ax.set_xticklabels(np.around(xticklabs / 60, 1))
-        ax.tick_params(axis='both', size=fs, labelsize=fs)
-        for side in ['left', 'right', 'top', 'bottom']:
-            getattr(ax.spines, side).set_visible(False)
+    # set subplot settings
+    ax.set_ylim(0, max(base_y.values()) + 1)  # 1 above the highest baseline
+    ax.set_ylabel(f'Movement (ACC)', size=fs + 6)
+    ax.set_yticks(list(base_y.values()), size=fs)
+    ax.set_yticklabels(list(base_y.keys()), size=fs)
+
+    ax.set_xlim(0, len(plot_times))  # align time axis with main plot (based on time-freq values)
+    xtickhop = 6
+    xticklabs = np.array(plot_times[::xtickhop], dtype=float)
+    ax.set_xticks([])
+    ax.set_xticklabels([])
+    # ax.set_xticks(np.linspace(.5, len(plot_times) - .5, len(xticklabs)))
+    # ax.set_xticklabels(np.around(xticklabs / 60, 1))
+    ax.tick_params(axis='both', size=fs, labelsize=fs)
+    for ax_side in ['left', 'right', 'top', 'bottom']:
+        getattr(ax.spines, ax_side).set_visible(False)
+    ncols = 4
+    if plot_task:
+        ax.fill_between(np.arange(.5, .5 + len_x_ax),
+                        [min(base_y.values())] * len_x_ax,
+                        [ax.get_ylim()[1]] * len_x_ax,
+                        where=np.array(task_list) == 'tap',
+                        facecolor='w', edgecolor='gray',
+                        hatch='X', alpha=.2,)
+        ncols += 1
+    ax.legend(frameon=False, ncol=ncols, fontsize=fs + 2,
+                bbox_to_anchor=(.5, 0), loc='center',)
 
     return fig, axes
 

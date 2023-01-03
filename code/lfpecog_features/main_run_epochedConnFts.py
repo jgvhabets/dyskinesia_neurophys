@@ -14,7 +14,8 @@ import time
 from os.path import join, exists
 from os import listdir, makedirs
 import csv
-from numpy import save, load, array
+from numpy import (save, load, array,
+                   concatenate, argsort)
 from pandas import DataFrame, read_csv
 
 
@@ -51,16 +52,19 @@ if __name__ == '__main__':
     MAIN_starttime = time.time()
 
     # variables (set into cfg.json later)
-    tasks = ['rest']
+    tasks = ['tap', 'rest']
     data_version = 'v3.1'
     winLen_sec = 60
     part_winOverlap = 0.5
     mne_format = True
     epochLen_sec = .5
     take_abs = True
+    plot_CDRS = True
+    plot_ACC = True
+    plot_task = True
 
     # create dict with results per task for plotting
-    mvc_values_per_task = {}
+    mvc_values_per_task, mvc_times_per_task = {}, {}
 
     # method to print in filenames
     if take_abs: print_method = f'abs{mvc_method}'
@@ -86,7 +90,7 @@ if __name__ == '__main__':
             results_df = read_csv(join(results_sub_dir, mvc_fts_task_file), index_col=0)
             mvc_values_per_task[task] = results_df.values
             mvc_freqs = results_df.keys()
-            mvc_times = results_df.index
+            mvc_times_per_task[task] = results_df.index
             print(f'\t...existing mvc-features are loaded for task: {task}')
             # if results for task are loaded, skip remainder of loop for this task
             continue
@@ -251,11 +255,13 @@ if __name__ == '__main__':
         if take_abs: mvc_values_per_task[task] = abs(mvc_values_per_task[task])
         # get mvc-freqs and -times
         mvc_freqs = mvc_results[0].freqs
-        mvc_times = class_mne_epochs.window_times
+        mvc_times_per_task[task] = class_mne_epochs.window_times
 
         # save mvc results in csv
         mvc_task_df = DataFrame(
-            data=mvc_values_per_task[task], index=mvc_times, columns=mvc_freqs)
+            data=mvc_values_per_task[task],
+            index=mvc_times_per_task[task],
+            columns=mvc_freqs)
         mvc_task_df.to_csv(
             join(results_sub_dir, mvc_fts_task_file),
             index=True, header=True, sep=',',
@@ -266,20 +272,39 @@ if __name__ == '__main__':
     from lfpecog_plotting.plot_timeFreq_Connectivity import plot_mvc
     
     # TODO: merge result dataframes from different tasks
-    add_CDRS = True
-    add_ACC = True
+    
+    # add CDRS or ACC to fname
+    if plot_CDRS: print_method += '_cdrs'
+    if plot_ACC: print_method += '_acc'
+    # process correct tasks in filename and plot-input
+    task_fname = '_'
+    for t in tasks: task_fname += f'{t}_'
 
-    if add_CDRS: print_method += '_cdrs'
-    if add_ACC: print_method += '_acc'
+    # merge values and times of tasks for plot
+    if len(tasks) == 1:
+        mvc_values = mvc_values_per_task[task]
+        mvc_times = mvc_times_per_task[task]
+    else:
+        mvc_values = concatenate(list(
+            mvc_values_per_task.values()
+        ))
+        mvc_times = concatenate(list(
+            mvc_times_per_task.values()
+        ))
+        t_order = argsort(mvc_times)
+        mvc_values = mvc_values[t_order]
+        mvc_times = mvc_times[t_order]
+
 
     # Run Plotting
     plot_mvc(
         sub=sub,
-        plot_data=mvc_values_per_task[task],
+        plot_data=mvc_values,
         plot_freqs=mvc_freqs,
         plot_times=mvc_times,
-        add_CDRS=add_CDRS,
-        add_ACC=add_ACC,
+        add_CDRS=plot_CDRS,
+        add_ACC=plot_ACC,
+        add_task=plot_task,
         data_version=data_version,
         winLen_sec=winLen_sec,
         fs=18,
@@ -287,8 +312,9 @@ if __name__ == '__main__':
         cmap='viridis',
         to_save=True,
         save_path=mvc_figures_dir,
-        fname=(f'{sub}_mvc_{print_method}_{task}_{data_version}_'
-              f'win{winLen_sec}s_overlap{part_winOverlap}'),
+        fname=(f'{sub}_mvc_{print_method}{task_fname}'
+               f'{data_version}_win{winLen_sec}s'
+              f'_overlap{part_winOverlap}'),
     )
  
 
