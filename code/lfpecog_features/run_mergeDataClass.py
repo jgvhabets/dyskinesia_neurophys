@@ -134,17 +134,19 @@ if __name__ == '__main__':
     if incl_acc:
         accStates = run_tap_detect.runTapDetection(data)
         merged_df = add_moveStates(merged_df, accStates)
+        print('...movement states added (in run_mergeDataClass)')
 
     
     ### Store dataframe
     if to_save:
+        print('...saving new df')
         if save_as_pickle:
             merged_class = mergedData(
                 sub=sub,
                 data_version=data_version,
-                data_array=merged_df.values,
-                data_colnames=list(merged_df.keys()),
-                data_times=list(merged_df.index.values),
+                data=merged_df.values,
+                colnames=list(merged_df.keys()),
+                times=list(merged_df.index.values),
                 fs=fs,
             )
             save_class_pickle(
@@ -153,6 +155,7 @@ if __name__ == '__main__':
                          'merged_sub_data', f'{data_version}'),
                 filename=f'{sub}_mergedDataClass_{data_version}',
             )
+            print(f'...pickled new mergedData sub-{sub}')
 
         else:  # save as data.npy, index.npy, columnNames.csv
             save_dfs(
@@ -163,6 +166,7 @@ if __name__ == '__main__':
                 ),
                 filename_base=f'{sub}_mergedDf_{fs}Hz',
             )
+            print(f'...new merged data ({sub}) saved as data.npy, index.npy, and colnames.csv')
 
 
 

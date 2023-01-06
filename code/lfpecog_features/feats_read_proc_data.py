@@ -62,6 +62,9 @@ class main_loadMergedData:
 
     def __post_init__(self,):
 
+        if type(self.tasks) == str:
+            self.tasks = [self.tasks]
+
         # create a seperate class per task-selection 
         for task in self.tasks:
 
@@ -441,8 +444,12 @@ def create_dopa_timed_array(
 
         task = datFile.split('_')[2]
         if 'rest' in task.lower(): task = 'rest'
-        if 'tap' in task.lower(): task = 'tap'
-        if 'free' in task.lower(): task = 'free'
+        elif 'tap' in task.lower(): task = 'tap'
+        elif 'free' in task.lower(): task = 'free'
+        elif 'flip' in task.lower(): task = 'tap'
+        elif 'rotation' in task.lower():
+            print(f'NOTE: Rotation task detected and skipped in {datFile}')
+            continue
 
         fs = datFile.split('Hz')[0]
         fs = fs.split('_')[-1]
@@ -456,7 +463,6 @@ def create_dopa_timed_array(
                 columns=names
             )
             data_out['task'] = [task] * data_out.shape[0]
-            
         
         else:
 
@@ -467,10 +473,10 @@ def create_dopa_timed_array(
                 columns=names,
                 index=None,
             )
+
             rec_data['task'] = [task] * rec_data.shape[0]
 
             data_out = pd.concat([data_out, rec_data])  # vertical adding of empty rows
-
 
     data_out = data_out.sort_values(
         axis=0, by='dopa_time'
@@ -495,21 +501,23 @@ def merge_ephys_sources(
             'ecog' in s.lower(), 'lfp' in s.lower()
         )
     ]
-    print('... merging dataframes from different data-sources')
-    merge_df = getattr(
+    print('...merging dataframes from different data-sources (merge_ephys_sources())')
+    print(f'...# {len(sources)} source-datatypes found')
+    merged_df = getattr(
         subdat, sources[0]
     ).data.set_index('dopa_time')
     
     for i in np.arange(1, len(sources)):
 
-        merge_df = merge_df.join(
+        merged_df = merged_df.join(
             getattr(subdat, sources[i]).data.set_index(
                 'dopa_time'), rsuffix='_DUPL'
         )
+        print(f'...datatype added ({i + 1}/{len(sources)})...')
 
     # remove duplicate columns (task/move-states)
-    cols_del = [c for c in merge_df.columns if 'DUPL' in c ]
-    merge_df = merge_df.drop(columns=cols_del)
+    cols_del = [c for c in merged_df.columns if 'DUPL' in c ]
+    merged_df = merged_df.drop(columns=cols_del)
 
     # include sample frequencies
     fs = getattr(subdat, sources[0]).fs
@@ -524,7 +532,10 @@ def merge_ephys_sources(
                 f'{fs2} -> {sources[i]}'
             )
 
-    return merge_df, fs
+    print('...dataframe merged (merge_ephys_sources())')
+
+
+    return merged_df, fs
 
 
 

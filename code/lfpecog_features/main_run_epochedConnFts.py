@@ -138,22 +138,23 @@ if __name__ == '__main__':
                 print(f'...create and store windowed class for sub-{sub}')
                 from utils.utils_windowing import get_windows
                 starttime = time.time()
-
-                data_as_df = False  # get data object as class
+                print(f'DEBUG: {task} before main_loadMergedData')
+                # get data object as class
                 data = read_data.main_loadMergedData(
                     list_of_subs = [sub,],
-                    tasks = tasks,
+                    tasks = task,
                     data_version=data_version,
                     float_convert=True,
-                    data_as_df=data_as_df,
+                    data_as_df=False,
+                    data_as_class=True,
                 )  # data consists full unwindowed data
                 
-                print('...data loaded')
-
+                print('...merged data (class) loaded')
+                print(f'data is type: {type(data)}')
                 # TODO: get rid of sub task subclasses
                 mergedData_class = getattr(data, task)
                 mergedData_class = getattr(mergedData_class, f'sub{sub}')
-                
+                print(f'DEBUG: shape data in mergedData_class: {mergedData_class.data_arr.shape}')
                 print('...start windowing')
                 windows_class = get_windows(
                     data=mergedData_class.data_arr,
