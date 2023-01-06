@@ -58,6 +58,7 @@ if __name__ == '__main__':
     # create noEphys mergedData per sub
     for sub in subs:
         
+        print(f'...start sub {sub}')
         f = f'{sub}_mergedDataClass_{data_version}.P'
         fullClass = load_class_pickle(join(pickle_path, f))
         # select and insert none Ephys columns

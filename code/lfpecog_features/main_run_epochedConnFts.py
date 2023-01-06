@@ -12,13 +12,14 @@ arrays due to computational speed
 import sys
 import time
 from os.path import join, exists
-from os import listdir, makedirs
+from os import listdir, makedirs, getcwd
 import csv
 from numpy import (save, load, array,
                    concatenate, argsort)
 from pandas import DataFrame, read_csv
 
-
+wd = getcwd()
+sys.path.append(getcwd())  # for debugger
 # import own functions
 from utils.utils_fileManagement import (
     get_project_path,
@@ -45,6 +46,10 @@ if __name__ == '__main__':
     """
     sub = sys.argv[1]
     mvc_method = sys.argv[2].upper()
+    # # DEBUGGING WITHOUT ARGUMENT FILE
+    # sub = '013'
+    # mvc_method = 'mic'
+
     assert mvc_method in ["MIC", "MIM"], (
         'second argument should be MVC method MIC or MIM'
     )
@@ -141,8 +146,8 @@ if __name__ == '__main__':
                 print(f'DEBUG: {task} before main_loadMergedData')
                 # get data object as class
                 data = read_data.main_loadMergedData(
-                    list_of_subs = [sub,],
-                    tasks = task,
+                    list_of_subs=[sub,],
+                    tasks=task,
                     data_version=data_version,
                     float_convert=True,
                     data_as_df=False,
@@ -154,6 +159,7 @@ if __name__ == '__main__':
                 # TODO: get rid of sub task subclasses
                 mergedData_class = getattr(data, task)
                 mergedData_class = getattr(mergedData_class, f'sub{sub}')
+                # mergedData_class is type subData_asArrays()
                 print(f'DEBUG: shape data in mergedData_class: {mergedData_class.data_arr.shape}')
                 print('...start windowing')
                 windows_class = get_windows(

@@ -57,7 +57,7 @@ class main_loadMergedData:
     float_convert: bool = True
     tasks: list = field(default_factory=lambda: ['all', 'rest', 'tap'])
     data_as_df: bool = False
-    data_as_class: bool = False
+    data_as_class: bool = True
     # filter_on_ACC: str/list
 
     def __post_init__(self,):
@@ -120,8 +120,8 @@ class get_mergedData_perTask:
     task: str
     data_version: str
     float_convert: bool = True
-    return_as_df: bool = True
-    return_as_class: bool = False
+    return_as_df: bool = False
+    return_as_class: bool = True
     acc_filter: str = None
     
 
@@ -133,46 +133,65 @@ class get_mergedData_perTask:
                 f'\tloading Sub {sub} ({self.task})'
             )
             # LOAD DATA
-            df = load_stored_merged_data(
+            mergedData_class = load_stored_merged_data(
                 sub=sub,
                 data_version=self.data_version,
                 float_convert=self.float_convert,
                 return_as_df=self.return_as_df,
-                )
-            # unpack tuple if not returning as df
-            if not self.return_as_df:
-                dat_arr, fs, col_names, time_arr = df
-            
-            # SELECT ON TASK (if returned as df)
-            if self.return_as_df:
-                
-                sel = df['task'] == self.task
-                df = df[sel]
-                # for non-df return this happens in class-function
-
-            
-            # SET AS ATTRIBUTE (dataframe or class)
-            if self.return_as_df:
-                setattr(
-                    self,
-                    f'sub{sub}',  # name is subXXX
-                    df
-                )
-            
-            else:
-                setattr(
+                return_as_class=self.return_as_class,
+            )
+            # choose for now scenario return as class
+            # TODO: get rid of extra subject layer, since always done per subject
+            # perform task selection within this class
+            setattr(
                     self,
                     f'sub{sub}',
                     subData_asArrays(
-                        data_arr=dat_arr,
-                        fs=fs,
-                        col_names=col_names,
-                        time_index=time_arr,
+                        data_arr=mergedData_class.data,
+                        fs=mergedData_class.fs,
+                        col_names=mergedData_class.colnames,
+                        time_index=mergedData_class.times,
                         task_sel=self.task,
                     )
                 )
                 
             print(f'...data merged for sub-{sub}')
+
+
+            # # unpack tuple if not returning as df
+            # if self.return_as_class:
+                
+            # elif not self.return_as_df:
+            #     dat_arr, fs, col_names, time_arr = merged_data
+            
+            # # SELECT ON TASK (if returned as df)
+            # if self.return_as_df:
+            #     sel = df['task'] == self.task
+            #     df = df[sel]
+            #     # for non-df return this happens in class-function
+            
+            # # SET AS ATTRIBUTE (dataframe or class)
+            # if self.return_as_df:
+            #     setattr(
+            #         self,
+            #         f'sub{sub}',  # name is subXXX
+            #         df
+            #     )
+            
+            # else:
+            #     setattr(
+            #         self,
+            #         f'sub{sub}',
+            #         subData_asArrays(
+            #             data_arr=dat_arr,
+            #             fs=fs,
+            #             col_names=col_names,
+            #             time_index=time_arr,
+            #             task_sel=self.task,
+            #         )
+            #     )
+                
+            # print(f'...data merged for sub-{sub}')
 
 
 @dataclass(init=True, repr=True, )
@@ -187,11 +206,11 @@ class subData_asArrays:
 
         if len(self.task_sel) > 1:
             # find task column
-            i_task = np.where(self.col_names == 'task')[0][0]
+            i_task = np.where([c == 'task' for c in self.col_names])[0][0]
             # select on performed task
             sel = self.data_arr[:, i_task] == self.task_sel
             self.data_arr = self.data_arr[sel]
-            self.time_index = self.time_index[sel]
+            self.time_index = np.array(self.time_index)[sel]
         
 
 

@@ -78,7 +78,7 @@ def get_windows(
                 'get_windows() DATA ARRAY SHAPE DOESNT MATCH COL_NAMES'
             )
             
-        times_col = np.where(col_names == 'dopa_time')[0][0]
+        times_col = np.where(c == 'dopa_time' for c in col_names)[0][0]
         times = data[:, times_col]
         # times = time_index   # CURRENTLY NUMERICAL INDEX !!!
         arr_keys = col_names
@@ -434,8 +434,8 @@ def get_epochedData_perChannel(
     ):
         raise ValueError('Choose EXACTLY 1 return method')
     
-    i_times = np.where(windows.keys == 'dopa_time')[0][0]       
-    i_ch = np.where(windows.keys == channelName)[0][0]
+    i_times = np.where(k == 'dopa_time' for k in windows.keys)[0][0]       
+    i_ch = np.where(k == channelName for k in windows.keys)[0][0]
     
     if return_3d_segmData:
         # max shape of array, aka max #-segments in window
