@@ -30,7 +30,8 @@ from lfpecog_features import feats_read_proc_data as read_data
 from lfpecog_features.feats_multivarConn import run_mne_MVC
 
 
-if __name__ == '__main__':
+# if __name__ == '__main__':
+def run_mvc_per_sub(sub):
 
     """
     Runs multivariate connectivity computation over
@@ -44,11 +45,11 @@ if __name__ == '__main__':
         (activate conda environment with custom mne_connectivity)
         python -m lfpecog_features.main_run_epochedConnFts "012" "mic"
     """
-    sub = sys.argv[1]
-    mvc_method = sys.argv[2].upper()
+    # sub = sys.argv[1]
+    # mvc_method = sys.argv[2].upper()
     # # DEBUGGING WITHOUT ARGUMENT FILE
     # sub = '013'
-    # mvc_method = 'mic'
+    mvc_method = 'MIC'
 
     assert mvc_method in ["MIC", "MIM"], (
         'second argument should be MVC method MIC or MIM'
@@ -278,8 +279,6 @@ if __name__ == '__main__':
     ### PLOT RESULTS ###
     from lfpecog_plotting.plot_timeFreq_Connectivity import plot_mvc
     
-    # TODO: merge result dataframes from different tasks
-    
     # add CDRS or ACC to fname
     if plot_CDRS: print_method += '_cdrs'
     if plot_ACC: print_method += '_acc'
@@ -287,7 +286,7 @@ if __name__ == '__main__':
     task_fname = '_'
     for t in tasks: task_fname += f'{t}_'
 
-    # merge values and times of tasks for plot
+    # merge values and times from different tasks for plot
     if len(tasks) == 1:
         mvc_values = mvc_values_per_task[task]
         mvc_times = mvc_times_per_task[task]

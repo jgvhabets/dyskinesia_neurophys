@@ -13,7 +13,7 @@ import sys
 #                    concatenate, argsort)
 # from pandas import DataFrame, read_csv
 
-from lfpecog_features.main_run_ import run_
+from lfpecog_features.main_run_epochedConnFts import run_mvc_per_sub
 
 
 if __name__ == '__main__':
@@ -28,7 +28,9 @@ if __name__ == '__main__':
     
     Running on WIN (from repo_folder/code):
         (activate conda environment with custom mne_connectivity)
-        python -m lfpecog_features.main_run_epochedConnFts "012" "mic"
+        python -m lfpecog_features.cmdRun_mvc_subs "010" "012" "013"
     """
     for sub in sys.argv[1:]:
+        print(sub)
+        run_mvc_per_sub(sub)
 

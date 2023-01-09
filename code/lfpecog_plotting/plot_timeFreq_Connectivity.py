@@ -162,8 +162,6 @@ def subplot_cdrs(fig, axes, fs, sub, plot_times, i_plot_ax=0):
 
         # get and plot CDRS values (scores in min, plot_times in sec)
         y_values = scores['CDRS_total']
-        # print('plot_times', type(plot_times), plot_times)
-        # print('m', scores['dopa_time'])
         x_times = [np.argmin(abs(m - plot_times))
                    for m in scores['dopa_time'] * 60]
         ax.plot(x_times, y_values, marker='o', alpha=.6,
@@ -173,15 +171,19 @@ def subplot_cdrs(fig, axes, fs, sub, plot_times, i_plot_ax=0):
         print(f'No clin scores found for sub {sub}')
     
     # PLOT LID-timings (observed Start and Peak moments)
-    lid_timings = importClin.get_seconds_of_LID_start()[sub]
-    lid_clrs = {'start': 'green', 'peak': 'orange'}
-    for timing in lid_clrs:
-        lid_t = getattr(lid_timings, f"t_{timing}")
-        # print(timing, lid_i, lid_t)
-        lid_i = np.argmin(abs(plot_times - lid_t))
-        ax.axvline(lid_i, ymin=0, ymax=20, ls='--', lw=5,
-                   color=lid_clrs[timing], alpha=.5,
-                   label=timing,)
+    try:
+        lid_timings = importClin.get_seconds_of_LID_start()[sub]
+        lid_clrs = {'start': 'green', 'peak': 'orange'}
+        for timing in lid_clrs:
+            lid_t = getattr(lid_timings, f"t_{timing}")
+            # print(timing, lid_i, lid_t)
+            lid_i = np.argmin(abs(plot_times - lid_t))
+            ax.axvline(lid_i, ymin=0, ymax=20, ls='--', lw=5,
+                    color=lid_clrs[timing], alpha=.5,
+                    label=timing,)
+    except AttributeError:
+        print('SUB LID timings not available')
+
 
     # PLOT JUMP IN TIME INDICATORS (gray line where temporal interruption is)
     for i_pre, x_t in enumerate(plot_times[1:]):
@@ -240,6 +242,13 @@ def subplot_acc(fig, axes, fs, sub, plot_times, winLen_sec,
         'merged_sub_data', data_version,
         f'{sub}_mergedDataClass_{data_version}_noEphys.P'
     ))
+    # if times attr is not correct, change here
+    if (list(acc.times[:3]) == ['0', '1', '2'] or
+        list(acc.times[:3]) == [0, 1, 2]
+    ):
+        sel = [c == 'dopa_time' for c in acc.colnames]
+        time_arr = np.ravel(acc.data.T[sel])
+        setattr(acc, 'times', time_arr)
 
     acc_percs = {'Left': {'tap': [], 'move': []},
                  'Right': {'tap': [], 'move': []}}
@@ -332,7 +341,7 @@ def subplot_acc(fig, axes, fs, sub, plot_times, winLen_sec,
                         [ax.get_ylim()[1]] * len_x_ax,
                         where=np.array(task_list) == 'tap',
                         facecolor='w', edgecolor='gray',
-                        hatch='X', alpha=.2,)
+                        hatch='X', alpha=.3,)
         ncols += 1
     ax.legend(frameon=False, ncol=ncols, fontsize=fs + 2,
                 bbox_to_anchor=(.5, 0), loc='center',)

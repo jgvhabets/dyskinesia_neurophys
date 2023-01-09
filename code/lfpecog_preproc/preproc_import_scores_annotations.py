@@ -10,6 +10,7 @@ import numpy as np
 from pandas import read_excel
 import datetime as dt
 from dataclasses import dataclass
+import json
 
 # Import own functions
 from utils.utils_fileManagement import get_onedrive_path
@@ -143,50 +144,69 @@ def get_seconds_of_LID_start():
     LID-start times updated 06.10.2022
 
     Returns:
-        - lid_times (dict): per sub onne class
+        - lid_times (dict): per sub one class
             containing sub, seconds of LID-start,
             and seconds of LID-peak
     """
-    lt_intakes_hhmm = {
-        '008': '11:30',
-        '012': '09:54',
-        '013': '10:55',
-        '014': '09:30'
-    }
-    # check LID-times in video/with Patricia
-    lid_start_hhmm = {
-        '008': '11:38',
-        '012': '09:55',
-        '013': '11:17',
-        '014': '09:47'
-    }
-    lid_peak_hhmm = {
-        '008': '12:05',
-        '012': '10:24',
-        '013': '11:40',
-        '014': '10:15'  # TO BE RATED PER 10-minutes
-    }
-    # ADD options for no LID
+    # lt_intakes_hhmm = {
+    #     '008': '11:30',
+    #     '009': '10:30',
+    #     '010': '11:12',
+    #     '011': '16:50',
+    #     '012': '09:54',
+    #     '013': '10:55',
+    #     '014': '09:30',
+    #     '016': '13:51'
+    # }
+    # # check LID-times in video/with Patricia
+    # lid_start_hhmm = {
+    #     '008': '11:38',
+    #     '012': '09:55',
+    #     '013': '11:17',
+    #     '014': '09:47'
+    # }
+    # lid_peak_hhmm = {
+    #     '008': '12:05',
+    #     '012': '10:24',
+    #     '013': '11:40',
+    #     '014': '10:15'  # TO BE RATED PER 10-minutes
+    # }
+    od_path = os.path.join(get_onedrive_path('data'), 'clinical scores')
+    json_f = os.path.join(od_path, 'med_info.json')
+
+    with open(json_f, 'w') as jsonfile:
+        med_info = json.load(json_f,)
+    
+    LDOPA_intakes_hhmm = med_info['lt_intakes_hhmm']
+    LID_start_hhmm = med_info['lid_start_hhmm']
+    LID_peak_hhmm = med_info['lid_peak_hhmm']
 
     lid_times = {}
 
-    for sub in lid_start_hhmm.keys():
+    for sub in LDOPA_intakes_hhmm.keys():
 
         t_dopa = dt.datetime.strptime(
-            lt_intakes_hhmm[sub], '%H:%M'
+            LDOPA_intakes_hhmm[sub], '%H:%M'
         )
-        t_start = dt.datetime.strptime(
-            lid_start_hhmm[sub], '%H:%M'
-        )
-        t_peak = dt.datetime.strptime(
-            lid_peak_hhmm[sub], '%H:%M'
-        )
+        try:
+            t_start = dt.datetime.strptime(
+                LID_start_hhmm[sub], '%H:%M'
+            )
+            t_peak = dt.datetime.strptime(
+                LID_peak_hhmm[sub], '%H:%M'
+            )
+            lid_times[sub] = lid_timing(
+                sub=sub,
+                t_start=(t_start - t_dopa).seconds,
+                t_peak=(t_peak - t_dopa).seconds,
+            )
+        except:  # if LID is not given or not present
+            lid_times[sub] = lid_timing(
+                sub=sub,
+                t_start=None,
+                t_peak=None,
+            )
 
-        lid_times[sub] = lid_timing(
-            sub=sub,
-            t_start=(t_start - t_dopa).seconds,
-            t_peak=(t_peak - t_dopa).seconds,
-        )
 
     return lid_times
 

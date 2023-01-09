@@ -4,7 +4,6 @@ based on two ephys-channels
 '''
 
 # Import public packages and functions
-from socket import AI_NUMERICHOST
 from typing import Any
 import numpy as np
 import os
