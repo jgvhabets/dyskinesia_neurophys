@@ -182,7 +182,7 @@ def subplot_cdrs(fig, axes, fs, sub, plot_times, i_plot_ax=0):
                     color=lid_clrs[timing], alpha=.5,
                     label=timing,)
     except AttributeError:
-        print('SUB LID timings not available')
+        print(f'\tSub-{sub} LID timings not available (in mvc-plotting)')
 
 
     # PLOT JUMP IN TIME INDICATORS (gray line where temporal interruption is)
@@ -233,7 +233,9 @@ def subplot_acc(fig, axes, fs, sub, plot_times, winLen_sec,
     Returns:
         - fig, axes with added subplot
     """
-    ax = axes[i_plot_ax]
+    if type(axes) == np.ndarray: ax = axes[i_plot_ax]
+    else: ax = axes
+
 
     from utils.utils_fileManagement import load_class_pickle, mergedData
     # load Acc-detected movement labels
@@ -250,8 +252,9 @@ def subplot_acc(fig, axes, fs, sub, plot_times, winLen_sec,
         time_arr = np.ravel(acc.data.T[sel])
         setattr(acc, 'times', time_arr)
 
-    acc_percs = {'Left': {'tap': [], 'move': []},
+    acc_plot_lines = {'Left': {'tap': [], 'move': []},
                  'Right': {'tap': [], 'move': []}}
+    acc_plot_counts = acc_plot_lines.copy()
     base_y = {'Left': 0.5, 'Right': 1.75}
     task_list = []
     
@@ -269,16 +272,22 @@ def subplot_acc(fig, axes, fs, sub, plot_times, winLen_sec,
         win = acc.data[i_start:i_end, :]  # window borders in seconds (as plot_times)
         assert len(win) > 0, f'{i_start} -> {i_end}'
         for side in colors.keys():
+            ### TODO: MAKE IF-ELIF BETWEEN %-lines and histo-counts
             # get % in window of type of unilateral movement
-            icol = np.where(acc.colnames == f'{side.lower()}_tap')[0][0]
-            tap_perc = sum(win[:, icol]) / len(win) # value between 0 and 1
+            i_tap = np.where(acc.colnames == f'{side.lower()}_tap')[0][0]
+            tap_perc = sum(win[:, i_tap]) / len(win) # value between 0 and 1
             tap_y = tap_perc + base_y[side]
-            icol = np.where(acc.colnames == f'{side.lower()}_move')[0][0]
-            move_perc = sum(win[:, icol]) / len(win)  # value between 0 and 1
+            i_move = np.where(acc.colnames == f'{side.lower()}_move')[0][0]
+            move_perc = sum(win[:, i_move]) / len(win)  # value between 0 and 1
             move_y = move_perc + tap_y
             # create full timeseries with tap and move borders
-            acc_percs[side]['tap'].append(tap_y)
-            acc_percs[side]['move'].append(move_y)
+            acc_plot_lines[side]['tap'].append(tap_y)
+            acc_plot_lines[side]['move'].append(move_y)
+            ### histo-counts
+            n_taps = sum(np.diff(win[:, i_tap]) == 1)  # n-times from 0 to 1
+            n_moves = sum(np.diff(win[:, i_move]) == 1)  # n-times from 0 to 1
+            acc_plot_counts[side]['tap'].append(n_taps)
+            acc_plot_counts[side]['move'].append(n_moves)
 
         # include most prevalent task label
         if plot_task:  # prevent double labels
@@ -295,18 +304,18 @@ def subplot_acc(fig, axes, fs, sub, plot_times, winLen_sec,
     # Plot activity for both sides
     for side in colors.keys():
         # fill between y-base and tap-values
-        len_x_ax = len(acc_percs[side]['tap'])
+        len_x_ax = len(acc_plot_values[side]['tap'])
         y_base_arr = np.array([base_y[side]] * len_x_ax)
         ax.fill_between(np.arange(.5, .5 + len_x_ax),
                         y_base_arr,
-                        acc_percs[side]['tap'],
+                        acc_plot_values[side]['tap'],
                         edgecolor=colors[side], alpha=.5,
                         facecolor='w', hatch='///',
                         label=f'Tap {side}',)
         # fill between tapvalues and move-values
         ax.fill_between(np.arange(.5, .5 + len_x_ax),
-                        acc_percs[side]['tap'],
-                        acc_percs[side]['move'],
+                        acc_plot_values[side]['tap'],
+                        acc_plot_values[side]['move'],
                         color=colors[side], alpha=.2,
                         label=f'Other Move {side}',)
         
@@ -345,6 +354,7 @@ def subplot_acc(fig, axes, fs, sub, plot_times, winLen_sec,
         ncols += 1
     ax.legend(frameon=False, ncol=ncols, fontsize=fs + 2,
                 bbox_to_anchor=(.5, 0), loc='center',)
+
 
     return fig, axes
 
