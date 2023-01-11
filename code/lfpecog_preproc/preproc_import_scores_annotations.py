@@ -27,7 +27,7 @@ def run_import_clinInfo(
         - sub (str): three-number code of sub
     
     Returns:
-        - scores (df)
+        - scores (df from 'dyskinesia_recording_scores_Jeroen.xlsx')
         - dopa_taps
         - annot_dict
     """

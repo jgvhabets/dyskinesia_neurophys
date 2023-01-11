@@ -5,7 +5,7 @@ General utilisation functions
 # import public packages and functions
 from os import getcwd, listdir, makedirs
 from os.path import join, exists, dirname
-from numpy import logical_and, save, ndarray
+from numpy import logical_and, save, ndarray, where, ravel
 from csv import writer
 import pickle
 from dataclasses import dataclass
@@ -212,3 +212,29 @@ def load_class_pickle(
     return output
 
 
+def correct_acc_class(acc):
+    """
+    Correct for dopa times and
+    flipped sides in Acc-DataClass, needed
+    in dataversion v3.1
+    """
+    flipped_sides = ['009',]
+
+    if (list(acc.times[:3]) == ['0', '1', '2'] or
+        list(acc.times[:3]) == [0, 1, 2]):
+
+        sel = [c == 'dopa_time' for c in acc.colnames]
+        time_arr = ravel(acc.data.T[sel])
+        setattr(acc, 'times', time_arr)
+    
+    if acc.sub in flipped_sides and acc.data_version == 'v3.1':
+        names = acc.colnames.copy()
+
+        for m in ['tap', 'move']:
+            i_left = where([c == f'left_{m}' for c in acc.colnames])[0][0]
+            i_right = where([c == f'right_{m}' for c in acc.colnames])[0][0]
+            names[i_left] = f'right_{m}'
+            names[i_right] = f'left_{m}'
+        setattr(acc, 'colnames', names)
+    
+    return acc

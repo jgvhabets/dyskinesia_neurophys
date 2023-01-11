@@ -30,7 +30,6 @@ from lfpecog_features import feats_read_proc_data as read_data
 from lfpecog_features.feats_multivarConn import run_mne_MVC
 
 
-# if __name__ == '__main__':
 def run_mvc_per_sub(sub):
 
     """
@@ -49,10 +48,10 @@ def run_mvc_per_sub(sub):
     # mvc_method = sys.argv[2].upper()
     # # DEBUGGING WITHOUT ARGUMENT FILE
     # sub = '013'
-    mvc_method = 'MIC'
+    ft_method = 'MIC'
 
-    assert mvc_method in ["MIC", "MIM"], (
-        'second argument should be MVC method MIC or MIM'
+    assert ft_method.lower() in ["mic", "mim", "gamma"], (
+        'ft_method should be MIC or MIM or gamma'
     )
     
     MAIN_starttime = time.time()
@@ -67,28 +66,34 @@ def run_mvc_per_sub(sub):
     take_abs = True
     plot_CDRS = True
     plot_ACC = True
+    acc_plottype = 'bars'
     plot_task = True
 
     # create dict with results per task for plotting
     mvc_values_per_task, mvc_times_per_task = {}, {}
 
-    # method to print in filenames
-    if take_abs: print_method = f'abs{mvc_method}'
-    else: print_method = mvc_method
+    # ft-method-string to print in filenames
+    if take_abs and ft_method.lower() == 'mic':
+        print_method = f'abs{ft_method}'
+    else:
+        print_method = ft_method
+    
+    if ft_method.lower() in ['mic', 'mim']: ft_code = 'mvc'
+    elif ft_method.lower() == 'gamma': ft_code = 'gamma'
 
     # create directories
-    results_sub_dir = join(get_project_path('results'), 'features', 'mvc', f'sub{sub}')
+    results_sub_dir = join(get_project_path('results'), 'features', ft_code, f'sub{sub}')
     data_sub_dir = join(get_project_path('data'), f'windowed_data_classes_{winLen_sec}s',
                         data_version, f'sub-{sub}')
-    mvc_figures_dir = join(get_project_path('figures'), 'ft_exploration', 'mvc')
+    ft_figures_dir = join(get_project_path('figures'), 'ft_exploration', ft_code)
 
-    for f in [results_sub_dir, data_sub_dir, mvc_figures_dir]:
+    for f in [results_sub_dir, data_sub_dir, ft_figures_dir]:
         if not exists(f): makedirs(f)
 
     for task in tasks:
 
         # check whether results are already present
-        mvc_fts_task_file = (f'mvc_fts_{sub}_{print_method}_{task}_{data_version}'
+        mvc_fts_task_file = (f'{ft_code}_fts_{sub}_{print_method}_{task}_{data_version}'
             f'win{winLen_sec}s_overlap{part_winOverlap}.csv'
         )
         if exists(join(results_sub_dir, mvc_fts_task_file)):
@@ -236,14 +241,15 @@ def run_mvc_per_sub(sub):
         # keep track of calculations in report txt-file
         mvc_report_path = join(
             get_project_path('results'),
-            'features', 'mvc',
-            f'{sub}_mvc_{mvc_method}_report_{task}_{data_version}'
+            'features', ft_code,
+            f'{sub}_{ft_code}_{ft_method}_report_{task}_{data_version}'
             f'win{winLen_sec}s_overlap{part_winOverlap}.txt'
         )
 
+        # TODO. CREATE IF ELSE FOR MVC METHODS AND GAMMA POWER
         mne_starttime = time.time()
         mvc_results = run_mne_MVC(
-            mvc_method=mvc_method,
+            mvc_method=ft_method,
             list_mneEpochArrays=list_mneEpochArrays,
             report=True,
             report_path=mvc_report_path,
@@ -281,7 +287,9 @@ def run_mvc_per_sub(sub):
     
     # add CDRS or ACC to fname
     if plot_CDRS: print_method += '_cdrs'
-    if plot_ACC: print_method += '_acc'
+    if plot_ACC:
+        if acc_plottype == 'fill': print_method += '_accFill'
+        elif acc_plottype == 'bars': print_method += '_accBar'
     # process correct tasks in filename and plot-input
     task_fname = '_'
     for t in tasks: task_fname += f'{t}_'
@@ -310,15 +318,16 @@ def run_mvc_per_sub(sub):
         plot_times=mvc_times,
         add_CDRS=plot_CDRS,
         add_ACC=plot_ACC,
+        acc_plottype=acc_plottype,
         add_task=plot_task,
         data_version=data_version,
         winLen_sec=winLen_sec,
         fs=18,
-        mvc_method=mvc_method,
+        mvc_method=ft_method,
         cmap='viridis',
         to_save=True,
-        save_path=mvc_figures_dir,
-        fname=(f'{sub}_mvc_{print_method}{task_fname}'
+        save_path=ft_figures_dir,
+        fname=(f'{sub}_{ft_code}_{print_method}{task_fname}'
                f'{data_version}_win{winLen_sec}s'
               f'_overlap{part_winOverlap}'),
     )

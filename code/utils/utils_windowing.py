@@ -521,6 +521,7 @@ class epochedChannel:
 @dataclass(init=True, repr=True,)
 class epochedData_multipleChannels:
     """
+    NOT USED IN MVC WORKFLOW 
     main class contains data and times per
     ephys-Channel (epochedChannel, containing data,
     window-times, and segment-times if applicable).
