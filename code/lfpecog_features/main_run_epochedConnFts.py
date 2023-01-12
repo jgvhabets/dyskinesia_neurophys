@@ -14,9 +14,8 @@ import time
 from os.path import join, exists
 from os import listdir, makedirs, getcwd
 import csv
-from numpy import (save, load, array,
-                   concatenate, argsort)
-from pandas import DataFrame, read_csv
+import numpy as np
+from pandas import DataFrame, read_csv, concat
 
 wd = getcwd()
 sys.path.append(getcwd())  # for debugger
@@ -27,7 +26,6 @@ from utils.utils_fileManagement import (
     load_class_pickle,
 )
 from lfpecog_features import feats_read_proc_data as read_data
-from lfpecog_features.feats_multivarConn import run_mne_MVC
 
 
 def run_mvc_per_sub(sub):
@@ -48,7 +46,7 @@ def run_mvc_per_sub(sub):
     # mvc_method = sys.argv[2].upper()
     # # DEBUGGING WITHOUT ARGUMENT FILE
     # sub = '013'
-    ft_method = 'MIC'
+    ft_method = 'gamma'
 
     assert ft_method.lower() in ["mic", "mim", "gamma"], (
         'ft_method should be MIC or MIM or gamma'
@@ -64,17 +62,21 @@ def run_mvc_per_sub(sub):
     mne_format = True
     epochLen_sec = .5
     take_abs = True
+    gammaFreq_low=60
+    gammaFreq_high=90
     plot_CDRS = True
-    plot_ACC = True
+    plot_ACC = False
     acc_plottype = 'bars'
     plot_task = True
 
     # create dict with results per task for plotting
-    mvc_values_per_task, mvc_times_per_task = {}, {}
+    ft_values_per_task, ft_times_per_task, ft_keys = {}, {}, {}
 
     # ft-method-string to print in filenames
     if take_abs and ft_method.lower() == 'mic':
         print_method = f'abs{ft_method}'
+    elif ft_method == 'gamma':
+        print_method = f'{ft_method}{gammaFreq_low}{gammaFreq_high}'
     else:
         print_method = ft_method
     
@@ -99,9 +101,9 @@ def run_mvc_per_sub(sub):
         if exists(join(results_sub_dir, mvc_fts_task_file)):
 
             results_df = read_csv(join(results_sub_dir, mvc_fts_task_file), index_col=0)
-            mvc_values_per_task[task] = results_df.values
-            mvc_freqs = results_df.keys()
-            mvc_times_per_task[task] = results_df.index
+            ft_values_per_task[task] = results_df.values
+            ft_keys[task] = results_df.keys()  # is freqs for mvc, ch_names for gamma
+            ft_times_per_task[task] = results_df.index
             print(f'\t...existing mvc-features are loaded for task: {task}')
             # if results for task are loaded, skip remainder of loop for this task
             continue
@@ -247,35 +249,48 @@ def run_mvc_per_sub(sub):
         )
 
         # TODO. CREATE IF ELSE FOR MVC METHODS AND GAMMA POWER
-        mne_starttime = time.time()
-        mvc_results = run_mne_MVC(
-            mvc_method=ft_method,
-            list_mneEpochArrays=list_mneEpochArrays,
-            report=True,
-            report_path=mvc_report_path,
-        )
-        # returns list of mne_connectivity.base.SpectralConnectivity per epoched-window in list
-        mne_stoptime = time.time()
+        if ft_method == 'mvc':
+            # import only now because of specific required conda env (mne_mvc)
+            from lfpecog_features.feats_multivarConn import run_mne_MVC
+
+            # returns list of mne_connectivity.base.SpectralConnectivity per epoched-window in list
+            ft_results = run_mne_MVC(
+                mvc_method=ft_method,
+                list_mneEpochArrays=list_mneEpochArrays,
+                report=True,
+                report_path=mvc_report_path,
+            )
+            # make 2d array of mvc results of several windows (n-windwos x n-coh-freqs)
+            ft_values_per_task[task] = np.array([
+                ft_results[i].get_data()[0]
+                for i in range(len(ft_results))
+            ])
+            # take absolute imag coh
+            if take_abs: ft_values_per_task[task] = abs(ft_values_per_task[task])
+            # get mvc-freqs and -times
+            ft_keys[task] = ft_results[0].freqs
+            ft_times_per_task[task] = class_mne_epochs.window_times
         
-        print(f'mne-mvc script time: {round((mne_stoptime - mne_starttime) / 60, 1)} minutes'
-              f'\n\t# MVC-result-windows: {len(mvc_results)}')
-
-        # make 2d array of mvc results of several windows
-        mvc_values_per_task[task] = array([
-            mvc_results[i].get_data()[0]
-            for i in range(len(mvc_results))
-        ])
-        # take absolute imag coh
-        if take_abs: mvc_values_per_task[task] = abs(mvc_values_per_task[task])
-        # get mvc-freqs and -times
-        mvc_freqs = mvc_results[0].freqs
-        mvc_times_per_task[task] = class_mne_epochs.window_times
-
+        elif ft_method == 'gamma':
+            from lfpecog_features.feats_epoched_gamma import run_epoched_gamma
+            (
+                ft_values_per_task[task],
+                ft_keys[task]  # is ch_names for gamma
+            ) = run_epoched_gamma(
+                freq_low=gammaFreq_low,
+                freq_high=gammaFreq_high,
+                list_mneEpochArrays=list_mneEpochArrays,
+                report=True,
+                report_path=mvc_report_path,
+            )
+            ft_times_per_task[task] = class_mne_epochs.window_times
+        
+        
         # save mvc results in csv
         mvc_task_df = DataFrame(
-            data=mvc_values_per_task[task],
-            index=mvc_times_per_task[task],
-            columns=mvc_freqs)
+            data=ft_values_per_task[task],
+            index=ft_times_per_task[task],
+            columns=ft_keys[task])
         mvc_task_df.to_csv(
             join(results_sub_dir, mvc_fts_task_file),
             index=True, header=True, sep=',',
@@ -283,7 +298,7 @@ def run_mvc_per_sub(sub):
 
 
     ### PLOT RESULTS ###
-    from lfpecog_plotting.plot_timeFreq_Connectivity import plot_mvc
+    from lfpecog_plotting.plot_timeFreq_Connectivity import ftPlot_over_dopaTime
     
     # add CDRS or ACC to fname
     if plot_CDRS: print_method += '_cdrs'
@@ -295,26 +310,40 @@ def run_mvc_per_sub(sub):
     for t in tasks: task_fname += f'{t}_'
 
     # merge values and times from different tasks for plot
+    # TODO. FIX GAMMA ARRAYS WITH DIFFERENT CHANNELS NAMES
     if len(tasks) == 1:
-        mvc_values = mvc_values_per_task[task]
-        mvc_times = mvc_times_per_task[task]
+        mvc_values = ft_values_per_task[task]
+        mvc_times = ft_times_per_task[task]
     else:
-        mvc_values = concatenate(list(
-            mvc_values_per_task.values()
-        ))
-        mvc_times = concatenate(list(
-            mvc_times_per_task.values()
-        ))
-        t_order = argsort(mvc_times)
+        mvc_times = np.concatenate(list(ft_times_per_task.values()))
+        try:
+            mvc_values = np.concatenate(list(ft_values_per_task.values()))
+        except ValueError:
+            if ft_method == 'gamma':
+                value_dfs = {}
+                for n, t in enumerate(tasks):
+                    value_dfs[n] = DataFrame(data=ft_values_per_task[t],
+                                             columns=ft_keys[t])
+                concat_values = value_dfs[0]
+                for n in np.arange(1, len(tasks)):
+                    concat_values = concat([concat_values, value_dfs[n]])
+                ft_keys = concat_values.keys()
+                mvc_values = concat_values.values
+
+            else:
+                raise ValueError('concatenate fails in main_run_epochFts()')
+        # order combined times and values chronologically
+        t_order = np.argsort(mvc_times)
         mvc_values = mvc_values[t_order]
         mvc_times = mvc_times[t_order]
 
+    if isinstance(ft_keys, dict): ft_keys = ft_keys[task]  # both are same (in gamma with same ch-names)
 
     # Run Plotting
-    plot_mvc(
+    ftPlot_over_dopaTime(
         sub=sub,
         plot_data=mvc_values,
-        plot_freqs=mvc_freqs,
+        plot_ft_keys=ft_keys,
         plot_times=mvc_times,
         add_CDRS=plot_CDRS,
         add_ACC=plot_ACC,
@@ -322,8 +351,8 @@ def run_mvc_per_sub(sub):
         add_task=plot_task,
         data_version=data_version,
         winLen_sec=winLen_sec,
-        fs=18,
-        mvc_method=ft_method,
+        fontsize=18,
+        ft_method=ft_method,
         cmap='viridis',
         to_save=True,
         save_path=ft_figures_dir,

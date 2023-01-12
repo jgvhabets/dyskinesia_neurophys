@@ -11,14 +11,20 @@ from lfpecog_plotting.timefreqSubplot_Acc import subplot_acc
 from lfpecog_plotting.timefreqSubplot_Clinical import subplot_cdrs
 
 
-def plot_mvc(
-    sub, plot_data, plot_freqs, plot_times,
-    fs=16, cmap='viridis', mvc_method='mic',
+def ftPlot_over_dopaTime(
+    sub, plot_data, plot_ft_keys, plot_times,
+    fontsize=16, cmap='viridis', ft_method='mic',
     to_save=False, save_path=None, fname=None,
     add_CDRS=True, add_ACC=True, add_task=False, acc_plottype='bars',
     data_version=None, mvc_ax=1, winLen_sec=None,
     plot_params={'sharex': False}, grid_params={},
 ):
+    """
+    Inputs:
+        - sub
+        - plot_data: 2d array
+        - plot_ft_keys: for mvc = freqs, for gamma = ch-names
+    """
     # define general plot settings
     num_axes = 1
     if add_CDRS: num_axes += 1
@@ -39,20 +45,23 @@ def plot_mvc(
         constrained_layout=True,)
     
     # Plot MVC features in subplot
-    fig, axes = subplot_mvc(fig=fig, axes=axes, num_axes=num_axes,
-                            mvc_ax=mvc_ax, fs=fs, cmap=cmap,
-                            plot_values=plot_data,
-                            plot_freqs=plot_freqs, plot_times=plot_times,
-                            sub=sub, mvc_method=mvc_method,)
+    if ft_method == 'mvc':
+        fig, axes = subplot_mvc(fig=fig, axes=axes, num_axes=num_axes,
+                                mvc_ax=mvc_ax, fs=fontsize, cmap=cmap,
+                                plot_values=plot_data,
+                                plot_freqs=plot_ft_keys, plot_times=plot_times,
+                                sub=sub, mvc_method=ft_method,)
+    elif ft_method == 'gamma':
+        print(f'create gamma subplot function'.upper())
 
     # Plot clinical LID scores (CDRS) in subplot
     if add_CDRS:
-        fig, axes = subplot_cdrs(fig=fig, axes=axes, fs=fs,
+        fig, axes = subplot_cdrs(fig=fig, axes=axes, fs=fontsize,
                                  sub=sub, plot_times=plot_times)
 
     # Plot Accelerometer features in subplot
     if add_ACC:
-        fig, axes = subplot_acc(fig=fig, axes=axes, fs=fs,
+        fig, axes = subplot_acc(fig=fig, axes=axes, fs=fontsize,
                                 sub=sub, plot_times=plot_times,
                                 data_version=data_version,
                                 winLen_sec=winLen_sec,
