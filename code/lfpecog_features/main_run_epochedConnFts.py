@@ -46,9 +46,9 @@ def run_mvc_per_sub(sub):
     # mvc_method = sys.argv[2].upper()
     # # DEBUGGING WITHOUT ARGUMENT FILE
     # sub = '013'
-    ft_method = 'gamma'
+    ft_method = 'rel_gamma'
 
-    assert ft_method.lower() in ["mic", "mim", "gamma"], (
+    assert ft_method.lower() in ["mic", "mim", "gamma", 'rel_gamma'], (
         'ft_method should be MIC or MIM or gamma'
     )
     
@@ -62,10 +62,10 @@ def run_mvc_per_sub(sub):
     mne_format = True
     epochLen_sec = .5
     take_abs = True
-    gammaFreq_low=60
-    gammaFreq_high=90
+    gammaFreq_low=70
+    gammaFreq_high=85
     plot_CDRS = True
-    plot_ACC = False
+    plot_ACC = True
     acc_plottype = 'bars'
     plot_task = True
 
@@ -75,13 +75,13 @@ def run_mvc_per_sub(sub):
     # ft-method-string to print in filenames
     if take_abs and ft_method.lower() == 'mic':
         print_method = f'abs{ft_method}'
-    elif ft_method == 'gamma':
+    elif 'gamma' in ft_method:
         print_method = f'{ft_method}{gammaFreq_low}{gammaFreq_high}'
     else:
         print_method = ft_method
     
     if ft_method.lower() in ['mic', 'mim']: ft_code = 'mvc'
-    elif ft_method.lower() == 'gamma': ft_code = 'gamma'
+    elif 'gamma' in ft_method.lower(): ft_code = ft_method.lower()
 
     # create directories
     results_sub_dir = join(get_project_path('results'), 'features', ft_code, f'sub{sub}')
@@ -249,7 +249,7 @@ def run_mvc_per_sub(sub):
         )
 
         # TODO. CREATE IF ELSE FOR MVC METHODS AND GAMMA POWER
-        if ft_method == 'mvc':
+        if ft_method in ['mic', 'mim']:
             # import only now because of specific required conda env (mne_mvc)
             from lfpecog_features.feats_multivarConn import run_mne_MVC
 
@@ -271,7 +271,7 @@ def run_mvc_per_sub(sub):
             ft_keys[task] = ft_results[0].freqs
             ft_times_per_task[task] = class_mne_epochs.window_times
         
-        elif ft_method == 'gamma':
+        elif 'gamma' in ft_method:
             from lfpecog_features.feats_epoched_gamma import run_epoched_gamma
             (
                 ft_values_per_task[task],
@@ -280,6 +280,7 @@ def run_mvc_per_sub(sub):
                 freq_low=gammaFreq_low,
                 freq_high=gammaFreq_high,
                 list_mneEpochArrays=list_mneEpochArrays,
+                ft_method=ft_method,
                 report=True,
                 report_path=mvc_report_path,
             )
@@ -319,7 +320,7 @@ def run_mvc_per_sub(sub):
         try:
             mvc_values = np.concatenate(list(ft_values_per_task.values()))
         except ValueError:
-            if ft_method == 'gamma':
+            if 'gamma' in ft_method:
                 value_dfs = {}
                 for n, t in enumerate(tasks):
                     value_dfs[n] = DataFrame(data=ft_values_per_task[t],

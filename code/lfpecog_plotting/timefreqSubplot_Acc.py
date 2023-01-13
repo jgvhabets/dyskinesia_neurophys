@@ -58,11 +58,8 @@ def subplot_acc(fig, axes, fs, sub, plot_times, winLen_sec,
         'merged_sub_data', data_version,
         f'{sub}_mergedDataClass_{data_version}_noEphys.P'
     ))
-    print(vars(acc).keys())
-    print(f'col names PRE: {acc.colnames}')
     acc = correct_acc_class(acc)
-    print(f'col names POST: {acc.colnames}')
-
+    
     acc_plot_lines = {
         'Left': {'tap': [], 'move': []},
         'Right': {'tap': [], 'move': []}}
@@ -203,6 +200,7 @@ def subplot_acc(fig, axes, fs, sub, plot_times, winLen_sec,
     ax.legend(frameon=False, ncol=ncols, fontsize=fs + 2,
                 bbox_to_anchor=(.5, -.1), loc='center',)
 
+    print(f'TYPES OF ACC SUBPLOT; fig: {type(fig)}, axes: {type(axes)}')
 
     return fig, axes
 
