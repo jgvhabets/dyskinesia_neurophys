@@ -72,7 +72,7 @@ def read_annotations(
 
 
 def read_clinical_scores(
-    sub, data_path,
+    sub, data_path=get_onedrive_path('data'),
 ):
     scores_fname = 'dyskinesia_recording_scores_Jeroen.xlsx'
     scores = read_excel(
@@ -240,3 +240,31 @@ def get_ecog_side(sub):
         return None
 
     return ecog_side
+
+
+def get_cdrs_specific(
+    sub, side='both'
+):
+    scores = read_clinical_scores(sub)
+    times = scores['dopa_time']
+
+    if side == 'both':
+        scores = scores['CDRS_total']
+    
+    elif np.logical_and(
+        'contra' in side.lower(),
+        'ecog' in side.lower()
+    ):
+        ecogside = get_ecog_side(sub)
+        if ecogside == 'left': side = 'right'
+        elif ecogside == 'right': side = 'left'
+        scores = scores[f'CDRS_total_{side}']
+    
+    elif np.logical_or(
+        side.lower() == 'left',
+        side.lower() == 'right',
+    ):
+        side = side.lower()
+        scores = scores[f'CDRS_total_{side}']
+    
+    return times, scores

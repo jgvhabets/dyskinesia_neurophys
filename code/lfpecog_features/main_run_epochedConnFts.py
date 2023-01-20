@@ -46,7 +46,7 @@ def run_mvc_per_sub(sub):
     # mvc_method = sys.argv[2].upper()
     # # DEBUGGING WITHOUT ARGUMENT FILE
     # sub = '013'
-    ft_method = 'rel_gamma'
+    ft_method = 'gamma'
 
     assert ft_method.lower() in ["mic", "mim", "gamma", 'rel_gamma'], (
         'ft_method should be MIC or MIM or gamma'
@@ -62,8 +62,8 @@ def run_mvc_per_sub(sub):
     mne_format = True
     epochLen_sec = .5
     take_abs = True
-    gammaFreq_low=70
-    gammaFreq_high=85
+    gammaFreq_low=60
+    gammaFreq_high=90
     plot_CDRS = True
     plot_ACC = True
     acc_plottype = 'bars'
@@ -84,10 +84,10 @@ def run_mvc_per_sub(sub):
     elif 'gamma' in ft_method.lower(): ft_code = ft_method.lower()
 
     # create directories
-    results_sub_dir = join(get_project_path('results'), 'features', ft_code, f'sub{sub}')
+    results_sub_dir = join(get_project_path('results'), 'features', f'sub{sub}', ft_code)
     data_sub_dir = join(get_project_path('data'), f'windowed_data_classes_{winLen_sec}s',
                         data_version, f'sub-{sub}')
-    ft_figures_dir = join(get_project_path('figures'), 'ft_exploration', ft_code)
+    ft_figures_dir = join(get_project_path('figures'), 'ft_exploration', data_version, ft_code)
 
     for f in [results_sub_dir, data_sub_dir, ft_figures_dir]:
         if not exists(f): makedirs(f)

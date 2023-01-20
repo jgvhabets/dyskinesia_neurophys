@@ -187,7 +187,7 @@ def subplot_gamma(
     for src in mean_per_source:
         src_arr = np.array(mean_per_source[src])
         mean_ps = np.nanmean(src_arr, axis=0,)
-        if src == 'ECOG': label = ecog_label
+        if src.lower() == 'ecog': label = ecog_label
         else: label = src
         ax.plot(mean_ps, lw=3, alpha=1,
                 color=colors[src], label=label)
