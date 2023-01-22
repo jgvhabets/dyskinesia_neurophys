@@ -245,6 +245,19 @@ def get_ecog_side(sub):
 def get_cdrs_specific(
     sub, side='both'
 ):
+    """
+    Gives uni- or bilateral CDRS scores
+    per subject
+
+    Input:
+        - sub
+        - side: should be left, right, both,
+            or 'contra ecog'
+    
+    Returns:
+        - times
+        - scores
+    """
     scores = read_clinical_scores(sub)
     times = scores['dopa_time']
 
@@ -266,5 +279,9 @@ def get_cdrs_specific(
     ):
         side = side.lower()
         scores = scores[f'CDRS_total_{side}']
+    
+    else:
+        raise ValueError('side should be "left", '
+                '"right", "both" or "contra ecog"')
     
     return times, scores
