@@ -22,6 +22,7 @@ def get_windows(
     remove_nan_timerows: bool = True,
     movement_part_acceptance: float = 1.,
     return_as_class=False,
+    only_ipsiECoG_STN=True,
 ):
     """
     Select windows with size nWin * Fs,
@@ -67,7 +68,8 @@ def get_windows(
             times = np.around(data.index.values, 6)
             data.insert(loc=0, column='dopa_time', value=times)
         
-        arr_keys = data.keys()
+        arr_keys = data.keys().copy()
+        data = data.values()
     
     elif isinstance(data, np.ndarray):
         
@@ -81,11 +83,40 @@ def get_windows(
         times_col = np.where(c == 'dopa_time' for c in col_names)[0][0]
         times = data[:, times_col]
         # times = time_index   # CURRENTLY NUMERICAL INDEX !!!
-        arr_keys = col_names
+        arr_keys = col_names.copy()
 
     else:
         raise ValueError('data inserted in get_windows() has wrong datatype')
     
+    # save few ECoG channels in case of many missings (eg 016)
+    for cols in [
+        ('ECOG_R_02_04', 'ECOG_R_02_05'),
+        ('ECOG_R_04_05', 'ECOG_R_05_06')
+    ]:
+
+        if np.logical_and(cols[0] in arr_keys, cols[1] in arr_keys):
+            
+            i1 = np.where(np.array(arr_keys) == cols[0])[0][0]
+            i2 = np.where(np.array(arr_keys) == cols[1])[0][0]
+
+        newcol = np.nansum([data[:, i1], data[:, i2]], axis=0)
+        data[:, i1] = newcol
+        data = np.delete(data, i2, axis=1)
+        arr_keys.remove(cols[1])
+
+    
+    # SELECT ONLY IPSILATERAL STN TO ECOG
+    if only_ipsiECoG_STN:
+        ecog_side = [c for c in arr_keys if 'ECOG' in c][0][5]
+        assert ecog_side in ['L', 'R'], print('incorrect ecog side detected')
+        if ecog_side == 'R': contra_side = 'L'
+        elif ecog_side == 'L': contra_side = 'R'
+        del_sel = np.array([f'_{contra_side}_' in c and 'LFP' in c for c in arr_keys])
+        data = data[:, ~del_sel]
+        arr_keys = np.array(arr_keys)[~del_sel]
+        print(data.shape, arr_keys.shape)
+
+
     # remove channels with too many NaNs to prevent deletion of all data
     # this happens due to different missing channels in different recordings
     if remove_nan_timerows:
@@ -103,7 +134,6 @@ def get_windows(
         data = data[:, good_cols]
         arr_keys = list(compress(arr_keys, good_cols))
         
-
     nWin = int(fs * winLen_sec)  # n samples within a full window
 
     # define time (in seconds) after which a new window starts (incl overlap)
@@ -112,8 +142,10 @@ def get_windows(
     else:
         sec_hop = winLen_sec
 
-    # start with rounded winLen positions
+    print(times[:10])
+    # start with rounded winLen positions to create uniform start times over subjects
     tStart = round(times[0] / winLen_sec) - (winLen_sec * .5)
+    tStart = tStart * winLen_sec  # convert rounded window number to seconds
 
     # create 3d array with windows
     arr_list, arr_times_sec = [], []
@@ -122,6 +154,7 @@ def get_windows(
     for win0_sec in np.arange(
         tStart, times[-1], sec_hop
     ):
+        print(f'DEBUG: start {win0_sec} SEC')
         # SELECT ROWS WITHIN TIME WINDOW
         if isinstance(data, DataFrame):
             wintemp = data.loc[win0_sec:win0_sec + winLen_sec]
@@ -131,14 +164,17 @@ def get_windows(
                 win0_sec < times, times < (win0_sec + winLen_sec)
             )
             wintemp = data[sel]
+            print(f'\tshape is {wintemp.shape}')
                         
             if remove_nan_timerows:
                 nansel = isna(wintemp).any(axis=1)
                 wintemp = wintemp[~nansel]
-                # print('after nan remove', wintemp.shape)
+                print('\tafter nan remove', wintemp.shape)
 
         # skip window if less data present than defined threshold
-        if wintemp.shape[0] < (nWin * min_winPart_present): continue
+        if wintemp.shape[0] < (nWin * min_winPart_present):
+            print('skip based on NaNs', win0_sec)
+            continue
 
         ### INCLUDE ACCELEROMETER ACTIVITY FILTERING
         if movement_part_acceptance < 1:  # 1 is default and means no filtering

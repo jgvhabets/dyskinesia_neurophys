@@ -5,7 +5,10 @@ General utilisation functions
 # import public packages and functions
 from os import getcwd, listdir, makedirs
 from os.path import join, exists, dirname
-from numpy import logical_and, save, ndarray, where, ravel
+from numpy import (
+    logical_and, save, ndarray, where,
+    ravel, arange, array
+)
 from csv import writer
 import pickle
 from dataclasses import dataclass
@@ -208,6 +211,15 @@ def load_class_pickle(
     with open(file_to_load, 'rb') as f:
         output = pickle.load(f)
         f.close()
+    
+    # if times is just indices 0,1,2,...
+    if 'times' in vars(output).keys():
+        if (output.times[:5] == arange(5)).all():
+            # find dopa-time values
+            i_time = where(array(output.colnames) == 'dopa_time')[0][0]
+            # set dopa-time values as times attr
+            setattr(output, 'times' ,output[:, i_time])
+
 
     return output
 
