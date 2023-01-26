@@ -218,8 +218,10 @@ def load_class_pickle(
             # find dopa-time values
             i_time = where(array(output.colnames) == 'dopa_time')[0][0]
             # set dopa-time values as times attr
-            setattr(output, 'times' ,output[:, i_time])
-
+            if 'data_arr' in vars(output).keys():
+                setattr(output, 'times' , output.data_arr[:, i_time])
+            elif 'data' in vars(output).keys():
+                setattr(output, 'times' , output.data[:, i_time])
 
     return output
 

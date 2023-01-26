@@ -40,13 +40,14 @@ def run_mvc_per_sub(sub):
     
     Running on WIN (from repo_folder/code):
         (activate conda environment with custom mne_connectivity)
-        python -m lfpecog_features.main_run_epochedConnFts "012" "mic"
+        python -m lfpecog_features.cmdRun_mvc_subs "000" "001" etc
     """
+    # single run deprecated, no if main anymore, only via group running (cmdRun_mvc_subs)
     # sub = sys.argv[1]
     # mvc_method = sys.argv[2].upper()
     # # DEBUGGING WITHOUT ARGUMENT FILE
     # sub = '013'
-    ft_method = 'gamma'
+    ft_method = 'mic'
 
     assert ft_method.lower() in ["mic", "mim", "gamma", 'rel_gamma'], (
         'ft_method should be MIC or MIM or gamma'
@@ -55,7 +56,7 @@ def run_mvc_per_sub(sub):
     MAIN_starttime = time.time()
 
     # variables (set into cfg.json later)
-    tasks = ['tap', 'rest']
+    tasks = ['rest', 'tap']
     data_version = 'v3.1'
     winLen_sec = 60
     part_winOverlap = 0.5
@@ -84,7 +85,7 @@ def run_mvc_per_sub(sub):
     elif 'gamma' in ft_method.lower(): ft_code = ft_method.lower()
 
     # create directories
-    results_sub_dir = join(get_project_path('results'), 'features', f'sub{sub}', ft_code)
+    results_sub_dir = join(get_project_path('results'), 'features', ft_code, f'sub{sub}')
     data_sub_dir = join(get_project_path('data'), f'windowed_data_classes_{winLen_sec}s',
                         data_version, f'sub-{sub}')
     ft_figures_dir = join(get_project_path('figures'), 'ft_exploration', data_version, ft_code)
@@ -113,9 +114,9 @@ def run_mvc_per_sub(sub):
         # define path names
         windowed_class_path = join(data_sub_dir, task)
         mneEpochs_pickle_fname = (f'{sub}_mneEpochs_{task}_{data_version}_'
-                        f'win{winLen_sec}s_overlap{part_winOverlap}')
+                        f'win{winLen_sec}s_overlap{part_winOverlap}_onlyEcogSide')
         windows_pickle_fname = (f'{sub}_windows_{task}_{data_version}_'
-                        f'win{winLen_sec}s_overlap{part_winOverlap}')
+                        f'win{winLen_sec}s_overlap{part_winOverlap}_onlyEcogSide')
 
         pickled_epochs_path = join(windowed_class_path, f'{mneEpochs_pickle_fname}.P')
         pickled_windows_path = join(windowed_class_path, f'{windows_pickle_fname}.P')

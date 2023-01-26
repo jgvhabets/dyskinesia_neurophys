@@ -89,20 +89,21 @@ def get_windows(
         raise ValueError('data inserted in get_windows() has wrong datatype')
     
     # save few ECoG channels in case of many missings (eg 016)
-    for cols in [
+    problem_cols = [
         ('ECOG_R_02_04', 'ECOG_R_02_05'),
         ('ECOG_R_04_05', 'ECOG_R_05_06')
-    ]:
+    ]
+    for cols in problem_cols:
 
         if np.logical_and(cols[0] in arr_keys, cols[1] in arr_keys):
             
             i1 = np.where(np.array(arr_keys) == cols[0])[0][0]
             i2 = np.where(np.array(arr_keys) == cols[1])[0][0]
 
-        newcol = np.nansum([data[:, i1], data[:, i2]], axis=0)
-        data[:, i1] = newcol
-        data = np.delete(data, i2, axis=1)
-        arr_keys.remove(cols[1])
+            newcol = np.nansum([data[:, i1], data[:, i2]], axis=0)
+            data[:, i1] = newcol
+            data = np.delete(data, i2, axis=1)
+            arr_keys.remove(cols[1])
 
     
     # SELECT ONLY IPSILATERAL STN TO ECOG
