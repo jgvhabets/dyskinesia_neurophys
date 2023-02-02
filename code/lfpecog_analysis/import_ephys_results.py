@@ -7,7 +7,6 @@ from os.path import join, exists
 import numpy as np
 from pandas import concat, read_csv, DataFrame
 
-
 # Import own functions
 from utils.utils_fileManagement import (
     get_project_path, load_class_pickle, correct_acc_class
