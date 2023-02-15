@@ -13,7 +13,10 @@ PM: consider seperate .py-files per feature
 # Import general packages and functions
 import os
 import numpy as np
+from pandas import DataFrame
 from scipy import signal
+from scipy.stats import variation
+import matplotlib.pyplot as plt
 # import own functions
 import lfpecog_features.feats_spectral_helpers as specHelpers
 
@@ -135,6 +138,8 @@ def calc_coherence(
 
 def get_fooof_peaks_freqs_and_sizes(
     f, pxx, range=[4, 98], knee_or_fix: str = 'knee',
+    max_n_peaks = np.inf, fooof_fig_dir=None,
+    plot=False, i_e=None, chname=None,
 ):
     """
     get relevant fooof-parameters
@@ -162,6 +167,7 @@ def get_fooof_peaks_freqs_and_sizes(
         peak_width_limits=(.5, 5),
         peak_threshold=.5,
         aperiodic_mode=knee_or_fix,
+        max_n_peaks=max_n_peaks,
         verbose=False,
     )     
     fm.fit(f, pxx, range)
@@ -173,5 +179,162 @@ def get_fooof_peaks_freqs_and_sizes(
     peak_freqs = temp_peaks[:, 0]
     peak_sizes = temp_peaks[:, 2] * temp_gaus[:, 1]  # height * bandwidth
     # peak_pows = temp_peaks[:, 1]
+    fit_r2 = fm.get_results().r_squared
+    
+    # Swann / De Hemptinne
+    pk_idx = [np.argmin(abs(np.array(f) - cf)) for cf in peak_freqs]
+    pk_hgts = [np.log(pxx[i]) for i in pk_idx]
+    lo_cut_idx = [np.argmin(abs(np.array(f) - cf - 5)) for cf in peak_freqs]
+    hi_cut_idx = [np.argmin(abs(np.array(f) - cf + 5)) for cf in peak_freqs]
+    base_hgts = [np.mean(np.log([pxx[i_lo], pxx[i_hi]]))
+                for i_lo, i_hi in zip(lo_cut_idx, hi_cut_idx)]
+    peak_logHeights = [(pk - base) for pk, base in zip(pk_hgts, base_hgts)]
 
-    return ap_off, ap_exp, peak_freqs, peak_sizes
+    # random plot for check
+    plt.figure()
+    fm.plot()
+    plt.title(f'Goodness, R2: {fit_r2}')
+    plt.savefig(
+        os.path.join(fooof_fig_dir, f'FOOOF_fit_win5epoch{i_e}_{chname}'),
+        dpi=150, facecolor='w',
+    )
+    plt.close()
+
+
+    return ap_off, ap_exp, peak_freqs, peak_sizes, peak_logHeights, fit_r2
+
+
+def get_fooof_fts_per_epoch(
+    epoch_dat, fs, nperseg, ch_names,
+    sources_incl=['ECOG', 'LFP_L', 'LFP_R'],
+    fooof_range = [4, 98],  # wider window -> more accurate, more comp-time
+    max_n_fooof_peaks = 15,
+    bw_ranges = {
+        'alpha': [8, 12],
+        'lo_beta': [12, 20],
+        'hi_beta': [20, 35],
+        'midgamma': [60, 90]
+    },
+    i_e=None, fooof_fig_dir=None,
+):
+    """
+    extracts aperiodic and spectral peak features
+    over 2d array (channels, timepoints)
+    """
+    # lists to store temp-single values and featuress (means, cv, sd)
+    ft_out = specHelpers.get_empty_spectral_ft_dict(lists_or_means='means')
+    ft_temp = specHelpers.get_empty_spectral_ft_dict(lists_or_means='lists')
+    goodness_fits = []
+    
+    for i_ch in np.arange(epoch_dat.shape[0]): # loop over all channels
+        check_plot = False
+
+        chname = ch_names[i_ch]
+        skip = True
+        # define matching source
+        for src in sources_incl:
+            if chname.startswith(src):
+                source = src
+                skip = False
+        if skip:
+            print(f'skipped {chname}')
+            continue  # skip channel if not in sources_incl
+        # select and transform data from one channel, in one epoch
+        f, pxx = signal.welch(
+            epoch_dat[i_ch, :], fs=fs, nperseg=nperseg,
+        )
+        # correct psd shape for linenoise corrected throughs
+        pxx = specHelpers.correct_notch_throughs(f, pxx, np.arange(50, 1201, 50))
+        # get aperiodic and periodic features
+
+        # for random plotting
+        # if i_e in [10, 20, 30]:
+        #     if i_ch in [0, 5, 15, 25]:
+        #         check_plot = True
+        (
+            ap_off, ap_exp, pk_cf, pk_pw, log_hgts, fit_r2
+        ) = get_fooof_peaks_freqs_and_sizes(
+            f, pxx, range=fooof_range, knee_or_fix='knee',
+            max_n_peaks=max_n_fooof_peaks,
+            i_e=i_e, chname=chname, plot=check_plot, fooof_fig_dir=fooof_fig_dir,
+        )
+
+        # distribute peaks to feat_arrays based on bandwidths
+        if np.isnan(ap_off): continue
+
+        goodness_fits.append(fit_r2)
+        # add aperiodic feats
+        ft_temp[source]['ap_off'].append(ap_off)
+        ft_temp[source]['ap_exp'].append(ap_exp)
+        # add peak-feats per bandwidth
+        for bw, rng in zip(bw_ranges.keys(), bw_ranges.values()):
+            bw_sel = np.logical_and(rng[0] < pk_cf, pk_cf < rng[1])
+            # skip if peak combi not present
+            if len(bw_sel) == 0: continue
+            # add lists of peak-values to correct list
+            ft_temp[source]['peak_freq'][bw].extend(pk_cf[bw_sel])
+            ft_temp[source]['peak_size'][bw].extend(pk_pw[bw_sel])
+            ft_temp[source]['peak_logHeight'][bw].extend(pk_pw[bw_sel])
+
+    # convert ft_lists to means per source (and bw)
+    for src in sources_incl:
+        for ft in ['ap_off', 'ap_exp']:
+            if ft_temp[src][ft] == []: continue  # skip empty lists
+            ft_out[src][ft]['mean'] = np.nanmean(ft_temp[src][ft])
+            ft_out[src][ft]['sd'] = np.nanstd(ft_temp[src][ft])
+            ft_out[src][ft]['cv'] = variation(ft_temp[src][ft], nan_policy='omit')     
+        
+        for ft in ['peak_freq', 'peak_size', 'peak_logHeight']:
+            for bw in bw_ranges.keys():
+                if ft_temp[src][ft][bw] == []: continue  # skip empty lists
+                ft_out[src][ft][bw]['mean'] = np.nanmean(ft_temp[src][ft][bw])
+                ft_out[src][ft][bw]['sd'] = np.nanstd(ft_temp[src][ft][bw])
+                ft_out[src][ft][bw]['cv'] = variation(ft_temp[src][ft][bw], nan_policy='omit')
+        
+    return ft_out, ft_temp, goodness_fits
+
+
+def get_spectral_ft_names(ex_epoch):
+
+    ft_names = []
+
+    for src in ex_epoch:
+        for ft in ex_epoch[src].keys():
+            if ft.startswith('ap'):
+                for m in ex_epoch[src][ft].keys():
+                    ft_names.append(f'{src}_{ft}_{m}')
+            elif ft.startswith('peak'):
+                for bw in ex_epoch[src][ft].keys(): 
+                    for m in ex_epoch[src][ft][bw].keys():
+                        ft_names.append(f'{src}_{ft}_{bw}_{m}')
+
+    return ft_names
+
+
+def create_windowFrame_specFeats(
+    epoch_feat_dict, save_csv=False,
+    csv_path=None, csv_fname=None,
+):
+    
+    ft_names = get_spectral_ft_names(epoch_feat_dict[0])
+
+    df = DataFrame(
+        data=np.array([[np.nan] * len(ft_names)] * len(epoch_feat_dict)),
+        columns=ft_names
+    )
+
+    for row, epoch in enumerate(epoch_feat_dict.values()):
+        for src in epoch:
+            for ft in epoch[src].keys():
+                if ft.startswith('ap'):
+                    for m in epoch[src][ft].keys():
+                        df.iloc[row][f'{src}_{ft}_{m}'] = epoch[src][ft][m]
+                elif ft.startswith('peak'):
+                    for bw in epoch[src][ft].keys(): 
+                        for m in epoch[src][ft][bw].keys():
+                            df.iloc[row][f'{src}_{ft}_{bw}_{m}'] = epoch[src][ft][bw][m]
+
+    if save_csv:
+        df.to_csv(os.path.join(csv_path, csv_fname), header=True)
+    return df
+

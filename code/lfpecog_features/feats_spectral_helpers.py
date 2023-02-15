@@ -155,7 +155,7 @@ def correct_notch_throughs(
 def get_empty_spectral_ft_dict(
     lists_or_means: str,
     sources_incl = ['LFP_L', 'LFP_R', 'ECOG'],
-    bw_feats = ['peak_freq', 'peak_size'],
+    bw_feats = ['peak_freq', 'peak_size', 'peak_logHeight'],
     ap_feats = ['ap_off', 'ap_exp'],
     ranges = ['alpha', 'lo_beta', 'hi_beta', 'midgamma'],
 ):
