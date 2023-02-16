@@ -191,14 +191,15 @@ def get_fooof_peaks_freqs_and_sizes(
     peak_logHeights = [(pk - base) for pk, base in zip(pk_hgts, base_hgts)]
 
     # random plot for check
-    plt.figure()
-    fm.plot()
-    plt.title(f'Goodness, R2: {fit_r2}')
-    plt.savefig(
-        os.path.join(fooof_fig_dir, f'FOOOF_fit_win5epoch{i_e}_{chname}'),
-        dpi=150, facecolor='w',
-    )
-    plt.close()
+    if plot:
+        plt.figure()
+        fm.plot()
+        plt.title(f'{chname}  -  Goodness, R2: {fit_r2}')
+        plt.savefig(
+            os.path.join(fooof_fig_dir, f'FOOOF_fit_win5epoch{i_e}_{chname}'),
+            dpi=150, facecolor='w',
+        )
+        plt.close()
 
 
     return ap_off, ap_exp, peak_freqs, peak_sizes, peak_logHeights, fit_r2
@@ -215,7 +216,8 @@ def get_fooof_fts_per_epoch(
         'hi_beta': [20, 35],
         'midgamma': [60, 90]
     },
-    i_e=None, fooof_fig_dir=None,
+    i_e=None, fooof_fig_dir=None, ch_fig_dir=None,
+    plot_examples=False,
 ):
     """
     extracts aperiodic and spectral peak features
@@ -245,18 +247,23 @@ def get_fooof_fts_per_epoch(
         )
         # correct psd shape for linenoise corrected throughs
         pxx = specHelpers.correct_notch_throughs(f, pxx, np.arange(50, 1201, 50))
-        # get aperiodic and periodic features
 
         # for random plotting
-        # if i_e in [10, 20, 30]:
-        #     if i_ch in [0, 5, 15, 25]:
-        #         check_plot = True
+        if plot_examples:
+            if i_e in [0, 20, 40, 60, 80]:
+                if i_ch in [0, 10, 20]:
+                    check_plot = True
+                    ch_fig_dir=os.path.join(fooof_fig_dir, chname)
+                    if not os.path.exists(ch_fig_dir): os.makedirs(ch_fig_dir)
+
+        # get aperiodic and periodic features
         (
             ap_off, ap_exp, pk_cf, pk_pw, log_hgts, fit_r2
         ) = get_fooof_peaks_freqs_and_sizes(
             f, pxx, range=fooof_range, knee_or_fix='knee',
             max_n_peaks=max_n_fooof_peaks,
-            i_e=i_e, chname=chname, plot=check_plot, fooof_fig_dir=fooof_fig_dir,
+            i_e=i_e, chname=chname, plot=check_plot,
+            fooof_fig_dir=ch_fig_dir,
         )
 
         # distribute peaks to feat_arrays based on bandwidths
@@ -314,6 +321,7 @@ def get_spectral_ft_names(ex_epoch):
 def create_windowFrame_specFeats(
     epoch_feat_dict, save_csv=False,
     csv_path=None, csv_fname=None,
+    fooof_fits=None,
 ):
     
     ft_names = get_spectral_ft_names(epoch_feat_dict[0])
@@ -336,5 +344,17 @@ def create_windowFrame_specFeats(
 
     if save_csv:
         df.to_csv(os.path.join(csv_path, csv_fname), header=True)
+
+        if fooof_fits:  # save fits            
+            n_col = max([len(fooof_fits[i]) for i in fooof_fits.keys()])
+            fit_df = DataFrame(np.array([[np.nan] * n_col] * len(fooof_fits)))
+
+            for i, f in enumerate(fooof_fits.values()):
+                fit_df.iloc[i, :len(f)] = f
+            
+            fit_df.to_csv(
+                os.path.join(csv_path, f'fits_{csv_fname}'),
+                header=False)
+                
     return df
 
