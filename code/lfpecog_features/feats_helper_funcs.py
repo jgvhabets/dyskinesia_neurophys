@@ -8,6 +8,23 @@ import numpy as np
 # from scipy.ndimage import uniform_filter1d
 
 
+def baseline_zscore(
+    arr_to_zscore, bl_mean, bl_std
+):
+    """
+    Performs a z-score with previously determined
+    mean and std-dev (from a baseline)
+    """
+    assert type(arr_to_zscore) == np.ndarray, (
+        'arr_to_zscore has to be array dtype'
+    ) 
+
+    new_arr = (arr_to_zscore - bl_mean) / bl_std
+
+    return new_arr
+
+
+
 def normalize_var_fts(values):
     """
     Normalise list or (nd)-array of values
@@ -76,9 +93,37 @@ def spaced_arange(
     return arr
 
 
-# ### SMOOTHING FUNCTION WITH NP.CONVOLVE or
-# from scipy.ndimage import uniform_filter1d
+from scipy.ndimage import uniform_filter1d
 
+def smoothing(
+    sig, win_samples=None, win_ms=None, fs=None,
+):
+    """
+    smoothens a signal, either on window length in
+    millisec or in samples.
+    NEEDS EITHER: win_samples, OR: win_ms AND fs
+
+    Inputs:
+        - sig: 1d array
+        - win_samples: n samples to use for smoothing
+        - win_ms: millisecs to smooth
+        - fs: fs (only needed when win_ms given)
+    
+    Returns:
+        - sig: smoothened signal
+    """
+    assert win_samples or win_ms, (
+        'define smoothing window samples or ms'
+    )
+    if win_ms:
+        assert fs, 'define fs if windowing on millisec'
+        win_samples = int(fs / 1000 * win_ms)  # smoothing-samples in defined ms-window
+    
+    # smooth signal
+    sig = uniform_filter1d(sig, win_samples)
+
+    return sig
+    
 
 # sig = accDat['40'].On
 # dfsig = np.diff(sig)

@@ -7,12 +7,13 @@ burst-dynamics
 import numpy as np
 import pandas as pd
 from scipy.signal import hilbert
+from scipy.stats import zscore
 from scipy.ndimage import uniform_filter1d
 from array import array
-from typing import Union
-
+from sklearn.decomposition import PCA
 # import own functions
 from lfpecog_features.feats_spectral_features import bandpass
+from lfpecog_features.feats_helper_funcs import baseline_zscore, smoothing
 
 
 def get_burst_features(
@@ -62,8 +63,9 @@ def get_burst_features(
     )
 
     if envelop_smoothing:
-        smooth_samples = int(fs / 1000 * smooth_factor_ms)  # smoothing-samples in defined ms-window
-        env = uniform_filter1d(env, smooth_samples)
+        env = smoothing(sig, win_ms=smooth_factor_ms, fs=fs)
+        # smooth_samples = int(fs / 1000 * smooth_factor_ms)  # smoothing-samples in defined ms-window
+        # env = uniform_filter1d(env, smooth_samples)
     
     burst_thr = get_burst_threshold(
         threshold_meth, cutoff_perc, env
@@ -129,16 +131,20 @@ def find_data_blocks(sig):
 
 def get_envelop(
     sig, fs, bandpass_freqs,
+    return_none_abs_Hilb=False,
     in_blocks=False,
     min_sec_block = 10,
+    bw_ranges = {
+        'alpha': [8, 12],
+        'lo_beta': [12, 20],
+        'hi_beta': [20, 35],
+        'midgamma': [60, 90]
+    },
 ):
     """
     """
-    # print(
-    #     '\nNaN percentage: ',
-    #     sum(np.isnan(list(sig))) / len(sig),
-    #     ' %'
-    # )
+    if type(bandpass_freqs) == str:
+        bandpass_freqs = bw_ranges[bandpass_freqs]
 
     # discard nans for hilbert transform
     if not in_blocks:
@@ -148,7 +154,12 @@ def get_envelop(
             sig, bandpass_freqs, fs
         )
         hilb_sig = hilbert(filt_sig)
+
+        if return_none_abs_Hilb: return hilb_sig
+
         env = abs(hilb_sig)  # rectify -> analytical signal / envelop
+
+        return env
 
     elif in_blocks:
         # calculating seperate available data blocks
@@ -246,3 +257,88 @@ def calc_bursts_from_env(
     rateLong = nLong / (len(envelop) / fs)
 
     return nShort, nLong, rateShort, rateLong
+
+
+
+def get_multichannel_analyticSignal(
+    dat,
+    fs,
+    bw_sel,
+    ch_names,
+    zscore_env=True,
+    source_sel=None,
+    return_n_comp=None,
+    bw_ranges = {
+        'alpha': [8, 12],
+        'lo_beta': [12, 20],
+        'hi_beta': [20, 35],
+        'midgamma': [60, 90]
+    },
+    use_none_abs_Hilb=False,
+    zscore_m=None, zscore_sd=None,
+):
+    """
+    extracts analytical signal for multiple channels
+    in one epoch, within specified freq-band, and returns
+    the first X Principle Components
+
+    Input:
+        - dat: 2d array with n-channels x n-samples
+        - fs: samping freq
+        - bw_sel: bandwidth to sel, if string given, then
+            defined bw_ranges is used, if tuple is given,
+            then it should be a tuple with min-max freq
+        - ch_names: list, length corresponding to 
+        - source_sel: defines LFP_L, LFP_R, or ECOG to include,
+            if not given, the whole inserted array is included 
+    """
+    # select out data if source is given
+    if source_sel:
+        assert len(ch_names) == dat.shape[0], (
+            '# of ch_names and # of data rows does not match'
+        )
+        assert source_sel in ['ECOG', 'LFP_L', 'LFP_R'], (
+            f'given source {source_sel}'
+        )
+
+        ch_sel = [ch.startswith(source_sel) for ch in ch_names]
+        dat = dat[ch_sel, :]
+    
+    # define freq band of interest
+    if type(bw_sel) == str:
+        bw = bw_ranges[bw_sel]
+    elif type(bw_sel) == list or type(bw_sel) == tuple:
+        assert len(bw_sel) == 2, 'bw_sel length incorrect'
+        bw = bw_sel
+    else:
+        raise ValueError('bw_sel should be tuple length 2 or freq range-string')
+    
+    env_array = np.zeros_like(dat)
+    # calculate env for included channels
+    for i_ch in np.arange(dat.shape[0]): # loop over all channels
+        
+        # select and include analytic signal (env) per channel, in one epoch
+        env = get_envelop(dat[i_ch, :], fs=fs, bandpass_freqs=bw,
+                          return_none_abs_Hilb=use_none_abs_Hilb)
+        env_array[i_ch, :] = env
+    
+    
+    # normalise every envelop seperately
+    if zscore_env:
+        z_env = np.empty_like(env_array)
+        for i, row in enumerate(env_array):
+            if zscore_m and zscore_sd:
+                z_env[i, :] = baseline_zscore(row, zscore_m, zscore_sd)
+            else:
+                z_env[i, :] = zscore(row)
+        env_array = z_env
+    
+    
+    # take PCA of env array
+    pca = PCA(n_components=return_n_comp, svd_solver='full')
+    env_arr_transformed = pca.fit_transform(env_array.T)  # PCA expect n-samples by n-features
+    env_arr_transformed = env_arr_transformed.T  # transpose back to n-features by n-samples
+    PCA(n_components=return_n_comp, svd_solver='full')
+    exp_var = pca.explained_variance_ratio_
+
+    return exp_var, env_arr_transformed
