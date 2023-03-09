@@ -109,10 +109,10 @@ if __name__ == '__main__':
     if "no_save" in sys.argv:
         TO_SAVE = False 
     else:
-        TO_SAVE = True
-        SAVE_AS_PICKLE = True
         if "no_pickle" in sys.argv:
-            SAVE_AS_PICKLE = False
+            TO_SAVE = 'df'
+        else:
+            TO_SAVE = 'P'  # save as pickle
 
 
     
@@ -128,11 +128,11 @@ if __name__ == '__main__':
     if not PICKLE_PER_SOURCE:
         merged_df, fs = read_data_funcs.merge_ephys_sources(data)
 
-    from pandas import isna
-    print('\n\tCHECK MISSINGS', merged_df.shape)
-    for col in list(merged_df.keys()):
-        sumnan = sum(isna(merged_df[col]))
-        print(f'{col}: {sumnan} nans')
+        from pandas import isna
+        print('\n\tCHECK MISSINGS', merged_df.shape)
+        for col in list(merged_df.keys()):
+            sumnan = sum(isna(merged_df[col]))
+            print(f'{col}: {sumnan} nans')
     
     
     ### Optionally add Accelerometer
@@ -143,69 +143,82 @@ if __name__ == '__main__':
             merged_df = add_moveStates(merged_df, accStates)
             print('...movement states added (in run_mergeDataClass)')
 
-    ### SAVING
-    if TO_SAVE:
+    ### Save per dType or all together
 
-        if PICKLE_PER_SOURCE:
+    if PICKLE_PER_SOURCE:
 
-            for dType in data.dtypes:
-                # skip other dtypes
-                if True not in [dType.lower().startswith(s)
-                                for s in ['acc', 'lfp', 'ecog']]:
-                    continue
+        for dType in data.dtypes:
+            # skip other dtypes
+            if True not in [dType.lower().startswith(s)
+                            for s in ['acc', 'lfp', 'ecog']]:
+                continue
 
+            # add ACC states to dType df
+            if INCL_ACC:
                 data_df = add_moveStates(
                     getattr(data, dType).data.set_index('dopa_time'),
                     accStates
                 )
-                fs = getattr(data, dType).fs
-                data_class = mergedData(
-                    sub=SUB,
-                    data_version=DATA_VERSION,
-                    data=data_df.values,
-                    colnames=list(data_df.keys()),
-                    times=list(data_df.index.values),
-                    fs=fs,
-                )
+            else:
+                data_df = getattr(data, dType).data.set_index('dopa_time')
+            
+            # get sampling freq, convert to class, and save
+            fs = getattr(data, dType).fs
+            data_class = mergedData(
+                sub=SUB,
+                data_version=DATA_VERSION,
+                data=data_df.values,
+                colnames=list(data_df.keys()),
+                times=list(data_df.index.values),
+                fs=fs,
+            )
+            if TO_SAVE == False:
+                print(f'dataclass created WITHOUT saving for {dType}')
+                continue
+            elif TO_SAVE == 'P':
                 save_class_pickle(
                     class_to_save=data_class,
-                    path=join(get_project_path(), 'data',
-                            'merged_sub_data', f'{DATA_VERSION}', SUB),
+                    path=join(get_project_path('data'),
+                              'merged_sub_data',
+                              f'{DATA_VERSION}',
+                              f'sub-{SUB}'),
                     filename=f'{SUB}_mergedData_{DATA_VERSION}_{dType}',
                 )
                 print(f'...pickled mergedData sub-{SUB}: {dType}')
 
-        elif not PICKLE_PER_SOURCE:
-        ### Store dataframe
-            print('...saving new df')
-            if SAVE_AS_PICKLE:
-                merged_class = mergedData(
-                    sub=SUB,
-                    data_version=DATA_VERSION,
-                    data=merged_df.values,
-                    colnames=list(merged_df.keys()),
-                    times=list(merged_df.index.values),
-                    fs=fs,
-                )
-                save_class_pickle(
-                    class_to_save=merged_class,
-                    path=join(get_project_path(), 'data',
-                            'merged_sub_data', f'{DATA_VERSION}'),
-                    filename=f'{SUB}_mergedDataClass_{DATA_VERSION}',
-                )
-                print(f'...pickled new mergedData sub-{SUB}')
+    elif not PICKLE_PER_SOURCE:
+        merged_class = mergedData(
+            sub=SUB,
+            data_version=DATA_VERSION,
+            data=merged_df.values,
+            colnames=list(merged_df.keys()),
+            times=list(merged_df.index.values),
+            fs=fs,
+        )
+        if TO_SAVE == 'P':
+            save_class_pickle(
+                class_to_save=merged_class,
+                path=join(get_project_path(), 'data',
+                        'merged_sub_data', f'{DATA_VERSION}'),
+                filename=f'{SUB}_mergedDataClass_{DATA_VERSION}',
+            )
+            print(f'...pickled new mergedData sub-{SUB}')
+        
+        elif TO_SAVE == 'df':  # save as data.npy, index.npy, columnNames.csv
+            save_dfs(
+                df=merged_df,
+                folder_path=join(
+                    get_project_path(), 'data',
+                    'merged_sub_data', f'{DATA_VERSION}'
+                ),
+                filename_base=f'{SUB}_mergedDf_{fs}Hz',
+            )
+            print(f'...new merged data ({SUB}) saved as data.npy, index.npy, and colnames.csv')
 
-            else:  # save as data.npy, index.npy, columnNames.csv
-                save_dfs(
-                    df=merged_df,
-                    folder_path=join(
-                        get_project_path(), 'data',
-                        'merged_sub_data', f'{DATA_VERSION}'
-                    ),
-                    filename_base=f'{SUB}_mergedDf_{fs}Hz',
-                )
-                print(f'...new merged data ({SUB}) saved as data.npy, index.npy, and colnames.csv')
+        else:
+            print(f'Full dataclass created WITHOUT saving')
 
+        
 
 
 
