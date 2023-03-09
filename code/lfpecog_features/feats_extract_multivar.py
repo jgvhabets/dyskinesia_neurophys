@@ -18,7 +18,7 @@ import lfpecog_features.feats_main as ftsMain
 import lfpecog_features.feats_spectral_features as specFeats
 
 @dataclass(init=True, repr=True, )
-class run_segmConnectFts:
+class extract_multivar_features:
     """
     Prepare the Extraction of Connectivity
     features per segments
