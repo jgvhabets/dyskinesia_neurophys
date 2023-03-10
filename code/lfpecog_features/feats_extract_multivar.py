@@ -4,98 +4,132 @@ based on two ephys-channels
 '''
 
 # Import public packages and functions
+import json
 from typing import Any
 import numpy as np
-import os
+from os.path import join
+from os import listdir
 from scipy.signal import welch
 from array import array
 from dataclasses import dataclass, field
-from itertools import product
+from itertools import product, compress
+import matplotlib.pyplot as plt
+
 
 # import own functions
-from utils import utils_windowing as utils_win
-import lfpecog_features.feats_main as ftsMain
+from utils.utils_fileManagement import get_project_path, get_onedrive_path, load_class_pickle
+from utils.utils_windowing import get_windows
 import lfpecog_features.feats_spectral_features as specFeats
+from lfpecog_features import feats_SSD as ssd
 
 @dataclass(init=True, repr=True, )
 class extract_multivar_features:
     """
-    Prepare the Extraction of Connectivity
-    features per segments
+    MAIN FEATURE EXTRACTION FUNCTION
 
-    TODO: MAKE THIS MAIN FEATURE EXTRACTION FUNCTION
-        - INCLUDE UNI-SIGNAL, NOT-CONNECTIVITY FEATURES IN HERE
-        - CREATE OPTIONAL attributes for features and conn_features
-    TODO: ADD PROPER FEATURE STORING FUNCTION
-
-    Default settings translate to a feature resolution
-    of 2 Hz (e.g. 60 sec windows, with 50% overlap
-    lead to a coherency-value every 30 seconds).
+    Run from run_ftExtr_multivar: python -m lfpecog_features.run_ftExtr_multivar 'ftExtr_spectral_v1.json'
     """
     sub: str
-    sub_df: Any
-    fs: int
-    winLen_sec: float = 60
-    part_winOverlap: float = .5
-    segLen_sec: float = .5
-    part_segmOverlap: float = .5
-    movement_part_acceptance: float = 1
-    channels_incl: list = field(default_factory=list)
-    channels_excl: list = field(default_factory=list)
-    
+    settings: dict = field(default_factory=lambda:{})
+    feat_setting_filename: str = None
+    ephys_sources: list = field(
+        default_factory=lambda: ['lfp_left', 'lfp_right',
+                                 'ecog_left', 'ecog_right']
+    )
     
     def __post_init__(self,):
-        # divides full dataframe in present windows
-        windows = utils_win.get_windows(
-            self.sub_df,
-            fs=self.fs,  
-            winLen_sec=self.winLen_sec,
-            part_winOverlap=self.part_winOverlap,
-            return_as_class = True,  # returns data/keys/times as class
-            movement_part_acceptance=self.movement_part_acceptance,
-        )
-        print('got windows')
+
+        assert np.logical_or(
+            isinstance(self.settings, dict),
+            isinstance(self.feat_setting_filename, str)
+        ), 'define settings-dict or setting-json-filename'
+
+        ### load settings from json
+        if not isinstance(self.settings, dict):
+            json_path = join(get_onedrive_path('data'),
+                            'featureExtraction_jsons',
+                            self.feat_setting_filename)
+            with open(json_path, 'r') as json_data:
+                SETTINGS =  json.load(json_data)
+        else:
+            SETTINGS = self.settings
+
+        ### Load Data
+        mergedData_path = join(get_project_path('data'),
+                               'merged_sub_data',
+                                SETTINGS['DATA_VERSION'],
+                                f'sub-{self.sub}')
+        
+        # loop over possible datatypes
+        for dType in self.ephys_sources:
+            dat_fname = (f'{self.sub}_mergedData_{SETTINGS["DATA_VERSION"]}'
+                        f'_{dType}.P')
+            # check existence of file in folder
+            if dat_fname not in listdir(mergedData_path):
+                print(f'{dat_fname} NOT AVAILABLE')
+                continue
+            # load data (as mergedData class)
+            data = load_class_pickle(join(mergedData_path, dat_fname))
+            print(f'{dat_fname} loaded')
+              
+            # divides full dataframe in present windows
+            windows = get_windows(
+                data=data.data,
+                fs=int(data.fs),
+                col_names=data.colnames,
+                winLen_sec=SETTINGS['WIN_LEN_sec'],
+                part_winOverlap=SETTINGS['WIN_OVERLAP_part'],
+                min_winPart_present=.5,
+                remove_nan_timerows=False,
+                return_as_class=True,
+                only_ipsiECoG_STN=False,
+            )
+            # filter out none-ephys signals
+            sel_chs = [c.startswith('LFP') or c.startswith('ECOG')
+                       for c in windows.keys]
+            print(f'GOT WINDOWS {dType}, shape: {windows.data.shape}, '
+                    f'colnames: {windows.keys}')
+            setattr(windows, 'data', windows.data[:, :, sel_chs])
+            setattr(windows, 'keys', list(compress(windows.keys, sel_chs)))
+            print(f'\tWINDOWS {dType} ONLY EPHYS, shape: {windows.data.shape}, '
+                    f'colnames: {windows.keys}')
+
+
+            # loop over windows
+            for i_w, win_dat in enumerate(windows.data[:5]):
+                
+                # select only rows without missing
+                nan_rows = [pd.isna(win_dat.data[:, i]).any()
+                            for i in range(win_dat.data.shape[-1])]
+                win_dat = win_dat[:, ~nan_rows]
+                win_chnames = list(compress(windows.keys, ~nan_rows))
+                win_time = windows.win_starttimes[i_w]
+                
+                # loop over defined frequency bands
+                for bw in SETTINGS['SPECTRAL_BANDS']:
+                    f_range = SETTINGS['SPECTRAL_BANDS'][bw]
+                    # check whether to perform SSD
+                    if SETTINGS['FEATS_INCL']['SSD']:
+                        (ssd_filt_data,
+                            ssd_pattern,
+                            ssd_eigvals
+                        ) = ssd.get_SSD_component(
+                            data_2d=epoch_dat,
+                            fband_interest=f_range,
+                            s_rate=windows.fs,
+                            use_freqBand_filtered=True,
+                            return_comp_n=0,
+                        )
+                        f, psd = welch(ssd_filt_data, axis=-1,
+                                              nperseg=data.fs, fs=data.fs)
+                        plt.plot(f, psd, label=bw)
+                plt.xlim(0, 100)
+                plt.title(f'WINDOW # {i_w} - {dType.upper()}')
+                plt.legend()
+                plt.show()
+
         
 
-        # select all ECOG-channels as targets
-        targets = [ch for ch in windows.keys if 'ECOG' in ch]
-        # select all ipsilateral STN-channels as seeds
-        ecogside = targets[0][5]
-        seeds = [
-            ch for ch in windows.keys if
-            f'LFP_{ecogside}' in ch
-        ]
-
-        # create class with 3d-segmented-data and times, per channel
-        epochedChannels = utils_win.epochedData_multipleChannels(
-            windows=windows,
-            channels_incl=targets+seeds,
-            fs=self.fs,
-            winLen_sec=self.winLen_sec,
-            segLen_sec=self.segLen_sec,
-            part_segmOverlap=self.part_segmOverlap,
-        )
-        # store for notebook use
-        setattr(self, 'channels', epochedChannels)
-
-        print('got epoched data')
-        # TODO: FUTURE SAVE EPOCHED CHANNEL DATA
-
-        # get list with tuples of all target x seed combis
-        self.allCombis = list(product(seeds, targets))
-
-        setattr(
-            self,
-            'features',
-            calculate_segmConnectFts(
-                epochChannels=self.channels,
-                fs=self.fs,
-                allCombis=self.allCombis,
-                fts_to_extract=[
-                    'COH', 'ICOH', 'absICOH', 'sqCOH',
-                ],
-            )
-        )
 
 
 @dataclass(init=True, repr=True, )

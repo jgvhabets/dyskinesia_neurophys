@@ -4,7 +4,8 @@ Run Merging data frames
 
 # import public functions
 import sys
-from os.path import join
+from os.path import join, exists
+from os import listdir, makedirs
 from dataclasses import dataclass, field
 from numpy import ndarray
 
@@ -91,6 +92,7 @@ if __name__ == '__main__':
     """
     # create separate pickles (mergedData) per LFP-L/R and ECOG
     PICKLE_PER_SOURCE = True
+    OVERWRITE = False  # if False, existing files are not new created and overwritten
 
     ### get and check variables out of run-command
     SUB = sys.argv[1]
@@ -152,6 +154,16 @@ if __name__ == '__main__':
             if True not in [dType.lower().startswith(s)
                             for s in ['acc', 'lfp', 'ecog']]:
                 continue
+
+            if not OVERWRITE:
+                fname = f'{SUB}_mergedData_{DATA_VERSION}_{dType}.P'
+                path = join(get_project_path('data'), 'merged_sub_data',
+                            f'{DATA_VERSION}', f'sub-{SUB}')
+                if not exists(path): makedirs(path)
+                if fname in listdir(path):
+                    print(f'{fname} ALREADY EXISTING IN {path}')
+                    continue
+
 
             # add ACC states to dType df
             if INCL_ACC:

@@ -16,13 +16,14 @@ def get_windows(
     data,
     fs,
     col_names = None,
-    winLen_sec=180,
-    part_winOverlap=.5,
-    min_winPart_present=.66,
+    winLen_sec = 180,
+    part_winOverlap = .5,
+    min_winPart_present = .66,
     remove_nan_timerows: bool = True,
     movement_part_acceptance: float = 1.,
-    return_as_class=False,
-    only_ipsiECoG_STN=True,
+    return_as_class = False,
+    only_ipsiECoG_STN = True,
+    verbose: bool = False
 ):
     """
     Select windows with size nWin * Fs,
@@ -47,6 +48,7 @@ def get_windows(
         - return_as_class: bool defines whether results are
             returned as class consisting of data, keys, times;
             or as separate variable (tuple)
+        - verbose: print debugging info, defaults False
     
     Returns:
         - win_array: 3d array of n-windows x n-samples x n-channels
@@ -143,41 +145,82 @@ def get_windows(
     else:
         sec_hop = winLen_sec
 
-    print(times[:10])
-    # start with rounded winLen positions to create uniform start times over subjects
+    # Variables to define time-range to loop windows with uniform start times over subjects
     tStart = round(times[0] / winLen_sec) - (winLen_sec * .5)
     tStart = tStart * winLen_sec  # convert rounded window number to seconds
 
     # create 3d array with windows
     arr_list, arr_times_sec = [], []
 
-    # epoch windows based on dopatime-seconds and index of dataframe
+
+    # variables for hopping between 2 consecutive windows (to speed up looping)
+    winLen_samples = int(winLen_sec * fs)  # sample length full window
+    sec_hop = winLen_sec * part_winOverlap  # hop includes overlap part
+    sample_hop = int(sec_hop * fs)
+    # variables window inclusion based on minimal window length
+    min_winPart_samples = int(min_winPart_present * winLen_samples)
+    min_winPart_sec = int(min_winPart_present * winLen_sec)
+    # variables to speed up timestamp comparison
+    secs_present = times[::int(fs)]  # get roughly every second present in data
+    allowed_dist_start = winLen_sec * part_winOverlap
+    allowed_dist_end = winLen_sec - min_winPart_sec
+    
+    # set index start to None at start
+    i_start = None
+
+    # LOOP OVER POSSIBLE WINDOWS IN TIME RANGE
     for win0_sec in np.arange(
         tStart, times[-1], sec_hop
     ):
-        print(f'DEBUG: start {win0_sec} SEC')
-        # SELECT ROWS WITHIN TIME WINDOW
+        # separate flow for DataFrames
         if isinstance(data, DataFrame):
             wintemp = data.loc[win0_sec:win0_sec + winLen_sec]
 
         elif isinstance(data, np.ndarray):
-            sel = np.logical_and(
-                win0_sec < times, times < (win0_sec + winLen_sec)
-            )
-            wintemp = data[sel]
-            print(f'\tshape is {wintemp.shape}')
-                        
-            if remove_nan_timerows:
-                nansel = isna(wintemp).any(axis=1)
-                wintemp = wintemp[~nansel]
-                print('\tafter nan remove', wintemp.shape)
 
-        # skip window if less data present than defined threshold
-        if wintemp.shape[0] < (nWin * min_winPart_present):
-            print('skip based on NaNs', win0_sec)
-            continue
+            if verbose: print(f'\nDEBUG: start {win0_sec} SEC')
+            # if i_start is not defined in previous window
+            if not i_start:
+                # find closest second to start of window
+                min_dist_start = min(abs(win0_sec - secs_present))
+                # skip if start-index is too many seconds off to create window
+                if min_dist_start > allowed_dist_start:
+                    if verbose: print('\tskipped distance')
+                    continue
+                # define exact start-index if within acceptance range
+                i_start = np.argmin(abs(win0_sec - times))  # get window start sample
 
-        ### INCLUDE ACCELEROMETER ACTIVITY FILTERING
+            # find closest second to end of window
+            min_dist_end = min(abs((win0_sec + winLen_sec) - secs_present))
+            # if full window is present (last second also in secs_present), select on index
+            if min_dist_end == 0:
+                wintemp = data[i_start:i_start + winLen_samples]
+                i_start += sample_hop  # SAVE START-INDEX TO SAVE MAJOR COMPUTATIONAL TIME
+                if verbose: print('\tselected on end-sample-presence')
+            # if end of window is too far off, skip window
+            elif min_dist_end > allowed_dist_end:
+                i_start = None  # reset start index
+                if verbose: print('\tskipped on end-distance')
+                continue
+            
+            # if window only partly present, select based on timestamps
+            else:
+                sel = np.logical_and(
+                    win0_sec < times, times < (win0_sec + winLen_sec)
+                )
+                wintemp = data[sel]
+                i_start = None  # reset start index
+                if verbose: print('\tselected on time')
+            
+            # skip window if less data present than defined threshold  (back up, currently above statements filter out everything)
+            if wintemp.shape[0] < min_winPart_samples:
+                if verbose: print('\tskipped based on NaNs', win0_sec)
+                continue
+
+            if verbose: print(f'\tINCLUDED shape is {wintemp.shape}')
+
+
+        ### INCLUDE ACCELEROMETER ACTIVITY FILTERING  (currently only works for DataFrame data)
         if movement_part_acceptance < 1:  # 1 is default and means no filtering
             move_part = 1 - (sum(wintemp['no_move']) / wintemp.shape[0])
             # skip window if it contains too many movement samples
