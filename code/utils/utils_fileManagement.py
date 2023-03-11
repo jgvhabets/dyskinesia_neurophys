@@ -7,7 +7,7 @@ from os import getcwd, listdir, makedirs
 from os.path import join, exists, dirname
 from numpy import (
     logical_and, save, ndarray, where,
-    ravel, arange, array
+    ravel, arange, array, float64
 )
 from csv import writer
 import pickle
@@ -39,7 +39,7 @@ def get_project_path(
     
     elif len(subfolder) > 0:
 
-        print('WARNING: incorrect subfolder')
+        raise ValueError('WARNING: incorrect subfolder')
 
     elif len(subfolder) == 0:
         return path
@@ -175,10 +175,10 @@ def save_class_pickle(
 ):
 
     if not exists(path): makedirs(path)
+
+    if not filename[-2:] == '.P': filename + extension
     
-    pickle_path = join(
-        path, filename + extension
-    )
+    pickle_path = join(path, filename)
 
     with open(pickle_path, 'wb') as f:
         pickle.dump(class_to_save, f)
@@ -188,7 +188,7 @@ def save_class_pickle(
 
 
 def load_class_pickle(
-    file_to_load,
+    file_to_load, convert_float_np64: bool = False,
 ):
     """
     Loads saved Classes. When running this code
@@ -222,6 +222,12 @@ def load_class_pickle(
                 setattr(output, 'times' , output.data_arr[:, i_time])
             elif 'data' in vars(output).keys():
                 setattr(output, 'times' , output.data[:, i_time])
+    
+    if convert_float_np64:
+        if 'data' in vars(output).keys():
+            if isinstance(output.data, ndarray):
+                setattr(output, 'data', output.data.astype(float64))
+
 
     return output
 

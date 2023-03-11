@@ -155,14 +155,13 @@ def get_windows(
 
     # variables for hopping between 2 consecutive windows (to speed up looping)
     winLen_samples = int(winLen_sec * fs)  # sample length full window
-    sec_hop = winLen_sec * part_winOverlap  # hop includes overlap part
     sample_hop = int(sec_hop * fs)
     # variables window inclusion based on minimal window length
     min_winPart_samples = int(min_winPart_present * winLen_samples)
     min_winPart_sec = int(min_winPart_present * winLen_sec)
     # variables to speed up timestamp comparison
     secs_present = times[::int(fs)]  # get roughly every second present in data
-    allowed_dist_start = winLen_sec * part_winOverlap
+    allowed_dist_start = sec_hop
     allowed_dist_end = winLen_sec - min_winPart_sec
     
     # set index start to None at start

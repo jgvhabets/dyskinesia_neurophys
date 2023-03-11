@@ -25,17 +25,17 @@ def get_SSD_component(
     with SSD (using meet toolbox).
 
     Inputs:
-        - data_2d: 2d array n-channels x n-samples
+        - data_2d (ndarray): 2d array n-channels x n-samples
         - fband_interest: tuple or list with lower
             and upper freq-band of interest border
-        - fs: sampling rate
-        - flank_distance: distance distal of freq-band
+        - fs (int): sampling rate
+        - flank_distance (int/float): distance distal of freq-band
             of interest to define flank bands,
             defaults to +/- 5 Hz
-        - use_freqBand_filtered: use the freq-band
+        - use_freqBand_filtered (bool): use the freq-band
             filtered signal to multiply with the
             SSD-filter and to return
-        - return_comp_n: the nth SSD-component to
+        - return_comp_n (int): the nth SSD-component to
             return (0 is the first component)
     
     Returns:

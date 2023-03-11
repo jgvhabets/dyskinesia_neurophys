@@ -23,8 +23,8 @@ if __name__ == '__main__':
                      json_fname)
     with open(json_path, 'r') as json_data:
         settings = json.load(json_data)
-
+    
     for sub in settings['SUBS_INCL']:
-
+        print(f'\tstart sub-{sub}...')
         extract_multivar_features(sub=sub, settings=settings)
 

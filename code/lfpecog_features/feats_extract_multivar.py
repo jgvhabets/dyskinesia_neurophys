@@ -7,9 +7,11 @@ based on two ephys-channels
 import json
 from typing import Any
 import numpy as np
-from os.path import join
-from os import listdir
+from os.path import join, exists
+from os import listdir, makedirs
+from pandas import isna, DataFrame
 from scipy.signal import welch
+from scipy.stats import variation
 from array import array
 from dataclasses import dataclass, field
 from itertools import product, compress
@@ -17,8 +19,13 @@ import matplotlib.pyplot as plt
 
 
 # import own functions
-from utils.utils_fileManagement import get_project_path, get_onedrive_path, load_class_pickle
-from utils.utils_windowing import get_windows
+from utils.utils_fileManagement import (
+    get_project_path, get_onedrive_path,
+    load_class_pickle, save_class_pickle
+)
+from lfpecog_preproc.preproc_import_scores_annotations import get_ecog_side
+
+from utils.utils_windowing import get_windows, windowedData
 import lfpecog_features.feats_spectral_features as specFeats
 from lfpecog_features import feats_SSD as ssd
 
@@ -36,6 +43,7 @@ class extract_multivar_features:
         default_factory=lambda: ['lfp_left', 'lfp_right',
                                  'ecog_left', 'ecog_right']
     )
+    use_stored_windows: bool = True
     
     def __post_init__(self,):
 
@@ -53,80 +61,153 @@ class extract_multivar_features:
                 SETTINGS =  json.load(json_data)
         else:
             SETTINGS = self.settings
+        
+        # define ephys_sources
+        ecog_side = get_ecog_side(self.sub)
+        self.ephys_sources = [f'ecog_{ecog_side}', 'lfp_left', 'lfp_right']
 
         ### Load Data
         mergedData_path = join(get_project_path('data'),
                                'merged_sub_data',
                                 SETTINGS['DATA_VERSION'],
                                 f'sub-{self.sub}')
+        windows_path = join(get_project_path('data'),
+                            'windowed_data_classes_'
+                            f'{SETTINGS["WIN_LEN_sec"]}s_'
+                            f'{SETTINGS["WIN_OVERLAP_part"]}overlap',
+                            SETTINGS['DATA_VERSION'],
+                            f'sub-{self.sub}')
+        feat_path = join(get_project_path('results'),
+                         'features',
+                         'SSD_powers',
+                         f'windows_{SETTINGS["WIN_LEN_sec"]}s_'
+                         f'{SETTINGS["WIN_OVERLAP_part"]}overlap')
+        if not exists(windows_path): makedirs(windows_path)
+        if not exists(feat_path): makedirs(feat_path)
         
         # loop over possible datatypes
         for dType in self.ephys_sources:
-            dat_fname = (f'{self.sub}_mergedData_{SETTINGS["DATA_VERSION"]}'
-                        f'_{dType}.P')
-            # check existence of file in folder
-            if dat_fname not in listdir(mergedData_path):
-                print(f'{dat_fname} NOT AVAILABLE')
-                continue
-            # load data (as mergedData class)
-            data = load_class_pickle(join(mergedData_path, dat_fname))
-            print(f'{dat_fname} loaded')
-              
-            # divides full dataframe in present windows
-            windows = get_windows(
-                data=data.data,
-                fs=int(data.fs),
-                col_names=data.colnames,
-                winLen_sec=SETTINGS['WIN_LEN_sec'],
-                part_winOverlap=SETTINGS['WIN_OVERLAP_part'],
-                min_winPart_present=.5,
-                remove_nan_timerows=False,
-                return_as_class=True,
-                only_ipsiECoG_STN=False,
-            )
+            print(f'\n\tstart {dType}')
+            # define path for windows of dType
+            dType_fname = (f'sub-{self.sub}_windows_'
+                           f'{SETTINGS["WIN_LEN_sec"]}s_'
+                           f'{SETTINGS["DATA_VERSION"]}_{dType}.P')
+            dType_win_path = join(windows_path, dType_fname)
+            
+            # check if windows are already available
+            if np.logical_and(self.use_stored_windows,
+                              exists(dType_win_path)):
+                print(f'load data from {windows_path}....')
+                windows = load_class_pickle(dType_win_path)
+                print(f'\tWINDOWS LOADED from {dType_fname} in {windows_path}')
+
+
+            else:
+                print('create data ....')
+                dat_fname = (f'{self.sub}_mergedData_{SETTINGS["DATA_VERSION"]}'
+                            f'_{dType}.P')
+                # check existence of file in folder
+                if dat_fname not in listdir(mergedData_path):
+                    print(f'{dat_fname} NOT AVAILABLE')
+                    continue
+                # load data (as mergedData class)
+                data = load_class_pickle(join(mergedData_path, dat_fname),)
+                print(f'{dat_fname} loaded')
+                
+                # divides full dataframe in present windows
+                windows = get_windows(
+                    data=data.data,
+                    fs=int(data.fs),
+                    col_names=data.colnames,
+                    winLen_sec=SETTINGS['WIN_LEN_sec'],
+                    part_winOverlap=SETTINGS['WIN_OVERLAP_part'],
+                    min_winPart_present=.5,
+                    remove_nan_timerows=False,
+                    return_as_class=True,
+                    only_ipsiECoG_STN=False,
+                )
+                save_class_pickle(windows, windows_path, dType_fname)
+                print(f'\tWINDOWS SAVED as {dType_fname} in {windows_path}')
+
+
             # filter out none-ephys signals
             sel_chs = [c.startswith('LFP') or c.startswith('ECOG')
                        for c in windows.keys]
-            print(f'GOT WINDOWS {dType}, shape: {windows.data.shape}, '
-                    f'colnames: {windows.keys}')
             setattr(windows, 'data', windows.data[:, :, sel_chs])
             setattr(windows, 'keys', list(compress(windows.keys, sel_chs)))
-            print(f'\tWINDOWS {dType} ONLY EPHYS, shape: {windows.data.shape}, '
-                    f'colnames: {windows.keys}')
+            
 
+            ### Create storing of features
+            feats_out = []  # list to store lists per window
+            feat_names = []  # feature names
+            for band in SETTINGS['SPECTRAL_BANDS'].keys():
+                feat_names.extend([f'{band}_max_peak', f'{band}_mean_peak', f'{band}_variation'])
+            
 
             # loop over windows
-            for i_w, win_dat in enumerate(windows.data[:5]):
-                
+            for i_w, win_dat in enumerate(windows.data):
+                feats_win = []  # temporary list to store features of current window
+                win_dat = win_dat.astype(np.float64)
                 # select only rows without missing
-                nan_rows = [pd.isna(win_dat.data[:, i]).any()
-                            for i in range(win_dat.data.shape[-1])]
+                nan_rows = np.array([isna(win_dat[:, i]).any()
+                            for i in range(win_dat.shape[-1])])
                 win_dat = win_dat[:, ~nan_rows]
-                win_chnames = list(compress(windows.keys, ~nan_rows))
-                win_time = windows.win_starttimes[i_w]
+                # win_chnames = list(compress(windows.keys, ~nan_rows))
+                # win_time = windows.win_starttimes[i_w]
                 
+                ### CALCULATE UNI-SOURCE FEATURES
+
                 # loop over defined frequency bands
                 for bw in SETTINGS['SPECTRAL_BANDS']:
                     f_range = SETTINGS['SPECTRAL_BANDS'][bw]
                     # check whether to perform SSD
                     if SETTINGS['FEATS_INCL']['SSD']:
-                        (ssd_filt_data,
-                            ssd_pattern,
-                            ssd_eigvals
-                        ) = ssd.get_SSD_component(
-                            data_2d=epoch_dat,
-                            fband_interest=f_range,
-                            s_rate=windows.fs,
-                            use_freqBand_filtered=True,
-                            return_comp_n=0,
-                        )
+                        # Perform SSD
+                        try:
+                            (ssd_filt_data,
+                                ssd_pattern,
+                                ssd_eigvals
+                            ) = ssd.get_SSD_component(
+                                data_2d=win_dat.T,
+                                fband_interest=f_range,
+                                s_rate=windows.fs,
+                                use_freqBand_filtered=True,
+                                return_comp_n=0,
+                            )
+                        except ValueError:
+                            print(f'{dType}: window # {i_w} failed on {bw}')
+                            feats_win.extend([np.nan, np.nan, np.nan])
+                            continue
+
+                        # Convert SSD'd signal into Power Spectrum
                         f, psd = welch(ssd_filt_data, axis=-1,
-                                              nperseg=data.fs, fs=data.fs)
-                        plt.plot(f, psd, label=bw)
-                plt.xlim(0, 100)
-                plt.title(f'WINDOW # {i_w} - {dType.upper()}')
-                plt.legend()
-                plt.show()
+                                       nperseg=windows.fs, fs=windows.fs)
+                        
+                        # CALCULATE SPECTRAL PEAK FEATURES (in same order as names!!!)
+
+                        # select psd in freq of interest
+                        f_sel = [f_range[0] < freq < f_range[1] for freq in f]
+                        # MAX FREQ BAND PEAK
+                        max_peak = np.max(psd[f_sel])
+                        feats_win.append(max_peak)
+                        # MEAN FREQ BAND PEAK
+                        mean_peak = np.mean(psd[f_sel])
+                        feats_win.append(mean_peak)
+                        # COEFFICIENT of VARIATION IN FILTERED SIGNAL
+                        cv_signal = variation(ssd_filt_data)
+                        feats_win.append(cv_signal)
+
+                # END OF WINDOW -> STORE list with window features to total list
+                feats_out.append(feats_win)
+            
+            # AFTER ALL WINDOWS OF DATA TYPE ARE DONE -> STORE FEATURE DATAFRAME
+            feats_out = np.array(feats_out)
+            feats_out = DataFrame(data=feats_out, columns=feat_names, index=windows.win_starttimes,)
+            feats_out.to_csv(join(feat_path, f'SSDfeatures_{self.sub}_{dType}.csv'),
+                             index=True, header=True,)
+            print(f'FEATURES for sub-{self.sub} {dType} in {feat_path}')
+
+
 
         
 
