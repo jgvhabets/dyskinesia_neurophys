@@ -16,7 +16,11 @@ import json
 from utils.utils_fileManagement import get_onedrive_path
 
 def run_import_clinInfo(
-    sub: str, verbose=False,
+    sub: str,
+    return_CDRS: bool = True,
+    return_annotations: bool = False,
+    return_tapTimes: bool = False,
+    verbose=False,
 ):
     """
     Main function to run the import and preprocessing
@@ -32,28 +36,48 @@ def run_import_clinInfo(
         - annot_dict
     """
     data_path = get_onedrive_path('data')
-    print(data_path)
-    
-    try:
-        annot_dict = read_annotations(sub, data_path)
-    except:
-        if verbose: print(f'Read ANNOTATIONS failed (sub {sub})')
-        annot_dict = None
-    
-    try:
-        scores = read_clinical_scores(sub, data_path)
-    except:
-        if verbose: print(f'Read CLINICAL SCORES failed (sub {sub})')
-        scores = None
-    
-    try:
-        dopa_taps = extract_video_tapTimes(annot_dict)
-    except:
-        if verbose: print(f'Read DOPA-TAPS failed (sub {sub})')
-        dopa_taps = None
-    
 
-    return scores, dopa_taps, annot_dict   
+    if return_CDRS + return_annotations + return_tapTimes > 1:
+        return_list = True
+        list_out = []
+    elif return_CDRS + return_annotations + return_tapTimes == 0:
+        raise ValueError('at least one variable must be True to return')
+    else:
+        return_list = False
+    
+    if return_annotations:
+        try:
+            annot_dict = read_annotations(sub, data_path)
+            if return_list: list_out.append(annot_dict)
+            else: return annot_dict
+        except:
+            if verbose: print(f'Read ANNOTATIONS failed (sub {sub})')
+            annot_dict = None
+    
+    if return_CDRS:
+        try:
+            scores = read_clinical_scores(sub, data_path)
+            # delete Nan Columns from scoring administration
+            for c in ['dopa_time_hhmmss', 'video_starttime',
+                      'video_name', 'video_time']:
+                if c in scores.keys(): del(scores[c])
+
+            if return_list: list_out.append(scores)
+            else: return scores
+        except:
+            if verbose: print(f'Read CLINICAL SCORES failed (sub {sub})')
+            scores = None
+    
+    if return_tapTimes:
+        try:
+            dopa_taps = extract_video_tapTimes(annot_dict)
+            if return_list: list_out.append(dopa_taps)
+            else: return dopa_taps
+        except:
+            if verbose: print(f'Read DOPA-TAPS failed (sub {sub})')
+            dopa_taps = None
+    
+    if return_list: return list_out   
 
 
 def read_annotations(

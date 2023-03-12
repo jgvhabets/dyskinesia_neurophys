@@ -66,7 +66,7 @@ class extract_multivar_features:
         ecog_side = get_ecog_side(self.sub)
         self.ephys_sources = [f'ecog_{ecog_side}', 'lfp_left', 'lfp_right']
 
-        ### Load Data
+        ### Define paths
         mergedData_path = join(get_project_path('data'),
                                'merged_sub_data',
                                 SETTINGS['DATA_VERSION'],
@@ -88,6 +88,14 @@ class extract_multivar_features:
         # loop over possible datatypes
         for dType in self.ephys_sources:
             print(f'\n\tstart {dType}')
+
+            # check if features already exist
+            feat_fname = f'SSDfeatures_{self.sub}_{dType}.csv'
+            if np.logical_and(feat_fname in listdir(feat_path),
+                              SETTINGS['OVERWRITE_FEATURES'] == False):
+                print(f'\n\tFEATURES ALREADY EXIST and are not overwritten'
+                      f' ({feat_fname} in {feat_path})')
+                continue
             # define path for windows of dType
             dType_fname = (f'sub-{self.sub}_windows_'
                            f'{SETTINGS["WIN_LEN_sec"]}s_'
@@ -106,12 +114,14 @@ class extract_multivar_features:
                 print('create data ....')
                 dat_fname = (f'{self.sub}_mergedData_{SETTINGS["DATA_VERSION"]}'
                             f'_{dType}.P')
+
                 # check existence of file in folder
                 if dat_fname not in listdir(mergedData_path):
                     print(f'{dat_fname} NOT AVAILABLE')
                     continue
+
                 # load data (as mergedData class)
-                data = load_class_pickle(join(mergedData_path, dat_fname),)
+                data = load_class_pickle(join(mergedData_path, dat_fname))
                 print(f'{dat_fname} loaded')
                 
                 # divides full dataframe in present windows
@@ -203,7 +213,7 @@ class extract_multivar_features:
             # AFTER ALL WINDOWS OF DATA TYPE ARE DONE -> STORE FEATURE DATAFRAME
             feats_out = np.array(feats_out)
             feats_out = DataFrame(data=feats_out, columns=feat_names, index=windows.win_starttimes,)
-            feats_out.to_csv(join(feat_path, f'SSDfeatures_{self.sub}_{dType}.csv'),
+            feats_out.to_csv(join(feat_path, feat_fname),
                              index=True, header=True,)
             print(f'FEATURES for sub-{self.sub} {dType} in {feat_path}')
 
