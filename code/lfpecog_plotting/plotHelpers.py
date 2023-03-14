@@ -15,6 +15,12 @@ def remove_duplicate_legend(
     
     Returns:
         - handles, labels: without duplicates
+            use as: plt.legend(handles, labels)
+    
+    Example:
+        plt.legend(handles, labels, ncol=4, frameon=False,
+                   loc='upper center', bbox_to_anchor=(0.5, -0.2),
+                   fancybox=False,)
     """
     handles = legend_handles_labels[0]
     labels = legend_handles_labels[1]
