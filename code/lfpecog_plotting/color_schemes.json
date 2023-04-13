@@ -1,0 +1,13 @@
+{
+    "access_colors_PaulTol": {
+        "nightblue": "#332288",
+        "darkgreen": "#117733",
+        "turquoise": "#44AA99",
+        "lightblue": "#88CCEE",
+        "sand": "#DDCC77",
+        "softred": "#CC6677",
+        "lila": "#AA4499",
+        "purplered": "#882255"
+    },
+    "contrast_duo": ["#E1BE6A", "#40B0A6"]
+}

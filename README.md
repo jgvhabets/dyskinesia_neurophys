@@ -12,6 +12,7 @@ from prof. Neumann.
   - `conda install mne`
   - `conda install mne-bids`
   - `conda install mne_connectivity` (NOT FOR MULTIVARIATE CONN ANALYSES)
+  - `pip install traces` (for regularization of CDRS scores from different raters)
 
   for the mne mvc analyses:
   - use an env: without general installed mne_connectivity

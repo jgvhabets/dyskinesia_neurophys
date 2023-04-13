@@ -7,10 +7,11 @@ annotations for the dyskinesia-protocol
 # Import public packages and functions
 import os
 import numpy as np
-from pandas import read_excel
+from pandas import read_excel, isna
 import datetime as dt
 from dataclasses import dataclass
 import json
+import traces
 
 # Import own functions
 from utils.utils_fileManagement import get_onedrive_path
@@ -96,9 +97,12 @@ def read_annotations(
 
 
 def read_clinical_scores(
-    sub, data_path=get_onedrive_path('data'),
+    sub, rater='Patricia', data_path=get_onedrive_path('data'),
 ):
-    scores_fname = 'dyskinesia_recording_scores_Jeroen.xlsx'
+    assert rater.capitalize() in ['Mean', 'Patricia', 'Jeroen'], (
+        'insert correct '
+    )
+    scores_fname = f'Dyskinesia_Ratings_{rater}.xlsx'
     scores = read_excel(
         os.path.join(data_path, 'clinical scores', scores_fname),
         sheet_name=f'sub-{sub}',
@@ -267,7 +271,8 @@ def get_ecog_side(sub):
 
 
 def get_cdrs_specific(
-    sub, side='both'
+    sub, side='both', rater='Patricia',
+    regularize=False,
 ):
     """
     Gives uni- or bilateral CDRS scores
@@ -282,7 +287,7 @@ def get_cdrs_specific(
         - times
         - scores
     """
-    scores = read_clinical_scores(sub)
+    scores = read_clinical_scores(sub, rater=rater)
     times = scores['dopa_time']
 
     if side == 'both':
@@ -307,5 +312,18 @@ def get_cdrs_specific(
     else:
         raise ValueError('side should be "left", '
                 '"right", "both" or "contra ecog"')
+
+    if regularize:
+        og_scores = traces.TimeSeries()
+        for t, s in zip(times, scores):
+            og_scores[t] = s  # add times and scores
+        # interpolate to a score every minute
+        reg_scores = np.array(og_scores.sample(sampling_period=1,
+                              start=int(min(times)), end=int(max(times)),
+                              interpolate='linear'))
+        nan_sel = isna(reg_scores[:, 1])  # remove None scores
+        reg_scores = reg_scores[~nan_sel]
+        times = reg_scores[:, 0]
+        scores = reg_scores[:, 1]
     
     return times, scores
