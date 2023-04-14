@@ -12,6 +12,7 @@ Based on:
 
 # import packages
 import numpy as np
+from dataclasses import dataclass
 
 import meet.meet as meet  # https://github.com/neurophysics/meet
 
@@ -105,8 +106,30 @@ def get_SSD_component(
         return return_array, SSD_pattern, SSD_eigvals
         
 
+@dataclass(init=True, repr=True,)
+class SSD_timeseries:
+    """
+    Store SSD filtered timeseries per freq-band,
+    is used per window
 
+    - data: 2d array n-channels x n-samples
+    - s_rate: sampling rate
+    - freq_bands_incl: dict like {'alpha': [4, 8],
+        'lo_beta': [12, 20], etc}
+    """
+    data: np.array
+    s_rate: int
+    freq_bands_incl: dict
 
+    def __post_init__(self,):
+
+        for f_band in self.freq_bands_incl.keys():
+            ssd_ts, _, _ = get_SSD_component(
+                data_2d=self.data,
+                fband_interest=self.freq_bands_incl[f_band],
+                s_rate=self.s_rate
+            )
+            setattr(self, f_band, ssd_ts)
 
 
 # # Import public packages and functions
