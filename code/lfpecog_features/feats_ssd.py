@@ -107,17 +107,22 @@ def get_SSD_component(
         
 
 @dataclass(init=True, repr=True,)
-class SSD_timeseries:
+class SSD_bands:
     """
     Store SSD filtered timeseries per freq-band,
     is used per window
+    TO DO: add functionality for several windows
+        optional: current version for one window
+        create 2d array for each freqband with n-windows and n-samples
+        attr data contains the 2d array, attr times contains the times
+        attr s_rate the fs
 
     - data: 2d array n-channels x n-samples
     - s_rate: sampling rate
     - freq_bands_incl: dict like {'alpha': [4, 8],
         'lo_beta': [12, 20], etc}
     """
-    data: np.array
+    data: np.ndarray
     s_rate: int
     freq_bands_incl: dict
 

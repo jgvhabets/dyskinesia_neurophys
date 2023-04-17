@@ -133,21 +133,26 @@ def correct_notch_throughs(
     smoothen out linenoise removal notch
     throughs, applied before fooof fitting
     """
-    for notch in notches:
-        # find closest index to 6 before and after notch-center
-        i = np.argmin(abs(np.array(freqs) - (notch - 6)))
-        # use as reference values
-        before = psd[i]
-        i = np.argmin(abs(np.array(freqs) - (notch + 6)))
-        after = psd[i]
-        # select values to correct (+/- 5 Hz)
-        sel = np.where(np.logical_and(
-            (notch - 5) < np.array(freqs),
-            np.array(freqs) < (notch + 5)))[0]
-        # linear line between references to fill
-        fill = np.linspace(before, after, len(sel))
-        # fill with mean between original value and linear line
-        for i, v in zip(sel, fill): psd[i] = (psd[i] + v) / 2
+    print(psd.shape)
+    if len(psd.shape) == 2: psd_array = psd
+
+    for psd in psd_array:
+        print(psd.shape)
+        for notch in notches:
+            # find closest index to 6 before and after notch-center
+            i = np.argmin(abs(np.array(freqs) - (notch - 6)))
+            # use as reference values
+            before = psd[i]
+            i = np.argmin(abs(np.array(freqs) - (notch + 6)))
+            after = psd[i]
+            # select values to correct (+/- 5 Hz)
+            sel = np.where(np.logical_and(
+                (notch - 5) < np.array(freqs),
+                np.array(freqs) < (notch + 5)))[0]
+            # linear line between references to fill
+            fill = np.linspace(before, after, len(sel))
+            # fill with mean between original value and linear line
+            for i, v in zip(sel, fill): psd[i] = (psd[i] + v) / 2
     
     return psd
 

@@ -27,10 +27,46 @@ from lfpecog_preproc.preproc_import_scores_annotations import get_ecog_side
 
 from utils.utils_windowing import get_windows, windowedData
 import lfpecog_features.feats_spectral_features as specFeats
-from lfpecog_features import feats_SSD as ssd
+from lfpecog_features import feats_ssd as ssd
+
+
+@dataclass
+class Spectralfunctions():
+    """
+    standard variables order in functions: f, psd, ssd_sig, f_sel
+    """
+    f: np.ndarray = np.array([])
+    psd: np.ndarray = np.array([])
+    ssd_sig: np.ndarray = np.array([])
+    f_sel: np.ndarray = np.array([])
+
+    # f: np.ndarray 
+    # psd: np.ndarray
+    # ssd_sig: np.ndarray
+    # f_sel: np.ndarray
+
+    def get_SSD_max_psd(self):
+        max_peak = np.max(self.psd[self.f_sel])
+        return max_peak
+
+    def get_SSD_peak_freq(self):
+        i_peak = np.argmax(self.psd[self.f_sel])
+        f_peak = self.f[self.f_sel][i_peak]
+        return f_peak
+
+    def get_SSD_mean_psd(self):
+        mean_peak = np.mean(self.psd[self.f_sel])
+        return mean_peak
+
+    def get_SSD_variation(self):
+        cv_signal = variation(self.ssd_sig)
+        return cv_signal
+    
+
+
 
 @dataclass(init=True, repr=True, )
-class extract_multivar_features:
+class extract_multivar_features():
     """
     MAIN FEATURE EXTRACTION FUNCTION
 
@@ -44,6 +80,7 @@ class extract_multivar_features:
                                  'ecog_left', 'ecog_right']
     )
     use_stored_windows: bool = True
+    save_ssd_windows: bool = True
     
     def __post_init__(self,):
 
@@ -79,7 +116,7 @@ class extract_multivar_features:
                             f'sub-{self.sub}')
         feat_path = join(get_project_path('results'),
                          'features',
-                         'SSD_powers',
+                         'SSD_powers_TEST',
                          f'windows_{SETTINGS["WIN_LEN_sec"]}s_'
                          f'{SETTINGS["WIN_OVERLAP_part"]}overlap')
         if not exists(windows_path): makedirs(windows_path)
@@ -90,11 +127,11 @@ class extract_multivar_features:
             print(f'\n\tstart {dType}')
 
             # check if features already exist
-            feat_fname = f'SSDfeatures_{self.sub}_{dType}.csv'
-            if np.logical_and(feat_fname in listdir(feat_path),
+            feat_filename = f'SSD_spectralFeatures_{self.sub}_{dType}.csv'
+            if np.logical_and(feat_filename in listdir(feat_path),
                               SETTINGS['OVERWRITE_FEATURES'] == False):
                 print(f'\n\tFEATURES ALREADY EXIST and are not overwritten'
-                      f' ({feat_fname} in {feat_path})')
+                      f' ({feat_filename} in {feat_path})')
                 continue
             # define path for windows of dType
             dType_fname = (f'sub-{self.sub}_windows_'
@@ -146,80 +183,119 @@ class extract_multivar_features:
             setattr(windows, 'data', windows.data[:, :, sel_chs])
             setattr(windows, 'keys', list(compress(windows.keys, sel_chs)))
             
+            ### empty list to store all SSD-bands per window
+            if self.save_ssd_windows: ssd_arr_3d = []
 
             ### Create storing of features
+            fts_incl = SETTINGS['FEATS_INCL']  # get features to include
             feats_out = []  # list to store lists per window
             feat_names = []  # feature names
             for band in SETTINGS['SPECTRAL_BANDS'].keys():
-                feat_names.extend([f'{band}_max_peak', f'{band}_mean_peak', f'{band}_variation'])
+                # NOTE: order has to be identical of order of adding features
+                n_spec_feats = 0
+                for ft_name in fts_incl:
+                    # to feats_out (via temporarily list feats_win)
+                    if fts_incl[ft_name] and ft_name.startswith('SSD_'):
+                        feat_names.append(f'{band}_{ft_name[4:]}')
+                        n_spec_feats += 1
             
-
             # loop over windows
             for i_w, win_dat in enumerate(windows.data):
+
                 feats_win = []  # temporary list to store features of current window
                 win_dat = win_dat.astype(np.float64)
-                # select only rows without missing
+                # select only rows without missings in current window
                 nan_rows = np.array([isna(win_dat[:, i]).any()
                             for i in range(win_dat.shape[-1])])
                 win_dat = win_dat[:, ~nan_rows]
-                # win_chnames = list(compress(windows.keys, ~nan_rows))
-                # win_time = windows.win_starttimes[i_w]
+
+                # empty list to store ssd-signals for this window
+                if self.save_ssd_windows: ssd_arr_2d = []
                 
-                ### CALCULATE UNI-SOURCE FEATURES
+                ### CALCULATE UNI-SOURCE FEATURES ###
 
                 # loop over defined frequency bands
                 for bw in SETTINGS['SPECTRAL_BANDS']:
                     f_range = SETTINGS['SPECTRAL_BANDS'][bw]
                     # check whether to perform SSD
-                    if SETTINGS['FEATS_INCL']['SSD']:
-                        # Perform SSD
-                        try:
-                            (ssd_filt_data,
-                                ssd_pattern,
-                                ssd_eigvals
-                            ) = ssd.get_SSD_component(
-                                data_2d=win_dat.T,
-                                fband_interest=f_range,
-                                s_rate=windows.fs,
-                                use_freqBand_filtered=True,
-                                return_comp_n=0,
-                            )
-                        except ValueError:
-                            print(f'{dType}: window # {i_w} failed on {bw}')
-                            feats_win.extend([np.nan, np.nan, np.nan])
-                            continue
+                    if not (fts_incl['SSD_max_psd'] or fts_incl['SSD_mean_psd']
+                        or fts_incl['SSD_variation']): continue
 
-                        # Convert SSD'd signal into Power Spectrum
-                        f, psd = welch(ssd_filt_data, axis=-1,
-                                       nperseg=windows.fs, fs=windows.fs)
-                        
-                        # CALCULATE SPECTRAL PEAK FEATURES (in same order as names!!!)
+                    # Perform SSD
+                    try:
+                        (ssd_filt_data,
+                            ssd_pattern,
+                            ssd_eigvals
+                        ) = ssd.get_SSD_component(
+                            data_2d=win_dat.T,
+                            fband_interest=f_range,
+                            s_rate=windows.fs,
+                            use_freqBand_filtered=True,
+                            return_comp_n=0,
+                        )
+                    except ValueError:
+                        print(f'{dType}: window # {i_w} failed on {bw}')
+                        feats_win.extend([np.nan] * n_spec_feats)
+                        if self.save_ssd_windows:
+                            ssd_arr_2d.append([np.nan] * win_dat.shape[0])
+                        continue
 
-                        # select psd in freq of interest
-                        f_sel = [f_range[0] < freq < f_range[1] for freq in f]
-                        # MAX FREQ BAND PEAK
-                        max_peak = np.max(psd[f_sel])
-                        feats_win.append(max_peak)
-                        # MEAN FREQ BAND PEAK
-                        mean_peak = np.mean(psd[f_sel])
-                        feats_win.append(mean_peak)
-                        # COEFFICIENT of VARIATION IN FILTERED SIGNAL
-                        cv_signal = variation(ssd_filt_data)
-                        feats_win.append(cv_signal)
+                    if self.save_ssd_windows:
+                        ssd_arr_2d.append(ssd_filt_data)
 
+                    # Convert SSD'd signal into Power Spectrum
+                    f, psd = welch(ssd_filt_data, axis=-1,
+                                    nperseg=windows.fs, fs=windows.fs)
+                    f_sel = [f_range[0] < freq < f_range[1] for freq in f]  # select psd in freq of interest
+
+                    # CALCULATE SPECTRAL PEAK FEATURES
+                    # NOTE: loop over ft-names and ft-funcs ensures correct ft-order
+                    for ft_name in fts_incl:
+                        if fts_incl[ft_name] and ft_name.startswith('SSD_'):
+                            # get value from function corresponding to ft-name
+                            func = getattr(Spectralfunctions(
+                                psd=psd, ssd_sig=ssd_filt_data,
+                                f=f, f_sel=f_sel
+                            ), f'get_{ft_name}')
+                            feats_win.append(func())
+                       
                 # END OF WINDOW -> STORE list with window features to total list
                 feats_out.append(feats_win)
+
+                # add 2d of window to overall list
+                if self.save_ssd_windows:
+                    ssd_arr_2d = np.array(ssd_arr_2d, dtype='object')  # convert list to 2d array
+                    ssd_arr_3d.append(ssd_arr_2d)
             
             # AFTER ALL WINDOWS OF DATA TYPE ARE DONE -> STORE FEATURE DATAFRAME
-            feats_out = np.array(feats_out)
+            feats_out = np.array(feats_out, dytpe='object')
             feats_out = DataFrame(data=feats_out, columns=feat_names, index=windows.win_starttimes,)
-            feats_out.to_csv(join(feat_path, feat_fname),
+            feats_out.to_csv(join(feat_path, feat_filename),
                              index=True, header=True,)
-            print(f'FEATURES for sub-{self.sub} {dType} in {feat_path}')
+            print(f'Saved FEATURES for sub-{self.sub} {dType} as '
+                  f'{feat_filename} in {feat_path}')
 
+            if self.save_ssd_windows:
+                fname = f'SSD_windowedBands_{self.sub}_{dType}'
+                ssd_arr_3d = np.array(ssd_arr_3d, dtype='object')  # convert array-list to 3d array
+                with open(join(windows_path, fname+'.npy'), mode='wb') as f:
+                    np.save(f, ssd_arr_3d)
+                # store meta info
+                assert np.logical_and(
+                    ssd_arr_3d.shape[0] == len(windows.win_starttimes),
+                    ssd_arr_3d.shape[1] == len(SETTINGS['SPECTRAL_BANDS'])
+                ), (f'ssd_arr_3d shape ({ssd_arr_3d.shape}) does not match '
+                    f'n-window-times ({len(windows.win_starttimes)}) or '
+                    f"n-freqbands ({len(SETTINGS['SPECTRAL_BANDS'])})")
+                
+                meta = {'npy_filename': fname,
+                        'bandwidths': SETTINGS['SPECTRAL_BANDS'],
+                        'timestamps': windows.win_starttimes}
+                with open(join(windows_path, fname+'.json'), 'w') as f:
+                    json.dump(meta, f)
+                print(f'Saved SSD windows for sub-{self.sub} {dType} as '
+                  f'{feat_filename} in {feat_path}')
 
-
-        
 
 
 

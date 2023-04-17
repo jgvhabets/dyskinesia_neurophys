@@ -66,6 +66,7 @@ def PAC_matrix(
             amplitude-component. Number of freq-bins is len(freqs_pha) - 1.
             Can be used for selecting specific freq-widths of PAC-values.
 
+    Tensorpac article (Combrisson 2020): https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1008302
     Doc: https://etiennecmb.github.io/tensorpac/generated/tensorpac.Pac.html#tensorpac.Pac
         first idpac integer is PAC-method: 2 codes for MI;
         second idpac integer is surrogate-method: 3 codes for time lag

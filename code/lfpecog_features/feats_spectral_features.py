@@ -136,6 +136,42 @@ def calc_coherence(
     return f, icoh, abs_icoh, coh, sq_coh
 
 
+def get_aperiodic(data, fs, method='fooof',
+                  method_params=None,):
+    """
+    Arguments:
+        - data: currently handles 2d array
+            (n-channels x n-samples)
+        - fs
+    
+    Returns:
+        - offset
+        - exponent
+        - R2 of fit
+    """
+    if data.shape[0] > data.shape[1]: data = data.T
+    # select and transform data from one channel, in one epoch
+    f, pxx = signal.welch(data, fs=fs, nperseg=fs, axis=1)
+    # correct psd shape for linenoise corrected throughs
+    pxx = specHelpers.correct_notch_throughs(
+        f, pxx, np.arange(50, f[-1], 50))
+
+    from fooof import FOOOF
+    
+    fm = FOOOF(peak_width_limits=(.5, 5),
+               peak_threshold=.5,
+               aperiodic_mode=method_params['knee'],
+               max_n_peaks=method_params['max_n_peaks'],
+               verbose=False,)     
+    fm.fit(f, pxx, freq_range=method_params['f_range'])
+
+    ap_off = fm.get_results().aperiodic_params[0]
+    ap_exp = fm.get_results().aperiodic_params[-1]
+    ap_fit_r2 = fm.get_results().r_squared
+
+    return ap_off, ap_exp, ap_fit_r2
+
+
 def get_fooof_peaks_freqs_and_sizes(
     f, pxx, range=[4, 98], knee_or_fix: str = 'knee',
     max_n_peaks = np.inf, fooof_fig_dir=None,

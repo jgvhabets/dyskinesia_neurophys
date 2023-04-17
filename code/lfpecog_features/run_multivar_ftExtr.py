@@ -1,7 +1,7 @@
 """
 Main Script to Run multivariate feature Extract (not MIC)
 
-Run on WIN:
+Run on WIN from repo/code:
     python -m lfpecog_features.run_multivar_ftExtr 'ftExtr_spectral_v1.json'
 """
 # import functions
