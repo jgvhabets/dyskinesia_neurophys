@@ -26,8 +26,17 @@ if __name__ == '__main__':
     
     # create SSD'd signals per freq-band, per window
     for sub in settings['SUBS_INCL']:
-        print(f'\tstart sub-{sub}...')
-        extract_multivar_features(sub=sub, settings=settings)
+        print(f'\tstart SSD + spectral creation, sub-{sub}...')
+        create_SSDs_and_spectral_features(sub=sub, settings=settings)
+    
+    # create local PAC features    
+    for sub in settings['SUBS_INCL']:
+        print(f'\tstart local-PAC sub-{sub}...')
+
+    # create multi-location connectivity features
+
+
+        
     
 
 
