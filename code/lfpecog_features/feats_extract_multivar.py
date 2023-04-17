@@ -30,47 +30,14 @@ import lfpecog_features.feats_spectral_features as specFeats
 from lfpecog_features import feats_ssd as ssd
 
 
-@dataclass
-class Spectralfunctions():
-    """
-    standard variables order in functions: f, psd, ssd_sig, f_sel
-    """
-    f: np.ndarray = np.array([])
-    psd: np.ndarray = np.array([])
-    ssd_sig: np.ndarray = np.array([])
-    f_sel: np.ndarray = np.array([])
-
-    # f: np.ndarray 
-    # psd: np.ndarray
-    # ssd_sig: np.ndarray
-    # f_sel: np.ndarray
-
-    def get_SSD_max_psd(self):
-        max_peak = np.max(self.psd[self.f_sel])
-        return max_peak
-
-    def get_SSD_peak_freq(self):
-        i_peak = np.argmax(self.psd[self.f_sel])
-        f_peak = self.f[self.f_sel][i_peak]
-        return f_peak
-
-    def get_SSD_mean_psd(self):
-        mean_peak = np.mean(self.psd[self.f_sel])
-        return mean_peak
-
-    def get_SSD_variation(self):
-        cv_signal = variation(self.ssd_sig)
-        return cv_signal
-    
-
-
 
 @dataclass(init=True, repr=True, )
-class extract_multivar_features():
+class create_SSDs_and_spectral_features():
     """
     MAIN FEATURE EXTRACTION FUNCTION
 
-    Run from run_ftExtr_multivar: python -m lfpecog_features.run_ftExtr_multivar 'ftExtr_spectral_v1.json'
+    Run from run_ftExtr_multivar:
+        python -m lfpecog_features.run_ftExtr_multivar 'ftExtr_spectral_v1.json'
     """
     sub: str
     settings: dict = field(default_factory=lambda:{})
@@ -249,11 +216,11 @@ class extract_multivar_features():
                     f_sel = [f_range[0] < freq < f_range[1] for freq in f]  # select psd in freq of interest
 
                     # CALCULATE SPECTRAL PEAK FEATURES
-                    # NOTE: loop over ft-names and ft-funcs ensures correct ft-order
+                    # loop over ft-names and ft-funcs ensures correct ft-order
                     for ft_name in fts_incl:
                         if fts_incl[ft_name] and ft_name.startswith('SSD_'):
                             # get value from function corresponding to ft-name
-                            func = getattr(Spectralfunctions(
+                            func = getattr(specFeats.Spectralfunctions(
                                 psd=psd, ssd_sig=ssd_filt_data,
                                 f=f, f_sel=f_sel
                             ), f'get_{ft_name}')
@@ -276,6 +243,7 @@ class extract_multivar_features():
                   f'{feat_filename} in {feat_path}')
 
             if self.save_ssd_windows:
+                # save SSD-bands per window as .npy and meta-data as .json
                 fname = f'SSD_windowedBands_{self.sub}_{dType}'
                 ssd_arr_3d = np.array(ssd_arr_3d, dtype='object')  # convert array-list to 3d array
                 with open(join(windows_path, fname+'.npy'), mode='wb') as f:
@@ -295,6 +263,81 @@ class extract_multivar_features():
                     json.dump(meta, f)
                 print(f'Saved SSD windows for sub-{self.sub} {dType} as '
                   f'{feat_filename} in {feat_path}')
+
+
+@dataclass(init=True, repr=True,)
+class extract_local_connectivitiy_fts:
+    """
+    Extracting local PAC based on SSD'd freq-bands
+    stored per window
+
+    Run from run_ftExtr_multivar
+    """
+    sub: str
+    settings: dict = field(default_factory=lambda:{})
+    feat_setting_filename: str = None
+    
+    
+    def __post_init__(self,):
+
+        assert np.logical_or(
+            isinstance(self.settings, dict),
+            isinstance(self.feat_setting_filename, str)
+        ), 'define settings-dict or setting-json-filename'
+
+        ### load settings from json
+        if not isinstance(self.settings, dict):
+            json_path = join(get_onedrive_path('data'),
+                            'featureExtraction_jsons',
+                            self.feat_setting_filename)
+            with open(json_path, 'r') as json_data:
+                SETTINGS =  json.load(json_data)
+        else:
+            SETTINGS = self.settings
+        
+        # define ephys_sources
+        ecog_side = get_ecog_side(self.sub)
+        self.ephys_sources = [f'ecog_{ecog_side}', 'lfp_left', 'lfp_right']
+
+        ### Define paths
+        data_path = join(get_project_path('data'),
+                            'windowed_data_classes_'
+                            f'{SETTINGS["WIN_LEN_sec"]}s_'
+                            f'{SETTINGS["WIN_OVERLAP_part"]}overlap',
+                            SETTINGS['DATA_VERSION'],
+                            f'sub-{self.sub}')
+        feat_path = join(get_project_path('results'),
+                         'features',
+                         'SSD_powers_TEST',
+                         f'windows_{SETTINGS["WIN_LEN_sec"]}s_'
+                         f'{SETTINGS["WIN_OVERLAP_part"]}overlap')
+        if not exists(feat_path): makedirs(feat_path)
+        
+        # loop over possible datatypes
+        for dType in self.ephys_sources:
+            print(f'\n\tstart {dType}')
+            # check is windowed SSDs bands exist
+            ssd_data_fname = f'SSD_windowedBands_{self.sub}_{dType}.npy'
+            assert exists(join(data_path, ssd_data_fname)), (
+                f"SSD'd bands missing for {ssd_data_fname} in {data_path}"
+            )
+            # check if features already exist
+            feat_fname = f'SSD_localPAC_{self.sub}_{dType}.npy'
+            if np.logical_and(feat_fname in listdir(feat_path),
+                              SETTINGS['OVERWRITE_FEATURES'] == False):
+                print(f'\n\tFEATURES ALREADY EXIST and are not overwritten'
+                      f' ({feat_fname} in {feat_path})')
+                continue
+            # get defined local PAC combinations (1st is phase, 2nd is amplitude)
+            local_pacs = SETTINGS['local_PAC']
+            # load SSD'd data
+            for [pha, ampl] in local_pacs:
+                print(pha, ampl)
+                #### TODO. CONTINUE
+                # load
+                # use tensorpac functions in notebook -> py script
+            
+
 
 
 

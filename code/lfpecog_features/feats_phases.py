@@ -1,31 +1,20 @@
 '''
-Functions to calculate bandwidth-based
-spectral features from neurophysiology
-data (LFP and ECOG) in ReTune's B04 Dyskinesia Project
+Functions to calculate Phase-Amplitude-
+Coupling features and phase-difference features
 
-Containing:
-- bandpass filter
-- coherence
-- Phase Amplitude Coupling (tensorpac)
-
-PM: consider seperate .py-files per feature
+Based on results by:
+    - Swann et al (Phase differences)
+    - De Hemptinne Nat Neurosc 2015 (PAC)
+    - Tort 2014 (PAC method)
+    - Combrisson 2020 (tensorpac: open-source PAC py-methods)
 '''
 # Import general packages and functions
 import os
 import numpy as np
 from scipy import signal
+import tensorpac
 
 import lfpecog_features.feats_spectral_helpers as specHelpers
-
-or_wd = os.getcwd()  # get original working directory
-
-# if necessary: change working directory to import tensorpac
-if or_wd.split('/')[-1] == 'dyskinesia_neurophys':
-    os.chdir(os.path.join(or_wd, 'code/PAC/tensorpac'))
-# import functions for Phase-Amplitude-Coupling
-# from tensorpac import Pac
-
-os.chdir(or_wd)  # set back work dir
 
 
 
@@ -144,19 +133,4 @@ def PAC_select(
     meanpac = np.mean(sel)
 
     return meanpac
-
-# # IMPORT MATPLOTLIB -> PLT
-# def visualise_PAC():
-#     """Plot Heatmap (colormesh) of PAC-comodulogram"""
-#     fig,ax = plt.subplots(1,1, figsize=(8,4))
-#     c = ax.pcolormesh(pacmatrix, cmap='viridis',
-#         vmin=-3, vmax=3, )
-#     # plot make up
-#     fig.colorbar(c, ax=ax)
-#     ax.set_xticks(np.arange(len(freqs_pha)))
-#     ax.set_xticklabels(freqs_pha.astype(int))
-#     ax.set_yticks(np.linspace(0, len(freqs_amp), 5))
-#     ax.set_yticklabels(np.linspace(
-#         freqs_amp[0], freqs_amp[-1], 5).astype(int))
-#     plt.show()
 

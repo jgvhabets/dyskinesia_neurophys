@@ -14,6 +14,7 @@ PM: consider seperate .py-files per feature
 import os
 import numpy as np
 from pandas import DataFrame
+from dataclasses import dataclass
 from scipy import signal
 from scipy.stats import variation
 import matplotlib.pyplot as plt
@@ -47,6 +48,34 @@ def bandpass(sig, freqs, fs, order=3,):
 
     return filtsig
 
+
+@dataclass
+class Spectralfunctions():
+    """
+    standard variables order in functions: f, psd, ssd_sig, f_sel
+    """
+    f: np.ndarray = np.array([])
+    psd: np.ndarray = np.array([])
+    ssd_sig: np.ndarray = np.array([])
+    f_sel: np.ndarray = np.array([])
+
+    def get_SSD_max_psd(self):
+        max_peak = np.max(self.psd[self.f_sel])
+        return max_peak
+
+    def get_SSD_peak_freq(self):
+        i_peak = np.argmax(self.psd[self.f_sel])
+        f_peak = self.f[self.f_sel][i_peak]
+        return f_peak
+
+    def get_SSD_mean_psd(self):
+        mean_peak = np.mean(self.psd[self.f_sel])
+        return mean_peak
+
+    def get_SSD_variation(self):
+        cv_signal = variation(self.ssd_sig)
+        return cv_signal
+    
 
 def calc_coherence(
     sig1,

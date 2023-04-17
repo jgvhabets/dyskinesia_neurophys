@@ -4,6 +4,8 @@ in neurophysiological signals.
 
 Takes all arguments and calls executive
 function in bursts_funcs.py
+
+TODO: dajust to SSD filtered signal
 """
 
 # import public packages and functions
