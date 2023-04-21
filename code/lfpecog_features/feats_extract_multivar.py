@@ -21,7 +21,8 @@ import matplotlib.pyplot as plt
 # import own functions
 from utils.utils_fileManagement import (
     get_project_path, get_onedrive_path,
-    load_class_pickle, save_class_pickle
+    load_class_pickle, save_class_pickle,
+    load_ft_ext_cfg
 )
 from lfpecog_preproc.preproc_import_scores_annotations import get_ecog_side
 
@@ -36,8 +37,7 @@ class create_SSDs_and_spectral_features():
     """
     MAIN FEATURE EXTRACTION FUNCTION
 
-    Run from run_ftExtr_multivar:
-        python -m lfpecog_features.run_ftExtr_multivar 'ftExtr_spectral_v1.json'
+    is ran from run_ftExtr_multivar:
     """
     sub: str
     settings: dict = field(default_factory=lambda:{})
@@ -57,19 +57,14 @@ class create_SSDs_and_spectral_features():
         ), 'define settings-dict or setting-json-filename'
 
         ### load settings from json
-        if not isinstance(self.settings, dict):
-            json_path = join(get_onedrive_path('data'),
-                            'featureExtraction_jsons',
-                            self.feat_setting_filename)
-            with open(json_path, 'r') as json_data:
-                SETTINGS =  json.load(json_data)
+        if self.settings == {}:
+            SETTINGS = load_ft_ext_cfg(self.feat_setting_filename)
         else:
             SETTINGS = self.settings
         
         # define ephys_sources
         ecog_side = get_ecog_side(self.sub)
         self.ephys_sources = [f'ecog_{ecog_side}', 'lfp_left', 'lfp_right']
-
         ### Define paths
         mergedData_path = join(get_project_path('data'),
                                'merged_sub_data',
@@ -91,15 +86,32 @@ class create_SSDs_and_spectral_features():
         
         # loop over possible datatypes
         for dType in self.ephys_sources:
+            if dType.startswith('lfp'):
+                print('skip', dType)
+                continue
             print(f'\n\tstart {dType}')
-
+            print('ft path listdir', listdir(feat_path))
             # check if features already exist
             feat_filename = f'SSD_spectralFeatures_{self.sub}_{dType}.csv'
-            if np.logical_and(feat_filename in listdir(feat_path),
-                              SETTINGS['OVERWRITE_FEATURES'] == False):
-                print(f'\n\tFEATURES ALREADY EXIST and are not overwritten'
-                      f' ({feat_filename} in {feat_path})')
+            ssd_windows_name = f'SSD_windowedBands_{self.sub}_{dType}'
+            print(ssd_windows_name)
+            if (
+                # feat_filename in listdir(feat_path) and
+                SETTINGS['OVERWRITE_FEATURES'] == False and
+                exists(join(windows_path, ssd_windows_name+'.json')) and
+                exists(join(windows_path, ssd_windows_name+'.npy'))):
+                # if both features and ssd windowed data present
+                print(f'\n\tFEATURES and DATA ALREADY EXIST, '
+                      'SSD windows loaded and not recreated and overwritten'
+                      f' (feats: {feat_filename} in {feat_path} and ssd'
+                      f'-windows: {ssd_windows_name} in {windows_path})')
+                # CREATE ATTRIBUTE CONTAINING WINDOWED SSD BANDS
+                setattr(self,
+                        dType,
+                        ssd.SSD_bands_windowed(self.sub, dType, SETTINGS))
                 continue
+            print('SHOULD NOT HAPPEN WITH EX FTS')
+
             # define path for windows of dType
             dType_fname = (f'sub-{self.sub}_windows_'
                            f'{SETTINGS["WIN_LEN_sec"]}s_'
@@ -244,9 +256,8 @@ class create_SSDs_and_spectral_features():
 
             if self.save_ssd_windows:
                 # save SSD-bands per window as .npy and meta-data as .json
-                fname = f'SSD_windowedBands_{self.sub}_{dType}'
                 ssd_arr_3d = np.array(ssd_arr_3d, dtype='object')  # convert array-list to 3d array
-                with open(join(windows_path, fname+'.npy'), mode='wb') as f:
+                with open(join(windows_path, ssd_windows_name+'.npy'), mode='wb') as f:
                     np.save(f, ssd_arr_3d)
                 # store meta info
                 assert np.logical_and(
@@ -256,10 +267,10 @@ class create_SSDs_and_spectral_features():
                     f'n-window-times ({len(windows.win_starttimes)}) or '
                     f"n-freqbands ({len(SETTINGS['SPECTRAL_BANDS'])})")
                 
-                meta = {'npy_filename': fname,
+                meta = {'npy_filename': ssd_windows_name,
                         'bandwidths': SETTINGS['SPECTRAL_BANDS'],
                         'timestamps': windows.win_starttimes}
-                with open(join(windows_path, fname+'.json'), 'w') as f:
+                with open(join(windows_path, ssd_windows_name+'.json'), 'w') as f:
                     json.dump(meta, f)
                 print(f'Saved SSD windows for sub-{self.sub} {dType} as '
                   f'{feat_filename} in {feat_path}')

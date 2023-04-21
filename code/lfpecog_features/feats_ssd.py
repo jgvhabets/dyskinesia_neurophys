@@ -13,8 +13,12 @@ Based on:
 # import packages
 import numpy as np
 from dataclasses import dataclass
+from os.path import join, exists
+import json
 
 import meet.meet as meet  # https://github.com/neurophysics/meet
+
+from utils.utils_fileManagement import get_onedrive_path, get_project_path
 
 def get_SSD_component(
     data_2d, fband_interest, s_rate,
@@ -107,7 +111,7 @@ def get_SSD_component(
         
 
 @dataclass(init=True, repr=True,)
-class SSD_bands:
+class SSD_bands_per_window:
     """
     Store SSD filtered timeseries per freq-band,
     is used per window
@@ -127,7 +131,6 @@ class SSD_bands:
     freq_bands_incl: dict
 
     def __post_init__(self,):
-
         for f_band in self.freq_bands_incl.keys():
             ssd_ts, _, _ = get_SSD_component(
                 data_2d=self.data,
@@ -135,6 +138,76 @@ class SSD_bands:
                 s_rate=self.s_rate
             )
             setattr(self, f_band, ssd_ts)
+
+
+@dataclass(init=True, repr=True,)
+class SSD_bands_windowed:
+    """
+    Get object containing attribute with windowed
+    SSDs timeseries per freq band, and timestamps
+
+    - sub: sub string code
+    - data_source: string 'lfp_side' , 'ecog_side
+    - settings dict
+
+    Results:
+        - data_source: 2d-array [n-windows, n-samples]
+        - times: list with timestamps of windows
+    """
+    sub: str
+    datasource: str
+    settings: dict
+    
+    def __post_init__(self,):
+    
+        assert self.sub and self.datasource and self.settings, (
+            'define subject, datasource, and settings'
+            ' to load windowed SSD bands'
+        )
+        data, meta = load_windowed_ssds(
+            sub=self.sub, dType=self.datasource,
+            settings=self.settings)
+        for i_f, fband in enumerate(meta['bandwidths']):
+            setattr(self, fband, data[:, i_f, :])  # [n-windows x n-samples]
+        self.times = meta['timestamps']
+
+
+def load_windowed_ssds(sub, dType, settings: dict):
+    """
+    loads SSD bands saved per datatype as 3d arrays
+    [n-windows, n-bands, n-samples]
+
+    craeted in feats_extract_multivar.py
+
+    Returns:
+        - data_ssd: 3d-array containing n-windows,
+            n-freqbands, n-samples-per-window
+        - meta_ssd: dict containing 'bandwidths' and
+            'timestamps' corresponding to data.
+            'bandwidths' contain freq-limits.
+    """
+    # define folder and file to load from
+    win_path = join(get_project_path('data'),
+                            'windowed_data_classes_'
+                            f'{settings["WIN_LEN_sec"]}s_'
+                            f'{settings["WIN_OVERLAP_part"]}overlap',
+                            settings['DATA_VERSION'],
+                            f'sub-{sub}')
+    ssd_win_fname = f'SSD_windowedBands_{sub}_{dType}'
+    meta_f = join(win_path, ssd_win_fname + '.json')
+    data_f = join(win_path, ssd_win_fname + '.npy')
+    # assure existence of files
+    assert np.logical_and(exists(meta_f), exists(data_f)), (
+        f'inserted SSD data files {ssd_win_fname} (.npy, .json)'
+        f'do not exist in {win_path}'
+    )
+
+    # load files
+    with open(meta_f, 'r') as meta_f:
+        meta_ssd = json.load(meta_f)
+    data_ssd = np.load(data_f, allow_pickle=True,)
+    
+    return data_ssd, meta_ssd
 
 
 # # Import public packages and functions

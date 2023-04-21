@@ -12,6 +12,7 @@ from numpy import (
 from csv import writer
 import pickle
 from dataclasses import dataclass
+import json
 
 
 def get_project_path(
@@ -84,6 +85,22 @@ def get_onedrive_path(
     else:  # must be data or figures
         return join(path, 'dysk_ecoglfp', folder.lower())
 
+
+def load_ft_ext_cfg(cfg_fname: str, cfg_folder=None):
+    # define folder to use, either default or
+    # given if cfg_folder is defined
+    if isinstance(cfg_folder, str):
+        json_path = join(cfg_folder, cfg_fname)
+    else:
+        json_path = join(get_onedrive_path('data'),
+                         'featureExtraction_jsons',
+                         cfg_fname)
+    
+    # open json
+    with open(json_path, 'r') as json_data:
+        ft_settings =  json.load(json_data)
+
+    return ft_settings
 
 def save_dfs(
     df,
