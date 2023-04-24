@@ -10,12 +10,11 @@ import json
 from os.path import join
 
 # import own functions
-from lfpecog_features.feats_extract_multivar import create_SSDs_and_spectral_features
 from utils.utils_fileManagement import (
     get_onedrive_path,
     load_ft_ext_cfg
 )
-
+from lfpecog_features.feats_ssd import get_subject_SSDs
 
 if __name__ == '__main__':
 
@@ -26,8 +25,7 @@ if __name__ == '__main__':
     # create SSD'd signals per freq-band, per window
     for sub in settings['SUBS_INCL']:
         print(f'\tstart SSD + spectral creation, sub-{sub}...')
-        sub_SSDs = create_SSDs_and_spectral_features(sub=sub,
-                                          settings=settings)
+        sub_SSD = get_subject_SSDs(sub=sub, settings=settings)
     
         # create local PAC features
          

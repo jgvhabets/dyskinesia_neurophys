@@ -33,7 +33,7 @@ from lfpecog_features import feats_ssd as ssd
 
 
 @dataclass(init=True, repr=True, )
-class create_SSDs_and_spectral_features():
+class create_SSDs():
     """
     MAIN FEATURE EXTRACTION FUNCTION
 
@@ -41,11 +41,9 @@ class create_SSDs_and_spectral_features():
     """
     sub: str
     settings: dict = field(default_factory=lambda:{})
-    feat_setting_filename: str = None
-    ephys_sources: list = field(
-        default_factory=lambda: ['lfp_left', 'lfp_right',
-                                 'ecog_left', 'ecog_right']
-    )
+    ft_setting_fname: str = None
+    incl_ecog: bool = True
+    incl_stn: bool = True
     use_stored_windows: bool = True
     save_ssd_windows: bool = True
     
@@ -53,18 +51,23 @@ class create_SSDs_and_spectral_features():
 
         assert np.logical_or(
             isinstance(self.settings, dict),
-            isinstance(self.feat_setting_filename, str)
+            isinstance(self.ft_setting_fname, str)
         ), 'define settings-dict or setting-json-filename'
 
         ### load settings from json
         if self.settings == {}:
-            SETTINGS = load_ft_ext_cfg(self.feat_setting_filename)
+            SETTINGS = load_ft_ext_cfg(self.ft_setting_fname)
         else:
             SETTINGS = self.settings
         
         # define ephys_sources
-        ecog_side = get_ecog_side(self.sub)
-        self.ephys_sources = [f'ecog_{ecog_side}', 'lfp_left', 'lfp_right']
+        self.ephys_sources = []
+        if self.incl_ecog:
+            ecog_side = get_ecog_side(self.sub)
+            self.ephys_sources.append(f'ecog_{ecog_side}')
+        if self.incl_stn:
+            self.ephys_sources.append(['lfp_left', 'lfp_right'])
+
         ### Define paths
         mergedData_path = join(get_project_path('data'),
                                'merged_sub_data',
@@ -76,41 +79,36 @@ class create_SSDs_and_spectral_features():
                             f'{SETTINGS["WIN_OVERLAP_part"]}overlap',
                             SETTINGS['DATA_VERSION'],
                             f'sub-{self.sub}')
-        feat_path = join(get_project_path('results'),
-                         'features',
-                         'SSD_powers_TEST',
-                         f'windows_{SETTINGS["WIN_LEN_sec"]}s_'
-                         f'{SETTINGS["WIN_OVERLAP_part"]}overlap')
+        # feat_path = join(get_project_path('results'),
+        #                  'features',
+        #                  'SSD_powers_TEST',
+        #                  f'windows_{SETTINGS["WIN_LEN_sec"]}s_'
+        #                  f'{SETTINGS["WIN_OVERLAP_part"]}overlap')
         if not exists(windows_path): makedirs(windows_path)
-        if not exists(feat_path): makedirs(feat_path)
+        # if not exists(feat_path): makedirs(feat_path)
         
         # loop over possible datatypes
         for dType in self.ephys_sources:
-            if dType.startswith('lfp'):
-                print('skip', dType)
-                continue
             print(f'\n\tstart {dType}')
-            print('ft path listdir', listdir(feat_path))
+            # print('ft path listdir', listdir(feat_path))
             # check if features already exist
-            feat_filename = f'SSD_spectralFeatures_{self.sub}_{dType}.csv'
+            # feat_filename = f'SSD_spectralFeatures_{self.sub}_{dType}.csv'
             ssd_windows_name = f'SSD_windowedBands_{self.sub}_{dType}'
-            print(ssd_windows_name)
+
             if (
-                # feat_filename in listdir(feat_path) and
+                # if both features and ssd windowed data present
                 SETTINGS['OVERWRITE_FEATURES'] == False and
                 exists(join(windows_path, ssd_windows_name+'.json')) and
-                exists(join(windows_path, ssd_windows_name+'.npy'))):
-                # if both features and ssd windowed data present
-                print(f'\n\tFEATURES and DATA ALREADY EXIST, '
-                      'SSD windows loaded and not recreated and overwritten'
-                      f' (feats: {feat_filename} in {feat_path} and ssd'
-                      f'-windows: {ssd_windows_name} in {windows_path})')
+                exists(join(windows_path, ssd_windows_name+'.npy'))
+            ):  
                 # CREATE ATTRIBUTE CONTAINING WINDOWED SSD BANDS
                 setattr(self,
                         dType,
                         ssd.SSD_bands_windowed(self.sub, dType, SETTINGS))
+                print(f'\n\texisting windowed ssd-data loaded')
                 continue
-            print('SHOULD NOT HAPPEN WITH EX FTS')
+
+            print('create windowed ssd data...')
 
             # define path for windows of dType
             dType_fname = (f'sub-{self.sub}_windows_'
@@ -274,7 +272,9 @@ class create_SSDs_and_spectral_features():
                     json.dump(meta, f)
                 print(f'Saved SSD windows for sub-{self.sub} {dType} as '
                   f'{feat_filename} in {feat_path}')
-
+            
+            # store created windowed ssd-timeseries as attr
+            setattr(self, dType, )
 
 @dataclass(init=True, repr=True,)
 class extract_local_connectivitiy_fts:

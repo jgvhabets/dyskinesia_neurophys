@@ -18,7 +18,12 @@ import json
 
 import meet.meet as meet  # https://github.com/neurophysics/meet
 
-from utils.utils_fileManagement import get_onedrive_path, get_project_path
+from lfpecog_preproc.preproc_import_scores_annotations import get_ecog_side
+from utils.utils_fileManagement import (
+    get_onedrive_path, get_project_path,
+    load_ft_ext_cfg
+)
+from lfpecog_features.feats_extract_multivar import create_SSDs
 
 def get_SSD_component(
     data_2d, fband_interest, s_rate,
@@ -157,19 +162,34 @@ class SSD_bands_windowed:
     sub: str
     datasource: str
     settings: dict
+    incl_ecog: bool = True
+    incl_stn: bool = True
     
     def __post_init__(self,):
-    
-        assert self.sub and self.datasource and self.settings, (
-            'define subject, datasource, and settings'
-            ' to load windowed SSD bands'
-        )
-        data, meta = load_windowed_ssds(
-            sub=self.sub, dType=self.datasource,
-            settings=self.settings)
+        # use stored data
+        try:
+            data, meta = load_windowed_ssds(
+                sub=self.sub,
+                dType=self.datasource,
+                settings=self.settings)
+            for i_f, fband in enumerate(meta['bandwidths']):
+                setattr(self, fband, data[:, i_f, :])  # [n-windows x n-samples]
+            self.times = meta['timestamps']
+        # create data if not found
+        except FileNotFoundError:
+            print('windowed SSD data doesnot exist yet')
+            create_SSDs(sub=self.sub, settings=self.settings,
+                        incl_ecog=self.incl_ecog,
+                        incl_stn=self.incl_stn)
+            # use newly created data
+            data, meta = load_windowed_ssds(sub=self.sub,
+                                            dType=self.datasource,
+                                            settings=self.settings)
+        
         for i_f, fband in enumerate(meta['bandwidths']):
             setattr(self, fband, data[:, i_f, :])  # [n-windows x n-samples]
         self.times = meta['timestamps']
+
 
 
 def load_windowed_ssds(sub, dType, settings: dict):
@@ -188,11 +208,11 @@ def load_windowed_ssds(sub, dType, settings: dict):
     """
     # define folder and file to load from
     win_path = join(get_project_path('data'),
-                            'windowed_data_classes_'
-                            f'{settings["WIN_LEN_sec"]}s_'
-                            f'{settings["WIN_OVERLAP_part"]}overlap',
-                            settings['DATA_VERSION'],
-                            f'sub-{sub}')
+                    'windowed_data_classes_'
+                    f'{settings["WIN_LEN_sec"]}s_'
+                    f'{settings["WIN_OVERLAP_part"]}overlap',
+                    settings['DATA_VERSION'],
+                    f'sub-{sub}')
     ssd_win_fname = f'SSD_windowedBands_{sub}_{dType}'
     meta_f = join(win_path, ssd_win_fname + '.json')
     data_f = join(win_path, ssd_win_fname + '.npy')
@@ -210,72 +230,36 @@ def load_windowed_ssds(sub, dType, settings: dict):
     return data_ssd, meta_ssd
 
 
-# # Import public packages and functions
-# import numpy as np
 
-# from mne import create_info
-# from mne.decoding import SSD
+@dataclass(init=True, repr=True)
+class get_subject_SSDs:
+    sub: str
+    settings: dict = None
+    ft_setting_fname: str = None
+    incl_ecog: bool = True
+    incl_stn: bool = True
 
-# def SSD_on_array(
-#     array, fs, freqband_to_optim
-# ):
-#     """
-#     Spatial Signal Decompositino increases
-#     the signal to noise ratio within a specific
-#     freq-bandwidth by correcting the signal
-#     for the 'noise-floor' measured in
-#     neighbouring frequency bins
+    def __post_init__(self,):
+        if not self.settings:
+            # load settings dict
+            self.settings = load_ft_ext_cfg(self.ft_setting_fname)
+        # define ephys data sources
+        self.ephys_sources = []
+        if self.incl_ecog:
+            ecog_side = get_ecog_side(self.sub)
+            self.ephys_sources.append(f'ecog_{ecog_side}')
+        if self.incl_stn:
+            self.ephys_sources.extend(['lfp_left', 'lfp_right'])
 
-#     Based on mne.Decoding.SDD:
-#     (https://mne.tools/stable/generated/mne.decoding.SSD.html#mne.decoding.SSD)
-
-#     TODO: eigenvector failure (positive definitive error)
-#     when performed on 2d data array
-    
-#     Input:
-#         - array to transform: should be without nans
-#         - fs
-#         - freqband_to_optim: tuple or list
-#             with lower and higher freq border
-    
-#     Returns:
-#         - ssd_array: array with optimised SNR
-#             for defined freq-band
-    
-#     Raises:
-#         - Assertion if array contains NaNs
-#     """
-#     assert ~np.isnan(array).any(), (
-#         'array to perform SSD on cannot contain NaNs'
-#     )
-#     if len(array.shape) == 1: array = np.array([array])  # transform to 2d array 1 x samples
-#     if array.shape[0] > array.shape[1]: array = array.T  # transpose in horizontal format
-    
-#     # create mne info object
-#     ch_names=[f'n{n}' for n in range(array.shape[0])]
-#     mne_info = create_info(
-#         ch_names=ch_names,
-#         sfreq=fs,
-#         ch_types=['eeg'] * len(ch_names)
-#     )
-    
-#     freqs_noise = (freqband_to_optim[0] - 4, freqband_to_optim[1] + 4)
-#     # freqs_noise = (1, 50)
-
-#     ssd_obj = SSD(
-#         info=mne_info,
-#         reg='oas',
-#         sort_by_spectral_ratio=False,  # False for purpose of example.
-#         filt_params_signal=dict(l_freq=freqband_to_optim[0],h_freq=freqband_to_optim[1],
-#                                 l_trans_bandwidth=1, h_trans_bandwidth=1),
-#         filt_params_noise=dict(l_freq=freqs_noise[0], h_freq=freqs_noise[1],
-#                                l_trans_bandwidth=1, h_trans_bandwidth=1),
-#         n_components=len(array),
-#         n_fft=len(array),
-#     )
-#     # perform SSD
-#     ssd_obj.fit(array)
-
-#     ssd_sources = ssd_obj.transform(X=array)
-
-#     return ssd_obj, ssd_sources
+        # for data sources, get all SSD windows
+        for dType in self.ephys_sources:
+            setattr(self,
+                    dType,
+                    SSD_bands_windowed(self.sub, dType,
+                                       self.settings,
+                                       incl_ecog=self.incl_ecog,
+                                       incl_stn=self.incl_stn)
+            )
+            
+        
+        ### TODO: CALCULATE FEATURES!!!
