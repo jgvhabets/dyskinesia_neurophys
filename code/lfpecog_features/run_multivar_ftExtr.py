@@ -15,6 +15,8 @@ from utils.utils_fileManagement import (
     load_ft_ext_cfg
 )
 from lfpecog_features.feats_ssd import get_subject_SSDs
+import lfpecog_features.extract_ssd_features as ssd_feats
+
 
 if __name__ == '__main__':
 
@@ -25,14 +27,18 @@ if __name__ == '__main__':
     # create SSD'd signals per freq-band, per window
     for sub in settings['SUBS_INCL']:
         print(f'\tstart SSD + spectral creation, sub-{sub}...')
-        sub_SSD = get_subject_SSDs(sub=sub, settings=settings)
-    
+        # load or create SSD windows for subject
+        sub_SSD = get_subject_SSDs(sub=sub, settings=settings,
+                                   incl_ecog=True, incl_stn=True)
+
+        # Extract local spectral power features
+
         # create local PAC features
          
         print(f'\tstart local-PAC sub-{sub}...')
 
-    # create multi-location connectivity features
-
+        # extract multi-location connectivity features
+        ssd_feats.extract_local_connectivitiy_fts(TODO)
 
         
     

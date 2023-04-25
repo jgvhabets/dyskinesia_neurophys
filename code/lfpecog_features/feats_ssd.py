@@ -182,6 +182,7 @@ class SSD_bands_windowed:
             for i_f, fband in enumerate(meta['bandwidths']):
                 setattr(self, fband, data[:, i_f, :])  # [n-windows x n-samples]
             self.times = meta['timestamps']
+            self.fs = meta['fs']
         
         # create data if not found
         except FileNotFoundError:
@@ -447,6 +448,7 @@ class create_SSDs():
                     f"n-freqbands ({len(SETTINGS['SPECTRAL_BANDS'])})")
                 
                 meta = {'npy_filename': ssd_windows_name,
+                        'fs': windows.fs,
                         'bandwidths': SETTINGS['SPECTRAL_BANDS'],
                         'timestamps': windows.win_starttimes}
                 

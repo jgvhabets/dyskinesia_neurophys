@@ -28,31 +28,23 @@ from lfpecog_preproc.preproc_import_scores_annotations import get_ecog_side
 
 from utils.utils_windowing import get_windows, windowedData
 import lfpecog_features.feats_spectral_features as specFeats
-from lfpecog_features import feats_ssd as ssd
+
 
 
 
 @dataclass(init=True, repr=True, )
-class create_SSDs():
+class extract_local_SSD_powers():
     """
-    Create windowed SSD timeseries per defined freq-
-    bandwidths
+    Extract local power spectral features from
+    SSD-d data
     """
-    sub: str
-    settings: dict = field(default_factory=lambda:{})
-    ft_setting_fname: str = None
+    sub_SSD: str
+    settings_dict: dict
     incl_ecog: bool = True
     incl_stn: bool = True
-    use_stored_windows: bool = True
-    save_ssd_windows: bool = True
     
     def __post_init__(self,):
-        ### load settings from json
-        if self.settings == {}:
-            SETTINGS = load_ft_ext_cfg(self.ft_setting_fname)
-        else:
-            SETTINGS = self.settings
-        
+        SETTINGS = self.settings_dict    
         # define ephys_sources
         self.ephys_sources = []
         if self.incl_ecog:
@@ -62,99 +54,22 @@ class create_SSDs():
             self.ephys_sources.append(['lfp_left', 'lfp_right'])
 
         ### Define paths
-        mergedData_path = join(get_project_path('data'),
-                               'merged_sub_data',
-                                SETTINGS['DATA_VERSION'],
-                                f'sub-{self.sub}')
-        windows_path = join(get_project_path('data'),
-                            'windowed_data_classes_'
-                            f'{SETTINGS["WIN_LEN_sec"]}s_'
-                            f'{SETTINGS["WIN_OVERLAP_part"]}overlap',
-                            SETTINGS['DATA_VERSION'],
-                            f'sub-{self.sub}')
-        # feat_path = join(get_project_path('results'),
-        #                  'features',
-        #                  'SSD_powers_TEST',
-        #                  f'windows_{SETTINGS["WIN_LEN_sec"]}s_'
-        #                  f'{SETTINGS["WIN_OVERLAP_part"]}overlap')
-        if not exists(windows_path): makedirs(windows_path)
-        # if not exists(feat_path): makedirs(feat_path)
+        feat_path = join(get_project_path('results'),
+                         'features',
+                         'SSD_powers_TEST',
+                         f'windows_{SETTINGS["WIN_LEN_sec"]}s_'
+                         f'{SETTINGS["WIN_OVERLAP_part"]}overlap')
+        if not exists(feat_path): makedirs(feat_path)
         
         # loop over possible datatypes
         for dType in self.ephys_sources:
             print(f'\n\tstart {dType}')
-            # print('ft path listdir', listdir(feat_path))
+            data = getattr(self.sub_SSD, dType)  # assign datatype data
             # check if features already exist
-            # feat_filename = f'SSD_spectralFeatures_{self.sub}_{dType}.csv'
-            ssd_windows_name = f'SSD_windowedBands_{self.sub}_{dType}'
+            feat_fname = f'SSD_spectralFeatures_{self.sub}_{dType}.csv'
 
-            if (
-                # if both features and ssd windowed data present
-                SETTINGS['OVERWRITE_FEATURES'] == False and
-                exists(join(windows_path, ssd_windows_name+'.json')) and
-                exists(join(windows_path, ssd_windows_name+'.npy'))
-            ):  
-                # CREATE ATTRIBUTE CONTAINING WINDOWED SSD BANDS
-                setattr(self,
-                        dType,
-                        ssd.SSD_bands_windowed(self.sub, dType, SETTINGS))
-                print(f'\n\texisting windowed ssd-data loaded')
-                continue
-
-            print('create windowed ssd data...')
-
-            # define path for windows of dType
-            dType_fname = (f'sub-{self.sub}_windows_'
-                           f'{SETTINGS["WIN_LEN_sec"]}s_'
-                           f'{SETTINGS["DATA_VERSION"]}_{dType}.P')
-            dType_win_path = join(windows_path, dType_fname)
-            
-            # check if windows are already available
-            if np.logical_and(self.use_stored_windows,
-                              exists(dType_win_path)):
-                print(f'load data from {windows_path}....')
-                windows = load_class_pickle(dType_win_path)
-                print(f'\tWINDOWS LOADED from {dType_fname} in {windows_path}')
-
-
-            else:
-                print('create data ....')
-                dat_fname = (f'{self.sub}_mergedData_{SETTINGS["DATA_VERSION"]}'
-                            f'_{dType}.P')
-
-                # check existence of file in folder
-                if dat_fname not in listdir(mergedData_path):
-                    print(f'{dat_fname} NOT AVAILABLE')
-                    continue
-
-                # load data (as mergedData class)
-                data = load_class_pickle(join(mergedData_path, dat_fname))
-                print(f'{dat_fname} loaded')
-                
-                # divides full dataframe in present windows
-                windows = get_windows(
-                    data=data.data,
-                    fs=int(data.fs),
-                    col_names=data.colnames,
-                    winLen_sec=SETTINGS['WIN_LEN_sec'],
-                    part_winOverlap=SETTINGS['WIN_OVERLAP_part'],
-                    min_winPart_present=.5,
-                    remove_nan_timerows=False,
-                    return_as_class=True,
-                    only_ipsiECoG_STN=False,
-                )
-                save_class_pickle(windows, windows_path, dType_fname)
-                print(f'\tWINDOWS SAVED as {dType_fname} in {windows_path}')
-
-
-            # filter out none-ephys signals
-            sel_chs = [c.startswith('LFP') or c.startswith('ECOG')
-                       for c in windows.keys]
-            setattr(windows, 'data', windows.data[:, :, sel_chs])
-            setattr(windows, 'keys', list(compress(windows.keys, sel_chs)))
-            
-            ### empty list to store all SSD-bands per window
-            if self.save_ssd_windows: ssd_arr_3d = []
+            print(f'Features ({feat_fname}) exist in '
+                  f'{feat_path}?', exists(join(feat_path, feat_fname)))
 
             ### Create storing of features
             fts_incl = SETTINGS['FEATS_INCL']  # get features to include
@@ -170,52 +85,23 @@ class create_SSDs():
                         n_spec_feats += 1
             
             # loop over windows
-            for i_w, win_dat in enumerate(windows.data):
-
-                feats_win = []  # temporary list to store features of current window
-                win_dat = win_dat.astype(np.float64)
-                # select only rows without missings in current window
-                nan_rows = np.array([isna(win_dat[:, i]).any()
-                            for i in range(win_dat.shape[-1])])
-                win_dat = win_dat[:, ~nan_rows]
-
-                # empty list to store ssd-signals for this window
-                if self.save_ssd_windows: ssd_arr_2d = []
+            for i_w, t in enumerate(data.times):
+                # temporary list to store features of current window
+                feats_win = []
                 
-                ### CALCULATE UNI-SOURCE FEATURES ###
-
                 # loop over defined frequency bands
                 for bw in SETTINGS['SPECTRAL_BANDS']:
                     f_range = SETTINGS['SPECTRAL_BANDS'][bw]
-                    # check whether to perform SSD
-                    if not (fts_incl['SSD_max_psd'] or fts_incl['SSD_mean_psd']
-                        or fts_incl['SSD_variation']): continue
-
-                    # Perform SSD
-                    try:
-                        (ssd_filt_data,
-                            ssd_pattern,
-                            ssd_eigvals
-                        ) = ssd.get_SSD_component(
-                            data_2d=win_dat.T,
-                            fband_interest=f_range,
-                            s_rate=windows.fs,
-                            use_freqBand_filtered=True,
-                            return_comp_n=0,
-                        )
-                    except ValueError:
-                        print(f'{dType}: window # {i_w} failed on {bw}')
+                    
+                    # check for unconverted nan array
+                    if np.isnan(getattr(data, bw)[i_w]).all():
+                        # fill with nan values for feature and go to next band
                         feats_win.extend([np.nan] * n_spec_feats)
-                        if self.save_ssd_windows:
-                            ssd_arr_2d.append([np.nan] * win_dat.shape[0])
                         continue
 
-                    if self.save_ssd_windows:
-                        ssd_arr_2d.append(ssd_filt_data)
-
                     # Convert SSD'd signal into Power Spectrum
-                    f, psd = welch(ssd_filt_data, axis=-1,
-                                    nperseg=windows.fs, fs=windows.fs)
+                    f, psd = welch(getattr(data, bw)[i_w], axis=-1,
+                                    nperseg=data.fs, fs=data.fs)
                     f_sel = [f_range[0] < freq < f_range[1] for freq in f]  # select psd in freq of interest
 
                     # CALCULATE SPECTRAL PEAK FEATURES
@@ -224,7 +110,7 @@ class create_SSDs():
                         if fts_incl[ft_name] and ft_name.startswith('SSD_'):
                             # get value from function corresponding to ft-name
                             func = getattr(specFeats.Spectralfunctions(
-                                psd=psd, ssd_sig=ssd_filt_data,
+                                psd=psd, ssd_sig=getattr(data, bw)[i_w],
                                 f=f, f_sel=f_sel
                             ), f'get_{ft_name}')
                             feats_win.append(func())
@@ -232,48 +118,13 @@ class create_SSDs():
                 # END OF WINDOW -> STORE list with window features to total list
                 feats_out.append(feats_win)
 
-                # add 2d of window to overall list
-                if self.save_ssd_windows:
-                    ssd_arr_2d = np.array(ssd_arr_2d, dtype='object')  # convert list to 2d array
-                    ssd_arr_3d.append(ssd_arr_2d)
-            
             # AFTER ALL WINDOWS OF DATA TYPE ARE DONE -> STORE FEATURE DATAFRAME
             feats_out = np.array(feats_out, dytpe='object')
-            feats_out = DataFrame(data=feats_out, columns=feat_names, index=windows.win_starttimes,)
-            feats_out.to_csv(join(feat_path, feat_filename),
+            feats_out = DataFrame(data=feats_out, columns=feat_names, index=data.times,)
+            feats_out.to_csv(join(feat_path, feat_fname),
                              index=True, header=True,)
             print(f'Saved FEATURES for sub-{self.sub} {dType} as '
-                  f'{feat_filename} in {feat_path}')
-
-            if self.save_ssd_windows:
-                # save SSD-bands per window as .npy and meta-data as .json
-                ssd_arr_3d = np.array(ssd_arr_3d, dtype='object')  # convert array-list to 3d array
-                
-                with open(join(windows_path, ssd_windows_name+'.npy'), mode='wb') as f:
-                    np.save(f, ssd_arr_3d)
-                
-                # store meta info
-                assert np.logical_and(
-                    ssd_arr_3d.shape[0] == len(windows.win_starttimes),
-                    ssd_arr_3d.shape[1] == len(SETTINGS['SPECTRAL_BANDS'])
-                ), (f'ssd_arr_3d shape ({ssd_arr_3d.shape}) does not match '
-                    f'n-window-times ({len(windows.win_starttimes)}) or '
-                    f"n-freqbands ({len(SETTINGS['SPECTRAL_BANDS'])})")
-                
-                meta = {'npy_filename': ssd_windows_name,
-                        'bandwidths': SETTINGS['SPECTRAL_BANDS'],
-                        'timestamps': windows.win_starttimes}
-                
-                with open(join(windows_path, ssd_windows_name+'.json'), 'w') as f:
-                    json.dump(meta, f)
-                
-                print(f'Saved SSD windowed data and meta for sub-{self.sub}'
-                  f' {dType} as {ssd_windows_name} in {windows_path}')
-            
-            # store created windowed ssd-timeseries as attr
-            setattr(self, dType, )
-
-
+                  f'{feat_fname} in {feat_path}')
 
 
 
