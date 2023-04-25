@@ -35,9 +35,8 @@ from lfpecog_features import feats_ssd as ssd
 @dataclass(init=True, repr=True, )
 class create_SSDs():
     """
-    MAIN FEATURE EXTRACTION FUNCTION
-
-    is ran from run_ftExtr_multivar:
+    Create windowed SSD timeseries per defined freq-
+    bandwidths
     """
     sub: str
     settings: dict = field(default_factory=lambda:{})
@@ -48,12 +47,6 @@ class create_SSDs():
     save_ssd_windows: bool = True
     
     def __post_init__(self,):
-
-        assert np.logical_or(
-            isinstance(self.settings, dict),
-            isinstance(self.ft_setting_fname, str)
-        ), 'define settings-dict or setting-json-filename'
-
         ### load settings from json
         if self.settings == {}:
             SETTINGS = load_ft_ext_cfg(self.ft_setting_fname)
@@ -255,8 +248,10 @@ class create_SSDs():
             if self.save_ssd_windows:
                 # save SSD-bands per window as .npy and meta-data as .json
                 ssd_arr_3d = np.array(ssd_arr_3d, dtype='object')  # convert array-list to 3d array
+                
                 with open(join(windows_path, ssd_windows_name+'.npy'), mode='wb') as f:
                     np.save(f, ssd_arr_3d)
+                
                 # store meta info
                 assert np.logical_and(
                     ssd_arr_3d.shape[0] == len(windows.win_starttimes),
@@ -268,13 +263,19 @@ class create_SSDs():
                 meta = {'npy_filename': ssd_windows_name,
                         'bandwidths': SETTINGS['SPECTRAL_BANDS'],
                         'timestamps': windows.win_starttimes}
+                
                 with open(join(windows_path, ssd_windows_name+'.json'), 'w') as f:
                     json.dump(meta, f)
-                print(f'Saved SSD windows for sub-{self.sub} {dType} as '
-                  f'{feat_filename} in {feat_path}')
+                
+                print(f'Saved SSD windowed data and meta for sub-{self.sub}'
+                  f' {dType} as {ssd_windows_name} in {windows_path}')
             
             # store created windowed ssd-timeseries as attr
             setattr(self, dType, )
+
+
+
+
 
 @dataclass(init=True, repr=True,)
 class extract_local_connectivitiy_fts:
@@ -282,7 +283,7 @@ class extract_local_connectivitiy_fts:
     Extracting local PAC based on SSD'd freq-bands
     stored per window
 
-    Run from run_ftExtr_multivar
+    Called from run_ftExtr_multivar
     """
     sub: str
     settings: dict = field(default_factory=lambda:{})
