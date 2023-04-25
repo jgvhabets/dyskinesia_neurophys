@@ -14,7 +14,7 @@ from utils.utils_fileManagement import (
     get_onedrive_path,
     load_ft_ext_cfg
 )
-from lfpecog_features.feats_ssd import get_subject_SSDs
+from lfpecog_features.get_ssd_data import get_subject_SSDs
 import lfpecog_features.extract_ssd_features as ssd_feats
 
 
