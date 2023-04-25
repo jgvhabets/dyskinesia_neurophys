@@ -2,7 +2,7 @@
 Main Script to Run multivariate feature Extract (not MIC)
 
 Run on WIN from repo/code:
-    python -m lfpecog_features.run_multivar_ftExtr 'ftExtr_spectral_v1.json'
+    python -m lfpecog_features.run_ssd_ftExtr 'ftExtr_spectral_v1.json'
 """
 # import functions
 import sys
@@ -26,19 +26,26 @@ if __name__ == '__main__':
     
     # create SSD'd signals per freq-band, per window
     for sub in settings['SUBS_INCL']:
-        print(f'\tstart SSD + spectral creation, sub-{sub}...')
+        print(f'start SSD feature extraction: sub-{sub}...')
         # load or create SSD windows for subject
         sub_SSD = get_subject_SSDs(sub=sub, settings=settings,
                                    incl_ecog=True, incl_stn=True)
 
         # Extract local spectral power features
-
+        if settings['FEATS_INCL']['to_extract_powers']:
+            ssd_feats.extract_local_SSD_powers(
+                sub=sub, sub_SSD=sub_SSD, settings_dict=settings
+            )
+        
         # create local PAC features
-         
+        if settings['FEATS_INCL']['to_extract_local_PACs']:
+            ssd_feats.extract_local_PACs(
+                sub=sub, sub_SSD=sub_SSD, settings_dict=settings
+            )
+
         print(f'\tstart local-PAC sub-{sub}...')
 
         # extract multi-location connectivity features
-        ssd_feats.extract_local_connectivitiy_fts(TODO)
 
         
     
