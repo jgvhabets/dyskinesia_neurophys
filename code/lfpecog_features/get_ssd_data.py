@@ -191,7 +191,7 @@ class SSD_bands_windowed:
             create_SSDs(sub=self.sub, settings=self.settings,
                         incl_ecog=self.incl_ecog,
                         incl_stn=self.incl_stn)
-            print('\t...loaded SSD windowed-data and meta-info'
+            print('\t...created SSD windowed-data and meta-info'
                   f' for {self.datasource} of sub-{self.sub}')
             # use newly created data
             data, meta = load_windowed_ssds(sub=self.sub,
@@ -229,16 +229,18 @@ def load_windowed_ssds(sub, dType, settings: dict):
     ssd_win_fname = f'SSD_windowedBands_{sub}_{dType}'
     meta_f = join(win_path, ssd_win_fname + '.json')
     data_f = join(win_path, ssd_win_fname + '.npy')
-    # assure existence of files
-    assert np.logical_and(exists(meta_f), exists(data_f)), (
-        f'inserted SSD data files {ssd_win_fname} (.npy, .json)'
-        f'do not exist in {win_path}'
-    )
+    
+    # # assure existence of files
+    # assert np.logical_and(exists(meta_f), exists(data_f)), (
+    #     f'inserted SSD data files {ssd_win_fname} (.npy, .json)'
+    #     f'do not exist in {win_path}'
+    # )
 
     # load files
     with open(meta_f, 'r') as meta_f:
         meta_ssd = json.load(meta_f)
-    data_ssd = np.load(data_f, allow_pickle=True,)
+    data_ssd = np.load(data_f, allow_pickle=True,).astype(np.float64)
+
     
     return data_ssd, meta_ssd
 
@@ -304,7 +306,7 @@ class create_SSDs():
             ecog_side = get_ecog_side(self.sub)
             self.ephys_sources.append(f'ecog_{ecog_side}')
         if self.incl_stn:
-            self.ephys_sources.append(['lfp_left', 'lfp_right'])
+            self.ephys_sources.extend(['lfp_left', 'lfp_right'])
 
         ### Define paths
         mergedData_path = join(get_project_path('data'),
@@ -321,7 +323,7 @@ class create_SSDs():
         
         # loop over possible datatypes
         for dType in self.ephys_sources:
-            print(f'\n\tstart {dType}')
+            print(f'\n\tstart create SSDs: {dType}')
             ssd_windows_name = f'SSD_windowedBands_{self.sub}_{dType}'
             # check existence of ssd windowed data
             if (SETTINGS['OVERWRITE_DATA'] == False and
@@ -332,7 +334,7 @@ class create_SSDs():
                 setattr(self,
                         dType,
                         SSD_bands_windowed(self.sub, dType, SETTINGS))
-                print(f'\n\texisting windowed ssd-data loaded')
+                print(f'\n\texisting windowed ssd-data loaded {ssd_windows_name}')
                 continue
             
             # Create windowed SSDd data 

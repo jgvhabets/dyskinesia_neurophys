@@ -9,105 +9,150 @@ Based on results by:
     - Combrisson 2020 (tensorpac: open-source PAC py-methods)
 '''
 # Import general packages and functions
-import os
 import numpy as np
-from scipy import signal
-import tensorpac
-
-import lfpecog_features.feats_spectral_helpers as specHelpers
+from pandas import isna
+from tensorpac import Pac
 
 
 
-def PAC_matrix(
-    sig,
-    Fs,
-    signame,
-    freqs_pha=np.arange(12, 30.5, 2),  # default full beta
-    freqs_amp=np.arange(50, 200.5, 2),
-    nperm=1000,
-    zscore=False,
+def calculate_PAC_matrix(
+    sig_pha: np.ndarray,
+    sig_amp: np.ndarray,
+    fs: int,
+    freq_range_pha,
+    freq_range_amp,
+    window_times=None,
+    pac_binwidths: dict = {"phase": 2, "ampl": 4},
+    pac_method='MI',
+    surrogate_method=None,
+    norm_method=None,
 ):
     """
-    TODO: REVISE
-
     Calculating Phase Amplitude Coupling following the tensorpac package,
     based on methodology from De Hemptinne et al Nature Neuroscience 2015,
     and Qasim et al Neurobiol of Disease 2018.
 
     Input:
-        - sig (arr): 1d-array with timedomain signal to extract PAC from
-        - Fs (int): corresponding sampling freq
-        - signame (str): name of channel used for sig
-        - freqs_pha (arr): freq-borders used for phase-component. Between
-            all consecutive freq's, one bin is calculated. Number of
-            freq-bins is len(freqs_pha) - 1
-        - freqs_amp (arr): freq-borders used for amplitude-component,
-            similar to freqs_pha
-        - nperm (int): number of permuted surrogates (if z-score is True)
-        - zscore (Bool): express PAC in zscore, if True -> surrogate
-            permutations are calculated for zscore calculation
-    
+        - sig_pha (arr): 1d or 2d--array with timedomain signal(s) to
+            extract phase of PAC from
+        - sig_amp (arr): 1d or 2d--array with timedomain signal(s) to
+            extract amplitude of PAC from
+        NOTE: for local PAC: sig_pha and sig_amp should be the same,
+            otherwise, they can be from different location but should
+            be of the same size
+        - fs (int): corresponding sampling freq
+        - freq_range_pha/amp: lower and upper border of frequency range
+            for phase and amplitudes to use
+        - window_times (array): optionally, timestamps of windows inserted
+        - pac_bindwidths: dict containing phase and ampl: integers for
+            bin width in Hz
+        - pac_method/ surrogate_method/ norm_method: defaults to MI
+            (Modulation Index, Tort/Hemptinne), no surrogates,
+            no normalisation (see documentation).
+        
     Returns:
-        - pacmatrix (nd-arr): matrix containing n rows for amplitudes, and
-            m columns for phases
-        - pacname (str): label for PAC matrix and source-signal
-        - freqs_pha, freqs_amp (arr): freq-borders used for resp. phase- and
-            amplitude-component. Number of freq-bins is len(freqs_pha) - 1.
-            Can be used for selecting specific freq-widths of PAC-values.
-
-    Tensorpac article (Combrisson 2020): https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1008302
+        - pac_matrix (nd-arr): 2d or 3d matrix containing n rows for number
+            of amplitude binss, and m columns for n of phase-bins
+        - pac_borders: dict wiht phase and ampl: borders of bins, length
+            is 1 more than number of bins
+        optionally: - times (array): if times is inserted, this returns 
+            the cleaned time array corresponding with n-matrices 
+        
+            
     Doc: https://etiennecmb.github.io/tensorpac/generated/tensorpac.Pac.html#tensorpac.Pac
         first idpac integer is PAC-method: 2 codes for MI;
-        second idpac integer is surrogate-method: 3 codes for time lag
+        second idpac integer is surrogate-method: 0=None, 3 codes for time lag
         (surrogate method (1): swap-phase surrogates are equal to real-values
+        third digit is normalisation: 0=None, 4=z-score
+
+        Tensorpac article (Combrisson 2020): https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1008302
     """
-    if zscore:
-        idpac = (2, 3, 0)
-        pacname = f'zPAC_{signame}'
-    else:
-        idpac = (2, 0, 0)
-        pacname = f'PAC_{signame}'
+    # data checks
+    assert sig_amp.shape == sig_pha.shape, "PAC Phase- and Amp-array need same shape"
+    if window_times: assert len(window_times) == len(sig_amp), (
+        'if PAC window times are given, length should equal data length'
+    )  # length times equals n-rows sigs
     
-    tp = Pac(
-        idpac=idpac,  # PAC-settings
-        f_pha=freqs_pha,
-        f_amp=freqs_amp,
-        dcomplex='hilbert',
-        verbose=False
+    # clean nan rows (parallel for data and times if given)
+    if isna(sig_pha).any():
+        nan_rows = isna(sig_pha).any(axis=1)
+        sig_pha = sig_pha[~nan_rows]
+        sig_amp = sig_amp[~nan_rows]
+        if window_times: window_times = window_times[~nan_rows]
+    if isna(sig_amp).any():
+        nan_rows = isna(sig_amp).any(axis=1)
+        sig_pha = sig_pha[~nan_rows]
+        sig_amp = sig_amp[~nan_rows]
+        if window_times: window_times = window_times[~nan_rows]
+
+    assert len(freq_range_pha) == 2 and len(freq_range_amp) == 2, (
+        'lengths of PAC amp/phase freq ranges have to be 2'
     )
-    pacmatrix = tp.filterfit(
-        Fs, sig, mcp='bonferroni',
-        n_perm=nperm, n_jobs=1, random_state=2711, 
-        edges=80,  # confirm correctness of 80
-    ).squeeze()  # squeeze makes 3d -> 2d
 
-    if zscore:
-        # Z-score PAC values based on surrogate-mean and -sd
-        # every matrix-pac (e.g. xy) is z-scored individually
-        # against all permuted xy-pac-values
-        perm_sd = np.nanstd(tp.surrogates.squeeze(), axis=0)
-        perm_m = np.nanmean(tp.surrogates.squeeze(), axis=0)
-        pacmatrix = ((pacmatrix - perm_m) / perm_sd)
+    # define pac_id
+    if pac_method == 'MI': method_i = 2
+    if surrogate_method == None: surr_i = 0
+    if norm_method == None: norm_i = 0
+    elif norm_method == 'z-score': norm_i = 4
+
+    PAC_id = (method_i, surr_i, norm_i)
+
+    # define PAC-freq-bins: 2 lists of lists with lower and upper border
+    pac_bins = {}
+    pac_bins['phase'] = [
+        [start, start + pac_binwidths['phase']]
+         for start in np.arange(freq_range_pha[0],
+                                freq_range_pha[1],
+                                pac_binwidths['phase'])
+    ]
+    pac_bins['ampl'] = [
+        [start, start + pac_binwidths['ampl']]
+         for start in np.arange(freq_range_amp[0],
+                                freq_range_amp[1],
+                                pac_binwidths['ampl'])
+    ]
+    # calculate pac borders (len is 1 more than length of bins)
+    pac_borders = {}
+    for var in pac_bins.keys():
+        bins = pac_bins[var]
+        pac_borders[var] = [bins[0][0]] + [b[1] for b in bins]
+
+    # run PAC calculation
+    pac_model = Pac(idpac=PAC_id, dcomplex='hilbert',
+                    f_pha=pac_bins['phase'], f_amp=pac_bins['ampl'],)
     
-    # # calc significancies compared to surrogates (if zscore)
-    # p95 = np.percentile(tp.surrogates.squeeze(), 95, axis=0)
-    # sign95 = epochpac > p95
-    # # to visualise surrogate means
-    # tp.comodulogram(
-    #     tp.surrogates.squeeze().mean(0),
-    #     # colorbar=False,
-    #     ylabel='Amplitude Freq (Hz)',
-    #     xlabel='Phase Freq (Hz)',
-    #     # title='Mean surrogates,
-    # )
+    # calculate PAC matrix/matrices)
+    pac_matrix = pac_model.filterfit(sf=fs, x_pha=sig_pha,
+                                     x_amp=sig_amp,)
+    # if n-window == 1: reduce 3d to 2d
+    if pac_matrix.shape[2] == 1: pac_matrix = pac_matrix[:, :, 0]
+    
+    # import matplotlib.pyplot as plt
+    # plt.subplot(1, 1, 1)
+    # pac_model.comodulogram(pac_matrix[:, :, :50].mean(-1),
+    #                     title="Local ECoG beta-gamma PAC "
+    #                     "(first 50 windows)",
+    #             cmap='Reds')
+    # plt.show()
 
-    return pacmatrix, pacname, freqs_pha, freqs_amp
+    # plt.subplot(1, 1, 1)
+    # pac_model.comodulogram(pac_matrix[:, :, -50:].mean(-1),
+    #                     title="Local ECoG beta-gamma PAC "
+    #                     "(last 50 windows)",
+    #                         cmap='Reds')
+    # plt.show()
+    
+    if window_times: return pac_matrix, window_times
+    else: return pac_matrix
 
 
 def PAC_select(
     pacmatrix, freqs_pha, freqs_amp,
     pha_bw=(13, 30), amp_bw=(60, 90)):
-    """Function to select specific bandwidths to include in
+    """
+    TODO: REVISE
+
+    Function to select specific bandwidths to include in
     summarising mean-score of total caluclated PAC matrix
     Input:
         - pacmatrix (arr): resulting PAC-values of PAC_comod...

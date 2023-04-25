@@ -38,10 +38,12 @@ class extract_local_SSD_powers():
     Extract local power spectral features from
     SSD-d data
     """
+    sub: str
     sub_SSD: str
     settings_dict: dict
     incl_ecog: bool = True
     incl_stn: bool = True
+    overwrite_features: bool = False
     
     def __post_init__(self,):
         SETTINGS = self.settings_dict    
@@ -51,7 +53,7 @@ class extract_local_SSD_powers():
             ecog_side = get_ecog_side(self.sub)
             self.ephys_sources.append(f'ecog_{ecog_side}')
         if self.incl_stn:
-            self.ephys_sources.append(['lfp_left', 'lfp_right'])
+            self.ephys_sources.extend(['lfp_left', 'lfp_right'])
 
         ### Define paths
         feat_path = join(get_project_path('results'),
@@ -63,13 +65,14 @@ class extract_local_SSD_powers():
         
         # loop over possible datatypes
         for dType in self.ephys_sources:
-            print(f'\n\tstart {dType}')
+            print(f'\n\tstart ({dType}) extracting local SSD powers')
             data = getattr(self.sub_SSD, dType)  # assign datatype data
             # check if features already exist
             feat_fname = f'SSD_spectralFeatures_{self.sub}_{dType}.csv'
 
-            print(f'Features ({feat_fname}) exist in '
-                  f'{feat_path}?', exists(join(feat_path, feat_fname)))
+            if exists(join(feat_path, feat_fname)) and not self.overwrite_features:
+                print(f'...\tfeatures already exist for {dType}'
+                      ' and are NOT overwritten, skip!')
 
             ### Create storing of features
             fts_incl = SETTINGS['FEATS_INCL']  # get features to include
@@ -94,7 +97,7 @@ class extract_local_SSD_powers():
                     f_range = SETTINGS['SPECTRAL_BANDS'][bw]
                     
                     # check for unconverted nan array
-                    if np.isnan(getattr(data, bw)[i_w]).all():
+                    if np.isnan(list(getattr(data, bw)[i_w])).all():
                         # fill with nan values for feature and go to next band
                         feats_win.extend([np.nan] * n_spec_feats)
                         continue
@@ -109,17 +112,17 @@ class extract_local_SSD_powers():
                     for ft_name in fts_incl:
                         if fts_incl[ft_name] and ft_name.startswith('SSD_'):
                             # get value from function corresponding to ft-name
-                            func = getattr(specFeats.Spectralfunctions(
+                            ft_func = getattr(specFeats.Spectralfunctions(
                                 psd=psd, ssd_sig=getattr(data, bw)[i_w],
                                 f=f, f_sel=f_sel
                             ), f'get_{ft_name}')
-                            feats_win.append(func())
+                            feats_win.append(ft_func())
                        
                 # END OF WINDOW -> STORE list with window features to total list
                 feats_out.append(feats_win)
 
             # AFTER ALL WINDOWS OF DATA TYPE ARE DONE -> STORE FEATURE DATAFRAME
-            feats_out = np.array(feats_out, dytpe='object')
+            feats_out = np.array(feats_out, dtype='object')
             feats_out = DataFrame(data=feats_out, columns=feat_names, index=data.times,)
             feats_out.to_csv(join(feat_path, feat_fname),
                              index=True, header=True,)
@@ -127,48 +130,34 @@ class extract_local_SSD_powers():
                   f'{feat_fname} in {feat_path}')
 
 
+from lfpecog_features.feats_phases import calculate_PAC_matrix
 
 @dataclass(init=True, repr=True,)
-class extract_local_connectivitiy_fts:
+class extract_local_PACs:
     """
     Extracting local PAC based on SSD'd freq-bands
     stored per window
 
-    Called from run_ftExtr_multivar
+    Called from run_ssd_ftExtr
     """
     sub: str
-    settings: dict = field(default_factory=lambda:{})
-    feat_setting_filename: str = None
-    
+    sub_SSD: str
+    settings_dict: dict
+    incl_ecog: bool = True
+    incl_stn: bool = True
+    overwrite_features: bool = False
     
     def __post_init__(self,):
-
-        assert np.logical_or(
-            isinstance(self.settings, dict),
-            isinstance(self.feat_setting_filename, str)
-        ), 'define settings-dict or setting-json-filename'
-
-        ### load settings from json
-        if not isinstance(self.settings, dict):
-            json_path = join(get_onedrive_path('data'),
-                            'featureExtraction_jsons',
-                            self.feat_setting_filename)
-            with open(json_path, 'r') as json_data:
-                SETTINGS =  json.load(json_data)
-        else:
-            SETTINGS = self.settings
-        
+        SETTINGS = self.settings_dict    
         # define ephys_sources
-        ecog_side = get_ecog_side(self.sub)
-        self.ephys_sources = [f'ecog_{ecog_side}', 'lfp_left', 'lfp_right']
+        self.ephys_sources = []
+        if self.incl_ecog:
+            ecog_side = get_ecog_side(self.sub)
+            self.ephys_sources.append(f'ecog_{ecog_side}')
+        if self.incl_stn:
+            self.ephys_sources.extend(['lfp_left', 'lfp_right'])
 
         ### Define paths
-        data_path = join(get_project_path('data'),
-                            'windowed_data_classes_'
-                            f'{SETTINGS["WIN_LEN_sec"]}s_'
-                            f'{SETTINGS["WIN_OVERLAP_part"]}overlap',
-                            SETTINGS['DATA_VERSION'],
-                            f'sub-{self.sub}')
         feat_path = join(get_project_path('results'),
                          'features',
                          'SSD_powers_TEST',
@@ -178,28 +167,26 @@ class extract_local_connectivitiy_fts:
         
         # loop over possible datatypes
         for dType in self.ephys_sources:
-            print(f'\n\tstart {dType}')
-            # check is windowed SSDs bands exist
-            ssd_data_fname = f'SSD_windowedBands_{self.sub}_{dType}.npy'
-            assert exists(join(data_path, ssd_data_fname)), (
-                f"SSD'd bands missing for {ssd_data_fname} in {data_path}"
-            )
+            print(f'\n\tstart ({dType}) extracting local SSD PACs')
+            data = getattr(self.sub_SSD, dType)  # assign datatype data
             # check if features already exist
-            feat_fname = f'SSD_localPAC_{self.sub}_{dType}.npy'
-            if np.logical_and(feat_fname in listdir(feat_path),
-                              SETTINGS['OVERWRITE_FEATURES'] == False):
-                print(f'\n\tFEATURES ALREADY EXIST and are not overwritten'
-                      f' ({feat_fname} in {feat_path})')
+            feat_fname = f'SSD_localPAC_{self.sub}_{dType}.csv'
+
+            if exists(join(feat_path, feat_fname)) and not self.overwrite_features:
+                print(f'...\tfeatures already exist for {dType}'
+                      ' and are NOT overwritten, skip!')
                 continue
-            # get defined local PAC combinations (1st is phase, 2nd is amplitude)
-            local_pacs = SETTINGS['local_PAC']
+
+            ### Create storing of features
+            pac_bands = SETTINGS['FEATS_INCL']['local_PAC']  # get features to include
+            feats_out = []  # list to store lists per window
+            feat_names = []  # feature names
+
             # load SSD'd data
-            for [pha, ampl] in local_pacs:
+            for [pha, ampl] in pac_bands:
                 print(pha, ampl)
-                #### TODO. CONTINUE
-                # load
-                # use tensorpac functions in notebook -> py script
-            
+                # use tensorpac functions in notebook phase_feats py
+                # calculate_PAC_matrix()
 
 
 
