@@ -7,13 +7,16 @@ Run on WIN from repo/code:
 # import functions
 import sys
 import json
-from os.path import join
+from os.path import join, exists
+from os import makedirs
 
 # import own functions
 from utils.utils_fileManagement import (
-    get_onedrive_path,
+    get_project_path,
     load_ft_ext_cfg
 )
+from lfpecog_preproc.preproc_import_scores_annotations import get_ecog_side
+
 from lfpecog_features.get_ssd_data import get_subject_SSDs
 import lfpecog_features.extract_ssd_features as ssd_feats
 
@@ -22,31 +25,73 @@ if __name__ == '__main__':
 
     json_fname = sys.argv[1]
     ### load settings from given json-file
-    settings = load_ft_ext_cfg(json_fname)
+    INCL_STN = True
+    INCL_ECOG = True
+    SETTINGS = load_ft_ext_cfg(json_fname)
+
+    ### Define paths
+    feat_path = join(get_project_path('results'),
+                    'features',
+                    'SSD_feats',
+                    SETTINGS["DATA_VERSION"],
+                    f'windows_{SETTINGS["WIN_LEN_sec"]}s_'
+                    f'{SETTINGS["WIN_OVERLAP_part"]}overlap')
+    if not exists(feat_path): makedirs(feat_path)
     
     # create SSD'd signals per freq-band, per window
-    for sub in settings['SUBS_INCL']:
-        print(f'start SSD feature extraction: sub-{sub}...')
+    for sub in SETTINGS['SUBS_INCL']:
+        print(f'\n\tSTART SSD feature extraction: sub-{sub}...')
+
+        # define ephys_sources
+        ephys_sources = []
+        if INCL_ECOG:
+            ecog_side = get_ecog_side(sub)
+            ephys_sources.append(f'ecog_{ecog_side}')
+        if INCL_STN:
+            ephys_sources.extend(['lfp_left', 'lfp_right'])
+
         # load or create SSD windows for subject
-        sub_SSD = get_subject_SSDs(sub=sub, settings=settings,
-                                   incl_ecog=True, incl_stn=True)
+        sub_SSD = get_subject_SSDs(sub=sub, settings=SETTINGS,
+                                   incl_ecog=INCL_ECOG, incl_stn=INCL_STN)
 
         # Extract local spectral power features
-        if settings['FEATS_INCL']['to_extract_powers']:
+        if SETTINGS['FEATS_INCL']['TO_EXTRACT_POWERS']:
+
+            print(f'\n\tSTART local powers sub-{sub}...')
             ssd_feats.extract_local_SSD_powers(
-                sub=sub, sub_SSD=sub_SSD, settings_dict=settings
+                sub=sub, sub_SSD=sub_SSD, settings_dict=SETTINGS,
+                feat_path=feat_path, ephys_sources=ephys_sources,
             )
         
         # create local PAC features
-        if settings['FEATS_INCL']['to_extract_local_PACs']:
-            ssd_feats.extract_local_PACs(
-                sub=sub, sub_SSD=sub_SSD, settings_dict=settings
+        if SETTINGS['FEATS_INCL']['TO_EXTRACT_LOCAL_PAC']:
+            print(f'\n\tSTART local-PAC sub-{sub}...')
+
+            ssd_feats.extract_local_SSD_PACs(
+                sub=sub, sub_SSD=sub_SSD, settings_dict=SETTINGS,
+                feat_path=feat_path, ephys_sources=ephys_sources,   
+            )
+        
+        # create Coherence features
+        if SETTINGS['FEATS_INCL']['TO_EXTRACT_COH_STN_STN']:
+
+            print(f'\n\tSTART bi-hemispheric-coherence sub-{sub}...')
+            ssd_feats.extract_SSD_coherences(
+                sub=sub, sub_SSD=sub_SSD, settings_dict=SETTINGS,
+                feat_path=feat_path, ephys_sources=ephys_sources,
+                sources='STN_STN',
             )
 
-        print(f'\tstart local-PAC sub-{sub}...')
 
-        # extract multi-location connectivity features
-
+        if SETTINGS['FEATS_INCL']['TO_EXTRACT_COH_STN_ECOG']:
+            
+            print(f'\n\tSTART stn-cortex-coherence sub-{sub}...')
+            ssd_feats.extract_SSD_coherences(
+                sub=sub, sub_SSD=sub_SSD, settings_dict=SETTINGS,
+                feat_path=feat_path, ephys_sources=ephys_sources,
+                sources='STN_ECOG',
+            )
+        
         
     
 

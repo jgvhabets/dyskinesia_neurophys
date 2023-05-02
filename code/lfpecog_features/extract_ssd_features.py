@@ -1,13 +1,16 @@
 '''
-Connectivity-Feature Extraction
-based on two ephys-channels
+Feature Extraction using SSD'd time-series
+
+extraciton of both local features, as well as
+(connetivity) features between two ephys-data sources
+(STN-STN, or STN-ECoG)
 '''
 
 # Import public packages and functions
 import json
 from typing import Any
 import numpy as np
-from os.path import join, exists
+from os.path import join, exists, splitext
 from os import listdir, makedirs
 from pandas import isna, DataFrame
 from scipy.signal import welch
@@ -41,36 +44,23 @@ class extract_local_SSD_powers():
     sub: str
     sub_SSD: str
     settings_dict: dict
+    ephys_sources: list
+    feat_path: str
     incl_ecog: bool = True
     incl_stn: bool = True
     overwrite_features: bool = False
     
     def __post_init__(self,):
         SETTINGS = self.settings_dict    
-        # define ephys_sources
-        self.ephys_sources = []
-        if self.incl_ecog:
-            ecog_side = get_ecog_side(self.sub)
-            self.ephys_sources.append(f'ecog_{ecog_side}')
-        if self.incl_stn:
-            self.ephys_sources.extend(['lfp_left', 'lfp_right'])
-
-        ### Define paths
-        feat_path = join(get_project_path('results'),
-                         'features',
-                         'SSD_powers_TEST',
-                         f'windows_{SETTINGS["WIN_LEN_sec"]}s_'
-                         f'{SETTINGS["WIN_OVERLAP_part"]}overlap')
-        if not exists(feat_path): makedirs(feat_path)
         
         # loop over possible datatypes
         for dType in self.ephys_sources:
             print(f'\n\tstart ({dType}) extracting local SSD powers')
             data = getattr(self.sub_SSD, dType)  # assign datatype data
             # check if features already exist
-            feat_fname = f'SSD_spectralFeatures_{self.sub}_{dType}.csv'
+            feat_fname = f'SSDfeats_{self.sub}_{dType}_local_spectralFeatures.csv'
 
-            if exists(join(feat_path, feat_fname)) and not self.overwrite_features:
+            if exists(join(self.feat_path, feat_fname)) and not self.overwrite_features:
                 print(f'...\tfeatures already exist for {dType}'
                       ' and are NOT overwritten, skip!')
 
@@ -124,16 +114,16 @@ class extract_local_SSD_powers():
             # AFTER ALL WINDOWS OF DATA TYPE ARE DONE -> STORE FEATURE DATAFRAME
             feats_out = np.array(feats_out, dtype='object')
             feats_out = DataFrame(data=feats_out, columns=feat_names, index=data.times,)
-            feats_out.to_csv(join(feat_path, feat_fname),
+            feats_out.to_csv(join(self.feat_path, feat_fname),
                              index=True, header=True,)
             print(f'Saved FEATURES for sub-{self.sub} {dType} as '
-                  f'{feat_fname} in {feat_path}')
+                  f'{feat_fname} in {self.feat_path}')
 
 
 from lfpecog_features.feats_phases import calculate_PAC_matrix
 
 @dataclass(init=True, repr=True,)
-class extract_local_PACs:
+class extract_local_SSD_PACs:
     """
     Extracting local PAC based on SSD'd freq-bands
     stored per window
@@ -143,169 +133,207 @@ class extract_local_PACs:
     sub: str
     sub_SSD: str
     settings_dict: dict
+    ephys_sources: list
+    feat_path: int
     incl_ecog: bool = True
     incl_stn: bool = True
     overwrite_features: bool = False
     
     def __post_init__(self,):
         SETTINGS = self.settings_dict    
-        # define ephys_sources
-        self.ephys_sources = []
-        if self.incl_ecog:
-            ecog_side = get_ecog_side(self.sub)
-            self.ephys_sources.append(f'ecog_{ecog_side}')
-        if self.incl_stn:
-            self.ephys_sources.extend(['lfp_left', 'lfp_right'])
-
-        ### Define paths
-        feat_path = join(get_project_path('results'),
-                         'features',
-                         'SSD_powers_TEST',
-                         f'windows_{SETTINGS["WIN_LEN_sec"]}s_'
-                         f'{SETTINGS["WIN_OVERLAP_part"]}overlap')
-        if not exists(feat_path): makedirs(feat_path)
         
         # loop over possible datatypes
         for dType in self.ephys_sources:
             print(f'\n\tstart ({dType}) extracting local SSD PACs')
             data = getattr(self.sub_SSD, dType)  # assign datatype data
-            # check if features already exist
-            feat_fname = f'SSD_localPAC_{self.sub}_{dType}.csv'
+            # data is here class with per bandwidth a 2d array (n-windows, n-samples)
 
-            if exists(join(feat_path, feat_fname)) and not self.overwrite_features:
-                print(f'...\tfeatures already exist for {dType}'
-                      ' and are NOT overwritten, skip!')
-                continue
-
-            ### Create storing of features
-            pac_bands = SETTINGS['FEATS_INCL']['local_PAC']  # get features to include
-            feats_out = []  # list to store lists per window
-            feat_names = []  # feature names
+            # define PAC-frequencies to extract
+            pac_bands = SETTINGS['FEATS_INCL']['local_PAC_freqs']  # get features to include
 
             # load SSD'd data
             for [pha, ampl] in pac_bands:
-                print(pha, ampl)
-                # use tensorpac functions in notebook phase_feats py
-                # calculate_PAC_matrix()
+                print(f'\n\t...START PAC {pha} {ampl}')
+                # check if features already exist
+                feat_fname = (f'SSDfeats_{self.sub}_{dType}_localPAC'
+                              f'_{pha}_{ampl}.npy')
 
+                if exists(join(self.feat_path, feat_fname)) and not self.overwrite_features:
+                    print(f'...\tlocal PAC already exist for {dType} '
+                          f'{pha}_{ampl} and are NOT overwritten, skip!')
+                    continue
+
+                # calculate 3d array with pac values (n-windows, n-ampl, n-phase bins)
+                pac_values, pac_times = calculate_PAC_matrix(
+                    sig_pha=getattr(data, pha),
+                    sig_amp=getattr(data, ampl),
+                    fs=data.fs,
+                    freq_range_pha=SETTINGS['SPECTRAL_BANDS'][pha],
+                    freq_range_amp=SETTINGS['SPECTRAL_BANDS'][ampl],
+                    window_times=data.times
+                )
+
+                # store feature values and window times
+                np.save(file=join(self.feat_path, feat_fname),
+                        arr=pac_values,
+                        allow_pickle=True)
+                ft_time_fname = splitext(feat_fname)[0] + '_times.csv'
+                np.savetxt(fname=join(self.feat_path, ft_time_fname),
+                           X=pac_times, delimiter=',',)
 
 
 
 
 @dataclass(init=True, repr=True, )
-class calculate_segmConnectFts:
+class extract_SSD_coherences:
     """
-    Extract of Connectivity
-    features per segments
+    Extract of Connectivity features per segments
 
+    Called from run_ssd_ftExtr
     """
-    epochChannels: Any  # attr of prepare_segmConnectFts()
-    fs: int
-    allCombis: Any   # attr of prepare_segmConnectFts()
-    fts_to_extract: list
-
+    sub: str
+    sub_SSD: str
+    sources: str
+    settings_dict: dict
+    ephys_sources: list
+    feat_path: int
+    incl_stn_ecog: bool = True
+    incl_stn_stn: bool = True
+    overwrite_features: bool = False
+    
     def __post_init__(self,):
+        assert self.sources.upper() in ['STN_ECOG', 'STN_STN']
 
-        coh_fts_incl = [
-            ft for ft in self.fts_to_extract
-            if 'coh' in ft.lower()
-        ]
-        if len(coh_fts_incl) > 1:
-            extract_COH = True  # create boolean indicator for coherences     
-            coh_lists = {}  # create empty lists to store COH's while calculating
-            for ft in coh_fts_incl: coh_lists[f'{ft}_list'] = []
+        SETTINGS = self.settings_dict    
 
-        print(f'Coherence fts to include: {coh_fts_incl}')
+        bands_to_extract = SETTINGS['SPECTRAL_BANDS']
 
-        for seedTarget in self.allCombis:
+        if self.sources == 'STN_STN':
+            seed_data = self.sub_SSD.lfp_left
+            target_data = self.sub_SSD.lfp_right
+        
+        elif self.sources == 'STN_ECOG':
+            ecog_source = [s for s in self.ephys_sources if 'ecog' in s][0]
+            stn_ecog_side = f"lfp_{ecog_source.split('_')[1]}"
+            seed_data = getattr(self.sub_SSD, stn_ecog_side)
+            target_data = getattr(self.sub_SSD, ecog_source)
 
-            print(
-                '\tstarting feature extraction: '
-                f'SEED: {seedTarget[0]} x '
-                f'TARGET: {seedTarget[1]}'
+        for bw in bands_to_extract:
+                
+            coh_values = calculate_coherence_per_band(
+                seed_data=seed_data, target_data=target_data,
+                band_name=bw, band_range=bands_to_extract[bw],
+                incl_sq_coh=SETTINGS['FEATS_INCL']['sq_coh'],
+                incl_imag_coh=SETTINGS['FEATS_INCL']['imag_coh'],
+                coh_segment_sec=SETTINGS['FEATS_INCL']['coherence_segment_sec'],
             )
-            # get epoched 2d/3d-data and times for channels of interest
-            seed = getattr(self.epochChannels, seedTarget[0])
-            target = getattr(self.epochChannels, seedTarget[1])
-            # reshape 3d segments to 2d, and internally check whether
-            # number of segments and timestamps are equal
-            if len(seed.data.shape) == 3:
-                setattr(
-                    seed,
-                    'data',
-                    get_clean2d(seed.data, seed.segmTimes)
-                )
-            if len(target.data.shape) == 3:
-                setattr(
-                    target,
-                    'data',
-                    get_clean2d(target.data, target.segmTimes)
-                )
+            
+            for COH in ['sq_coh', 'imag_coh']:
 
-            # reset storing lists
-            time_list = []
-            if extract_COH:
-                for l in coh_lists: coh_lists[l] = []
+                if SETTINGS['FEATS_INCL'][COH]:
+                    fname = f'SSDfeats_{self.sub}_{self.sources}_{bw}_{COH}.csv'
+                    coh_df = DataFrame(index=coh_values['times'],
+                                       columns=coh_values['freqs'],
+                                       data=coh_values[COH])
+                    coh_df.to_csv(join(self.feat_path, fname))
+                    print(f'\tCOH saved: {fname} (n-windows, n-freq-bins: {coh_df.shape})')
 
-            # find time-matching target-indices for seed-indices
-            for i_seed, t in enumerate(seed.winTimes):
+            
+from mne.filter import resample            
+        
 
-                if t in target.winTimes:
+def calculate_coherence_per_band(
+    seed_data, target_data,
+    band_name: str, band_range: list,
+    incl_sq_coh: bool = True,
+    incl_imag_coh: bool = True,
+    coh_segment_sec: float = 0.250,
+    DOWN_SAMPLE: bool = False
+):
+    """
+    calculate coherence features between two SSD'd
+    timeseries of different locations.
 
-                    i_target = np.where(target.winTimes == t)[0][0]
+    Results in 2d array per freq-band, per coherence-
+    metric with n-windows, n-freq-bins within the defined
+    bandwidth, and one array
+    with corresponding window timestamps
 
-                    time_list.append(t)
+    Inputs:
+        - seed_data, taget_data: SSDs data per source
+        - band_name: str with name of freq band
+        - band_range: list (or tuple) with lower and 
+            upper border of freq band
+    
+    Returns:
+        - coh_values (dict): containing 'times' (list),
+            'freqs' (list), 
+            'sq_coh' and 'imag_coh' if defined (both 2d array)
+    """
+    assert seed_data.fs == target_data.fs, (
+        'sampling rates should be equal between seed and target'
+    )
+    fs = seed_data.fs
 
-                    # COHERENCE EXTRACTION
-                    if len(coh_fts_incl) > 0:
+    seed_windows = getattr(seed_data, band_name).astype(np.float64)
+    seed_times = seed_data.times
+    target_windows = getattr(target_data, band_name).astype(np.float64)
+    target_times = target_data.times
 
-                        f_coh, icoh, icoh_abs, coh, sq_coh = specFeats.calc_coherence(
-                            sig1=seed.data[i_seed, :],
-                            sig2=target.data[i_target, :],
-                            fs=self.fs,
-                            nperseg=int(
-                                self.epochChannels.segLen_sec * self.fs
-                            ),
-                        )
-                        coh_lists['absICOH_list'].append(icoh_abs)
-                        coh_lists['ICOH_list'].append(icoh)
-                        coh_lists['COH_list'].append(coh)
-                        coh_lists['sqCOH_list'].append(sq_coh)
+    if DOWN_SAMPLE:
+        new_fs = 800
+        print(f'\t...downsample to {new_fs} Hz')
+        seed_windows = resample(seed_windows, up=1, down=fs/new_fs, axis=1)
+        target_windows = resample(target_windows, up=1, down=fs/new_fs, axis=1)
+        fs = new_fs
 
+    assert target_times == seed_times, (
+        'times arrays should be equal between seed and target'
+    )
+    
+    coh_values = {'times': []}
+    if incl_sq_coh: coh_values['sq_coh'] = []
+    if incl_imag_coh: coh_values['imag_coh'] = []
 
-            # STORE RESULTING FEATURES IN CLASSES
-            setattr(
-                self,
-                f'{seedTarget[0]}_{seedTarget[1]}',
-                storeSegmFeats(
-                    channelName=f'{seedTarget[0]}_{seedTarget[1]}',
-                    epoch_times=np.array(time_list),
-                    ft_lists=coh_lists,
-                    freqs=f_coh,
-                    winStartTimes=target.winTimes,
-                )
-            )
+    freq_sel = None
+    
+    for i_win, (seed_win, target_win) in enumerate(
+        zip(seed_windows, target_windows)
+    ):
 
-@dataclass(init=True, repr=True,)
-class storeSegmFeats:
-    channelName: str
-    epoch_times: array
-    ft_lists: dict
-    freqs: array
-    winStartTimes: Any
+        if np.isnan(seed_win).any() or np.isnan(target_win).any():
+            # skip window bcs of NaNs in data
+            continue
 
-    def __post_init__(self,):
+        # if all data present
+        coh_values['times'].append(seed_times[i_win])
+        
+        # COHERENCE EXTRACTION
+        # print(f'fs: {fs}, seg: {coh_segment_sec}; nperseg IN: {int(fs * coh_segment_sec)}')
+        f, _, icoh_abs, _, sq_coh = specFeats.calc_coherence(
+            sig1=seed_win,
+            sig2=target_win,
+            fs=fs,
+            nperseg=int(fs * coh_segment_sec),
+        )
 
-        # create feature attrbiutes
-        for key in self.ft_lists.keys():
+        if not isinstance(freq_sel, np.ndarray):
+            # if freq_sel is still None, create boolean for freq-bin selection
+            freq_sel = np.logical_and(f > band_range[0],
+                                      f < band_range[1])
+            coh_values['freqs'] = list(f[freq_sel])
 
-            ft = key.split('_')[0]
-            setattr(
-                self,
-                ft,
-                np.array(self.ft_lists[f'{ft}_list'])
-            )
+        if incl_imag_coh:
+            icoh_abs = icoh_abs[freq_sel]
+            coh_values['imag_coh'].append(list(icoh_abs))
+        if incl_sq_coh:
+            sq_coh = sq_coh[freq_sel]
+            coh_values['sq_coh'].append(list(sq_coh))
+    
+    coh_values['sq_coh'] = np.array(coh_values['sq_coh'], dtype='object')
+    coh_values['imag_coh'] = np.array(coh_values['imag_coh'], dtype='object')
 
+    return coh_values
 
 
 def get_clean2d(data3d, times=None):

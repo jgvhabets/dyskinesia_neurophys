@@ -202,6 +202,7 @@ class SSD_bands_windowed:
             setattr(self, fband, data[:, i_f, :])  # [n-windows x n-samples]
 
         self.times = meta['timestamps']
+        self.fs = meta['fs']
 
 
 

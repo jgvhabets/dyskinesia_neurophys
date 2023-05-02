@@ -124,6 +124,7 @@ def calc_coherence(
         - sq_coh: array of squared-coherence values
     """
     if nperseg == None: nperseg = fs // 2
+
     # check if signals are in np.float64 dtype, if not psd output raises errors 
     if np.logical_or(
         type(sig1[0]) != np.float64, type(sig2[0]) != np.float64 

@@ -53,10 +53,8 @@ def calculate_PAC_matrix(
     Returns:
         - pac_matrix (nd-arr): 2d or 3d matrix containing n rows for number
             of amplitude binss, and m columns for n of phase-bins
-        - pac_borders: dict wiht phase and ampl: borders of bins, length
-            is 1 more than number of bins
-        optionally: - times (array): if times is inserted, this returns 
-            the cleaned time array corresponding with n-matrices 
+        - (if window_times defined) pac_times: array of timestamps
+            correspoding to pac_values windows
         
             
     Doc: https://etiennecmb.github.io/tensorpac/generated/tensorpac.Pac.html#tensorpac.Pac
@@ -69,21 +67,26 @@ def calculate_PAC_matrix(
     """
     # data checks
     assert sig_amp.shape == sig_pha.shape, "PAC Phase- and Amp-array need same shape"
-    if window_times: assert len(window_times) == len(sig_amp), (
-        'if PAC window times are given, length should equal data length'
-    )  # length times equals n-rows sigs
+    if window_times:
+        assert len(window_times) == len(sig_amp), (
+            'if PAC window times are given, length should equal data length'
+        )  # length times equals n-rows sigs
+        if isinstance(window_times, list): window_times = np.array(window_times)
+        incl_times = True
+    else:
+        incl_times = False
     
     # clean nan rows (parallel for data and times if given)
     if isna(sig_pha).any():
         nan_rows = isna(sig_pha).any(axis=1)
         sig_pha = sig_pha[~nan_rows]
         sig_amp = sig_amp[~nan_rows]
-        if window_times: window_times = window_times[~nan_rows]
+        if incl_times: window_times = window_times[~nan_rows]
     if isna(sig_amp).any():
         nan_rows = isna(sig_amp).any(axis=1)
         sig_pha = sig_pha[~nan_rows]
         sig_amp = sig_amp[~nan_rows]
-        if window_times: window_times = window_times[~nan_rows]
+        if incl_times: window_times = window_times[~nan_rows]
 
     assert len(freq_range_pha) == 2 and len(freq_range_amp) == 2, (
         'lengths of PAC amp/phase freq ranges have to be 2'
@@ -142,7 +145,7 @@ def calculate_PAC_matrix(
     #                         cmap='Reds')
     # plt.show()
     
-    if window_times: return pac_matrix, window_times
+    if incl_times: return pac_matrix, window_times
     else: return pac_matrix
 
 
