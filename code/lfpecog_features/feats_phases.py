@@ -102,18 +102,27 @@ def calculate_PAC_matrix(
 
     # define PAC-freq-bins: 2 lists of lists with lower and upper border
     pac_bins = {}
-    pac_bins['phase'] = [
-        [start, start + pac_binwidths['phase']]
-         for start in np.arange(freq_range_pha[0],
-                                freq_range_pha[1],
-                                pac_binwidths['phase'])
-    ]
-    pac_bins['ampl'] = [
-        [start, start + pac_binwidths['ampl']]
-         for start in np.arange(freq_range_amp[0],
-                                freq_range_amp[1],
-                                pac_binwidths['ampl'])
-    ]
+    pac_bins['phase'] = get_pac_bins(
+        freq_range=freq_range_pha,
+        binwidth=pac_binwidths['phase']
+    )
+    pac_bins['ampl'] = get_pac_bins(
+        freq_range=freq_range_amp,
+        binwidth=pac_binwidths['ampl']
+    )
+    # pac_bins['phase'] = [
+    #     [start, start + pac_binwidths['phase']]
+    #      for start in np.arange(freq_range_pha[0],
+    #                             freq_range_pha[1],
+    #                             pac_binwidths['phase'])
+    # ]
+    # pac_bins['ampl'] = [
+    #     [start, start + pac_binwidths['ampl']]
+    #      for start in np.arange(freq_range_amp[0],
+    #                             freq_range_amp[1],
+    #                             pac_binwidths['ampl'])
+    # ]
+    
     # calculate pac borders (len is 1 more than length of bins)
     pac_borders = {}
     for var in pac_bins.keys():
@@ -147,6 +156,17 @@ def calculate_PAC_matrix(
     
     if incl_times: return pac_matrix, window_times
     else: return pac_matrix
+
+
+def get_pac_bins(
+    freq_range, binwidth
+):
+    pac_bins = [[start, start + binwidth]
+                for start in np.arange(freq_range[0],
+                                       freq_range[1],
+                                       binwidth)]
+    
+    return pac_bins
 
 
 def PAC_select(

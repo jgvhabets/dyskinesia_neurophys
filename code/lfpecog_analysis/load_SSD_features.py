@@ -103,7 +103,8 @@ class ssdFeats_perSubject:
             if self.verbose: print(f'load local PAC - {self.sub}')
             pac_freqs = self.extract_settings['FEATS_INCL']['local_PAC_freqs']
             self.localPAC = load_ssd_localPAC(self.sub, feat_path=self.feat_path,
-                                              pac_freqs=pac_freqs)
+                                              pac_freqs=pac_freqs,
+                                              extr_settings=self.extract_settings)
         
         if self.settings['incl_coherence']:
             if self.verbose: print(f'TODO: load COHERENCES - {self.sub}')
@@ -117,7 +118,7 @@ class ssdFeats_perSubject:
 
 CDRS_scores = namedtuple('CDRS_scores', 'times left right total')
 
-localPAC = namedtuple('localPAC', 'times values')
+localPAC = namedtuple('localPAC', 'times values pha_bins amp_bins')
 
 
 def load_ssd_powers(sub, feat_path):
@@ -146,7 +147,7 @@ def load_ssd_powers(sub, feat_path):
 
 
 def load_ssd_localPAC(
-    sub, feat_path, pac_freqs
+    sub, feat_path, pac_freqs, extr_settings
 ):
 
     sub_ft_files = [f for f in os.listdir(feat_path) if
@@ -168,16 +169,32 @@ def load_ssd_localPAC(
                     times = np.loadtxt(join(feat_path, f), delimiter=',')
                 else:
                     dat = np.load(join(feat_path, f), allow_pickle=True)
-            
+                # get pac bins for phase and ampl
+                pha_bins = get_pac_bins(
+                    freq_range=extr_settings['SPECTRAL_BANDS'][pha_f],
+                    binwidth=extr_settings['FEATS_INCL']['PAC_binwidths']['phase']
+                )
+                amp_bins = get_pac_bins(
+                    freq_range=extr_settings['SPECTRAL_BANDS'][amp_f],
+                    binwidth=extr_settings['FEATS_INCL']['PAC_binwidths']['ampl']
+                )
             assert len(times) == dat.shape[-1], (
                 f'loaded PACs times ({len(times)}) and data ({dat.shape})'
                 f' dont match for {dType}_{pha_f}_{amp_f}'
             )
-            dict_out[f'{dType}_{pha_f}_{amp_f}'] = localPAC(times, dat)
+            
+            dict_out[f'{dType}_{pha_f}_{amp_f}'] = localPAC(
+                times=times, values=dat,
+                pha_bins=pha_bins, amp_bins=amp_bins
+            )
+
+
             del(times, dat)
 
     return dict_out
 
+
+from lfpecog_features.feats_phases import get_pac_bins
 from itertools import product
 
 Coh_sources = namedtuple('Coh_sources', 'STN_STN STN_ECOG')
