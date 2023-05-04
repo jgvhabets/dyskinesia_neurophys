@@ -118,7 +118,7 @@ class ssdFeats_perSubject:
 
 CDRS_scores = namedtuple('CDRS_scores', 'times left right total')
 
-localPAC = namedtuple('localPAC', 'times values pha_bins amp_bins')
+localPAC = namedtuple('localPAC', 'values times pha_bins amp_bins')
 
 
 def load_ssd_powers(sub, feat_path):
@@ -149,6 +149,17 @@ def load_ssd_powers(sub, feat_path):
 def load_ssd_localPAC(
     sub, feat_path, pac_freqs, extr_settings
 ):
+    """
+    
+    Returns:
+        - dict with PAC results per SOURCE_PHA_AMP
+            within dict is a namedtuple containing:
+                - values: 3d ndarray, (n-amp-bins,
+                    n-pha-bins, n-windows)
+                - times: list w/ start times from windows
+                - pha_bins: list w/ tuples of phase bin ranges
+                - amp_bins: list w/ tuples of ampl bin ranges
+    """
 
     sub_ft_files = [f for f in os.listdir(feat_path) if
                     sub in f and 'localPAC' in f]
@@ -184,8 +195,10 @@ def load_ssd_localPAC(
             )
             
             dict_out[f'{dType}_{pha_f}_{amp_f}'] = localPAC(
-                times=times, values=dat,
-                pha_bins=pha_bins, amp_bins=amp_bins
+                values=dat,
+                times=times,
+                pha_bins=pha_bins,
+                amp_bins=amp_bins
             )
 
 
