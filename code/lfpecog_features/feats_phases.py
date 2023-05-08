@@ -169,36 +169,36 @@ def get_pac_bins(
     return pac_bins
 
 
-def PAC_select(
-    pacmatrix, freqs_pha, freqs_amp,
-    pha_bw=(13, 30), amp_bw=(60, 90)):
-    """
-    TODO: REVISE
+# def PAC_select(
+#     pacmatrix, freqs_pha, freqs_amp,
+#     pha_bw=(13, 30), amp_bw=(60, 90)):
+#     """
+#     TODO: REVISE
 
-    Function to select specific bandwidths to include in
-    summarising mean-score of total caluclated PAC matrix
-    Input:
-        - pacmatrix (arr): resulting PAC-values of PAC_comod...
-        - freqs_pha, freqs_amp (arr): corresponding freq-bin
-            borders, result of PAC_comodolugram
-        - pha_bw (tuple): lower and upper border to include
-            phase-frequencies
-        - amp_bw (tuple): idem but for ampl-frequencies
+#     Function to select specific bandwidths to include in
+#     summarising mean-score of total caluclated PAC matrix
+#     Input:
+#         - pacmatrix (arr): resulting PAC-values of PAC_comod...
+#         - freqs_pha, freqs_amp (arr): corresponding freq-bin
+#             borders, result of PAC_comodolugram
+#         - pha_bw (tuple): lower and upper border to include
+#             phase-frequencies
+#         - amp_bw (tuple): idem but for ampl-frequencies
     
-    Returns:
-        - meanpac (float): mean PAC-value within freq-ranges
-    """
-    # create Boolean list to select freqs within ranges
-    sel_pha = [np.logical_and(freqs_pha[i - 1] >= pha_bw[0],
-        freqs_pha[i] <= pha_bw[1]) for i in range(1, len(freqs_pha))]
-    sel_amp = [np.logical_and(freqs_amp[i - 1] >= amp_bw[0],
-        freqs_amp[i] <= amp_bw[1]) for i in range(1, len(freqs_amp))]
-    # select PAC-values based on freq-border-lists
-    if np.logical_and(np.any(sel_pha), np.any(sel_amp)):
-        sel = pacmatrix[:, sel_pha]  # select phases
-        sel = sel[sel_amp, :]  # select amplitudes
+#     Returns:
+#         - meanpac (float): mean PAC-value within freq-ranges
+#     """
+#     # create Boolean list to select freqs within ranges
+#     sel_pha = [np.logical_and(freqs_pha[i - 1] >= pha_bw[0],
+#         freqs_pha[i] <= pha_bw[1]) for i in range(1, len(freqs_pha))]
+#     sel_amp = [np.logical_and(freqs_amp[i - 1] >= amp_bw[0],
+#         freqs_amp[i] <= amp_bw[1]) for i in range(1, len(freqs_amp))]
+#     # select PAC-values based on freq-border-lists
+#     if np.logical_and(np.any(sel_pha), np.any(sel_amp)):
+#         sel = pacmatrix[:, sel_pha]  # select phases
+#         sel = sel[sel_amp, :]  # select amplitudes
 
-    meanpac = np.mean(sel)
+#     meanpac = np.mean(sel)
 
-    return meanpac
+#     return meanpac
 

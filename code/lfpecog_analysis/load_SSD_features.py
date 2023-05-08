@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 from collections import namedtuple
 from dataclasses import dataclass, field
+from itertools import product
 
 # import custom functions
 from utils.utils_fileManagement import (
@@ -19,6 +20,7 @@ from utils.utils_fileManagement import (
 from lfpecog_preproc.preproc_import_scores_annotations import (
     read_clinical_scores
 )
+from lfpecog_features.feats_phases import get_pac_bins
 
 
 @dataclass(init=True, repr=True)
@@ -207,8 +209,6 @@ def load_ssd_localPAC(
     return dict_out
 
 
-from lfpecog_features.feats_phases import get_pac_bins
-from itertools import product
 
 Coh_sources = namedtuple('Coh_sources', 'STN_STN STN_ECOG')
 
