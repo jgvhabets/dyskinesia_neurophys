@@ -53,7 +53,6 @@ if __name__ == '__main__':
              and 'noEphys' in f]
     doneSubs = list(set([f[:3] for f in noEphys_files]))
     subs = [s for s in subs if s not in doneSubs]
-    print(subs)
 
     # create noEphys mergedData per sub
     for sub in subs:

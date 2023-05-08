@@ -117,7 +117,6 @@ def get_windows(
         del_sel = np.array([f'_{contra_side}_' in c and 'LFP' in c for c in arr_keys])
         data = data[:, ~del_sel]
         arr_keys = np.array(arr_keys)[~del_sel]
-        print(data.shape, arr_keys.shape)
 
 
     # remove channels with too many NaNs to prevent deletion of all data
@@ -243,7 +242,7 @@ def get_windows(
 
         arr_list.append(wintemp)  # list with 2d arrays
     
-    print(f'\n...# {len(arr_list)} windows found')
+    # print(f'\n...# {len(arr_list)} windows found')
     win_array = np.array(arr_list)  # create 3d array
 
     if return_as_class:

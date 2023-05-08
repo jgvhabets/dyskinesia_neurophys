@@ -4,6 +4,8 @@ Function to assisst making pretty Plots
 # Import publoc packages and functions
 # import numpy as np
 
+from os.path import join
+import json
 
 def remove_duplicate_legend(
     legend_handles_labels
@@ -33,3 +35,29 @@ def remove_duplicate_legend(
     return handles, labels
 
 
+def get_colors(scheme='access_colors_PaulTol'):
+    """
+    if scheme is 'access_colors_PaulTol' Paul Tol's
+        colorscheme for accessible colors is returned,
+    if scheme is 'contrast_duo', two contrasting colors
+        are returned
+    
+        colors:
+        {'nightblue': '#332288',
+        'darkgreen': '#117733',
+        'turquoise': '#44AA99',
+        'lightblue': '#88CCEE',
+        'sand': '#DDCC77',
+        'softred': '#CC6677',
+        'lila': '#AA4499',
+        'purplered': '#882255'}
+    """
+    cmap_json = join('lfpecog_plotting',
+                     'color_schemes.json')
+
+    with open(cmap_json, 'r') as json_data:
+        schemes = json.load(json_data)
+
+    cmap = schemes[scheme]
+
+    return cmap
