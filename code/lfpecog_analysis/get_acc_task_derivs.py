@@ -8,6 +8,7 @@ from os.path import join
 from pandas import DataFrame
 import numpy as np
 from collections import namedtuple
+from scipy.signal import resample_poly
 
 from utils.utils_fileManagement import (
     load_class_pickle, get_project_path
@@ -52,7 +53,7 @@ def get_n_and_length_taps(win_tap_bool, acc_fs):
 
 Sides = namedtuple('Sides', 'left right')
 
-def load_acc(
+def load_acc_and_task(
     sub, dataversion='v3.1',
     resample_freq=0,
 ):
@@ -138,4 +139,82 @@ def load_acc(
     return acc_both, labels
 
 
-from scipy.signal import resample_poly
+def find_task_during_time(
+    timing, task_labels, task_times
+):
+    """
+    Arguments:
+        - timing (in dopa_time), timestamp
+        - task_labels (array): task-column within
+            extracted labels df
+        - task_times (array): timestamp corresponding
+            to task labels (index of labels_df)
+    
+    Returns:
+        - task_found (str): rest, tap, or free
+    """
+    i = np.argmin(abs(task_times - timing))
+    task_found = task_labels[i]
+
+    return task_found
+
+
+def get_task_timings(label_df, task):
+    """
+    Get start and end timings of tasks within
+    a recording of a subject
+
+    Arguments:
+        - label_df (df): result of load_acc_and_task
+        - task: str of task to give timings for
+    
+    Returns:
+        - tuple with starts (list) and ends (list)
+            of timings in dopa_time (sec)
+    """
+
+    label_arr = label_df['task'].values
+    label_times = label_df.index.values
+
+    starts = list(np.where(np.diff((label_arr == task).astype(int)) == 1)[0])
+    ends = list(np.where(np.diff((label_arr == task).astype(int)) == -1)[0])
+
+    if label_arr[0] == task: starts = [0] + starts
+    if label_arr[-1] == task: ends.append(len(label_arr) - 1)
+
+    starts = label_times[starts]
+    ends = label_times[ends]
+
+    return starts, ends
+
+
+def select_task_in_features(
+    ft_times, label_df, task
+):
+    """
+    Arguments:
+        - ft_times: times of feature values (in seconds!)
+        - label_df: subject specific label dataframe
+            imported in load_acc_and_task()
+        - task (string): task to select on
+    """
+    # convert ft_times in seconds if needed
+    if max(ft_times) < 200: ft_times *= 60
+
+    fts_during_task = np.zeros((len(ft_times)))
+
+    if isinstance(task, str): task = [task,]
+
+    # repeat for all tasks given to include
+    for t in task:
+
+        starts, ends = get_task_timings(label_df, t)
+
+        for s, e in zip(starts, ends):
+
+            sel = np.logical_and(ft_times > s,
+                                ft_times < e)
+
+            fts_during_task[sel] = 1
+    
+    return fts_during_task

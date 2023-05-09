@@ -68,3 +68,60 @@ def plot_rose_axis(
     if polar_ax: return ax
     else:
         plt.show()
+
+
+def plot_pac_comodulogram(
+    pac_arr_2d,
+    pha_bin_tuples,
+    amp_bin_tuples,
+    fsize=14,
+    plot_title=None,
+    plot_on_ax=None,
+    fig_axis=None,
+    vmax=None
+):
+    if plot_on_ax:
+        ax = plot_on_ax
+        fig = fig_axis
+    else: fig, ax = plt.subplots(1,1, figsize=(6, 6))
+
+    im = ax.imshow(pac_arr_2d, cmap='Reds',
+                   vmin=0, vmax=vmax)
+    fig.colorbar(im, ax=ax)
+
+
+    ticks, ticklabels = get_pac_bins_ticks(
+        pha_bin_tuples, n_ticks=3)
+    ax.set_xticks(ticks,)
+    ax.set_xticklabels(ticklabels, rotation=0)
+    ticks, ticklabels = get_pac_bins_ticks(
+        amp_bin_tuples, n_ticks=5)
+    ax.set_yticks(ticks,)
+    ax.set_yticklabels(ticklabels,)
+
+    ax.set_xlabel('Phase freq. (Hz)', size=fsize)
+    ax.set_ylabel('Ampltitude freq. (Hz)', size=fsize)
+
+    ax.invert_yaxis()
+
+    if plot_title: ax.set_title(plot_title, size=fsize,
+                             weight='bold',)
+
+    ax.tick_params(axis='both', size=fsize, labelsize=fsize)
+    
+    if plot_on_ax:
+        return ax
+    else:
+        plt.tight_layout()
+        plt.show()
+
+
+def get_pac_bins_ticks(pac_bins, n_ticks=3):
+
+    ticks = np.linspace(0, len(pac_bins) - 1, n_ticks)
+
+    ticklabels = np.linspace(pac_bins[0][0],
+                             pac_bins[-1][1],
+                             n_ticks)
+    
+    return ticks, ticklabels.astype(int)
