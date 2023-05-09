@@ -35,6 +35,7 @@ if __name__ == '__main__':
     ### get and check variables out of run-command
 
     data_version = sys.argv[1]
+
     assert data_version[0]=='v', print('WRONG INPUT: '
         f'data_version (2nd variable: {data_version}) incorrect, e.g.: "v0.1"'
     )
