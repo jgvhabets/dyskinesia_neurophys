@@ -86,6 +86,46 @@ def get_onedrive_path(
         return join(path, 'dysk_ecoglfp', folder.lower())
 
 
+def get_beta_project_path(
+    folder: str = 'beta'
+):
+    """
+    Device and OS independent function to find
+    the synced-OneDrive folder for BETA-project
+
+    Folder has to be in ['onedrive', 'figures', 'bids_rawdata']
+    """
+    folder = folder.lower()
+    folder_options = [
+        'beta', 'figures', 'results', 'data'
+    ]
+    if folder.lower() not in folder_options:
+        raise ValueError(
+            f'given folder: {folder} is incorrect, '
+            f'should be {folder_options}')
+
+    path = getcwd()
+
+    while dirname(path)[-5:].lower() != 'users':
+        path = dirname(path)
+    # path is now Users/username
+    onedrive_f = [
+        f for f in listdir(path) if logical_and(
+            'onedrive' in f.lower(),
+            'charit' in f.lower()
+        ) 
+    ]
+    path = join(path, onedrive_f[0])
+    betapath = join(path, 'aDBS beta explorations')
+    assert exists(betapath), (f'created path {betapath}'
+                              ' does not exist')
+
+    if folder == 'beta': return betapath
+
+    else:  # must be data, results or figures
+        return join(betapath, folder)
+    
+
 def load_ft_ext_cfg(cfg_fname: str, cfg_folder=None):
     # define folder to use, either default or
     # given if cfg_folder is defined
