@@ -14,7 +14,7 @@ from utils.utils_fileManagement import (
 from lfpecog_preproc.preproc_import_scores_annotations import (
     get_ecog_side
 )
-from lfpecog_analysis.get_acc_derivs import get_n_and_length_taps
+from lfpecog_analysis.get_acc_task_derivs import get_n_and_length_taps
 
 
 

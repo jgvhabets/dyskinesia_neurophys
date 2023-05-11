@@ -13,12 +13,13 @@ from array import array
 from sklearn.decomposition import PCA
 # import own functions
 from lfpecog_features.feats_spectral_features import bandpass
-from lfpecog_features.feats_helper_funcs import baseline_zscore, smoothing
+from lfpecog_features.feats_helper_funcs import (
+    baseline_zscore, smoothing
+)
 
 
 def get_burst_features(
     sig, fs, burst_freqs, cutoff_perc,
-    threshold_meth,
     min_shortBurst_sec, min_longBurst_sec,
     envelop_smoothing=False,
     smooth_factor_ms=125,
@@ -46,17 +47,6 @@ def get_burst_features(
             175 ms in Lofredi, Neurobiol of Dis 2019
         - smooth_factor_ms: window of smoothing in milisec
     """
-    possible_thr_meths = [
-        'full-window',
-        'extremes-on-off'
-    ]
-    if threshold_meth not in possible_thr_meths:
-        # raise
-        print(
-            'ERROR:'
-            f'inserted treshold-method {threshold_meth}'
-            f' is not in {possible_thr_meths}')
-
     env = get_envelop(
         sig=sig, fs=fs, bandpass_freqs=burst_freqs,
         in_blocks=True
@@ -67,9 +57,8 @@ def get_burst_features(
         # smooth_samples = int(fs / 1000 * smooth_factor_ms)  # smoothing-samples in defined ms-window
         # env = uniform_filter1d(env, smooth_samples)
     
-    burst_thr = get_burst_threshold(
-        threshold_meth, cutoff_perc, env
-    )
+    burst_thr = get_burst_threshold(cutoff_perc, env)
+
 
     nShort, nLong, rateShort, rateLong = calc_bursts_from_env(
         envelop=env, burst_thr=burst_thr, fs=fs,
@@ -81,21 +70,16 @@ def get_burst_features(
     return nShort, nLong, rateShort, rateLong
 
 
-def get_burst_threshold(
-    threshold_meth, cutoff_perc,
-    envelop,
-):
+def get_burst_threshold(cutoff_perc, envelop,):
     """
     for now: use xx-percentile of 3-minute window
 
         try-out: xx-percentile based on rest data
         in max med-Off and med-On
     """
-    if threshold_meth == 'full-window':
-
-        burst_thr = np.nanpercentile(
-            list(envelop), cutoff_perc
-        )
+    burst_thr = np.nanpercentile(
+        list(envelop), cutoff_perc
+    )
 
     return burst_thr
 
