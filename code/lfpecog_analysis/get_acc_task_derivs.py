@@ -218,3 +218,69 @@ def select_task_in_features(
             fts_during_task[sel] = 1
     
     return fts_during_task
+
+
+def define_OFF_ON_times(
+    feat_times, cdrs_scores, cdrs_times,
+    max_OFF_minutes=15,
+    max_OFF_cdrs=0,
+    min_ON_minutes=45,
+    max_ON_CDRS=5,
+    incl_tasks='all',
+    labels_df=None
+):
+    """
+    Finds binary medication moments OFF and ON, based on
+    minutes after L-Dopa intake, and present CDRS scores.
+
+    Arguments:
+        - feat_times: array of timestamps corresponding
+            to specific features of interest that should
+            be selected (or splitted)
+        - cdrs_scores, cdrs_times: arrays containing the
+            total CDRS scores and corresponding timestamps
+        - ... variables to set borders to OFF and ON inclusion
+        - incl_tasks: string or list with task(s) to include
+        - labels_df: subject specific DataFrame resulting from
+            load_acc_and_task(), to select on tasks (if not default 'all')
+    
+    Returns:
+        - off_times_sel: boolean array with length of feat_times,
+            indicating which feature (time) meets the 
+            requirements for inclusion in the OFF-condition
+        - on_times_sel: idem for ON-condition
+    """
+    if isinstance(feat_times, list): feat_times = np.array(feat_times)
+    # ensure all times are in minutes
+    if np.nanmax(feat_times) > 200:
+        feat_times /= 60
+    if np.nanmax(cdrs_times) > 200:
+        cdrs_times /= 60
+    
+    # get closest cdrs score for every feat-time
+    ftwin_cdrs_score = [cdrs_scores[np.argmin(abs(cdrs_times - t))]
+                        for t in feat_times]
+    
+    off_times_sel = [np.logical_and(m < max_OFF_minutes,
+                                    ftwin_cdrs_score[i] == max_OFF_cdrs)
+                     for i, m in enumerate(feat_times)]
+    
+    on_times_sel = [np.logical_and(m > min_ON_minutes,
+                                   ftwin_cdrs_score[i] <= max_ON_CDRS)
+                     for i, m in enumerate(feat_times)]
+    
+    # perform selection on task
+    if incl_tasks != 'all':
+        assert isinstance(labels_df, DataFrame), (
+            'if time-windows need to be selected on '
+            'tasks, labels_df has to DataFrame resulting'
+            ' from load_acc_and_task()'
+        )
+        task_sel = select_task_in_features(
+            ft_times=feat_times, label_df=labels_df,
+            task=incl_tasks)
+        # combine selection on on/off moments and included tasks
+        off_times_sel = np.logical_and(off_times_sel, task_sel)
+        on_times_sel = np.logical_and(on_times_sel, task_sel)
+    
+    return off_times_sel, on_times_sel
