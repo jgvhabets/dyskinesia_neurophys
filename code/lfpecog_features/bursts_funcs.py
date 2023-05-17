@@ -173,12 +173,10 @@ def get_envelop(
     return env  # return list_of_envs to calculate data-parts seperately
 
 
-def get_burst_indices(
-    envelop, burst_thr,
-):
+def get_burst_indices(envelop, burst_thr,):
     exceedThr = envelop > burst_thr
 
-    if sum(exceedThr) == 0: return (None, None)
+    if sum(exceedThr) == 0: return None, None
 
     changeThr = np.diff(exceedThr.astype(int))
     startBursts = np.where(changeThr == 1)[0] + 1  # add one to correct for diff-index
@@ -191,7 +189,7 @@ def get_burst_indices(
     if exceedThr[-1]:
         endBursts = np.concatenate([endBursts, np.array[len(exceedThr) - 1]])
     
-    return (startBursts, endBursts)
+    return startBursts, endBursts
 
 
 
@@ -212,7 +210,7 @@ def calc_bursts_from_env(
     min_longBurst_samples = min_longBurst_sec * fs
 
     # define burst-starts and - ends
-    if type(envelop) == list:
+    if isinstance(envelop, list):
         burstIndices = []
         # create list with tuples
         for env in envelop:
@@ -222,24 +220,31 @@ def calc_bursts_from_env(
 
     else:
         # if one envelop -> create tuple with start- and end-indices
-        burstIndices = get_burst_indices(
-            envelop, burst_thr,
-        )
 
-    # CHECK FOR NO BURSTS FUCTIONALITY
-# TODO: REVISE with new set up     
+        # TODO: APPLY SMOOTHING
+        
 
-    burstSampleLengths = endBursts - startBursts
+
+        burst_starts, burst_ends = get_burst_indices(envelop, burst_thr)
+
+    if not isinstance(burst_ends, np.ndarray):
+        return None, None, None, None
+    
+    # calculate length all bursts (in samples)
+    burst_lengths = burst_ends - burst_starts
+    print(burst_lengths)
+
+
     # count number of short and long bursts as defined
-    nShort = sum(np.logical_and(
-        min_shortBurst_samples < burstSampleLengths,
-        burstSampleLengths < min_longBurst_samples
+    n_short = sum(np.logical_and(
+        min_shortBurst_samples < burst_lengths,
+        burst_lengths < min_longBurst_samples
     ))
-    nLong = sum(burstSampleLengths > min_longBurst_samples)
+    n_long = sum(burst_lengths > min_longBurst_samples)
 
-    rateShort = nShort / (len(envelop) / fs)
-    rateLong = nLong / (len(envelop) / fs)
+    rateShort = n_short / (len(envelop) / fs)
+    rateLong = n_long / (len(envelop) / fs)
 
-    return nShort, nLong, rateShort, rateLong
+    return n_short, n_long, rateShort, rateLong
 
 
