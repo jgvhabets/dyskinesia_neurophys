@@ -12,12 +12,15 @@ import pandas as pd
 from itertools import compress
 import json
 from os.path import join, exists
+from os import makedirs
 from scipy.signal import hilbert
 import matplotlib.pyplot as plt
 
 # import own functions
 from lfpecog_features.bursts_funcs import get_burst_features
-from utils.utils_fileManagement import get_beta_project_path
+from utils.utils_fileManagement import (
+    get_beta_project_path, make_dict_jsonable
+)
 from lfpecog_features.get_ssd_data import get_subject_SSDs
 import lfpecog_features.bursts_funcs as burstFuncs
 import lfpecog_features.feats_helper_funcs as ftHelpers
@@ -129,6 +132,8 @@ def get_burst_features_SSD(
     TO_SAVE_FIG: bool = True,
     FIG_DIR: str = None,
     sub_SSD_class = None,
+    TO_PLOT_FIG: bool = False,
+    TO_STORE_BURST_LENGTHS: bool = True
 ):
     """
     Arguments:
@@ -141,10 +146,6 @@ def get_burst_features_SSD(
             if given, this will decrease computational time
     """
     print(f'start {sub}, burst feature-extraction')
-
-    if SPLIT_OFF_ON:
-        # get off/on definitions for subject
-        fts = ssdFeatures(sub_list=[sub,])  # load features for CDRS scores
 
     burst_count = {}  # empty dict to store values
     
@@ -161,7 +162,7 @@ def get_burst_features_SSD(
         # load thresholds from JSON
         burst_thresh_dir = join(
             get_beta_project_path('results'),
-            'bursts')
+            'bursts', 'thresholds')
         thrsh_fname = f'burst_thresholds_{beta_bw}.json'
         thrsh_path = join(burst_thresh_dir, thrsh_fname)
         with open(thrsh_path, 'r') as t:
@@ -184,27 +185,17 @@ def get_burst_features_SSD(
         for dType in thresh.keys():  # loop over lfp_left/right and ecog_side
             
             burst_count[beta_bw][dType] = {
-                'short': [], 'long': []
+                'short': [], 'long': [],
+                'burst_lengths': []
             }
 
-            if SPLIT_OFF_ON:
-                # get off/on definitions for subject
-                win_sel = {}
-                win_sel['off'], win_sel['on'] = define_OFF_ON_times(
-                    feat_times=getattr(ssd_dat, dType).times.copy(),
-                    cdrs_scores=getattr(fts, f'sub{sub}').scores.total.copy(),
-                    cdrs_times=getattr(fts, f'sub{sub}').scores.times.copy(),
-                    incl_tasks='rest',
-                    sub=sub, data_version=ssd_dat.lfp_left.settings['DATA_VERSION'],
-                )
-
-
+            # select SSD'd data to extract from
             tempdat = getattr(ssd_dat, dType)
             fs = tempdat.fs
             sig_array = getattr(tempdat, beta_bw)  # 2d array of shape n-windows, n-samples (per window) 
 
             for sig in sig_array:
-                
+                # loops over all windows                
                 env = abs(hilbert(sig))
 
                 if SMOOTH_MILLISEC > 0:
@@ -212,7 +203,8 @@ def get_burst_features_SSD(
                                               win_ms=SMOOTH_MILLISEC)
                 
                 (n_short, n_long,
-                 short_rate, long_rate
+                 short_rate, long_rate,
+                 burst_lengths
                 ) = burstFuncs.calc_bursts_from_env(
                     envelop=env,
                     fs=fs,
@@ -222,10 +214,38 @@ def get_burst_features_SSD(
                 )
                 burst_count[beta_bw][dType]['short'].append(short_rate)
                 burst_count[beta_bw][dType]['long'].append(long_rate)
+                burst_count[beta_bw][dType]['burst_lengths'].append(burst_lengths)
+    
+    if TO_STORE_BURST_LENGTHS:
+        
+        store_dir = join(get_beta_project_path('results'),
+                         'bursts')
+        if not exists(store_dir): makedirs(store_dir)
+        fname = f'sub{sub}_bursts.json'
+        
+        # save values in json
+        for bw in burst_count.keys():
+            for dtype in burst_count[bw].keys():
+                burst_count[bw][dtype] = make_dict_jsonable(
+                    burst_count[bw][dtype])
+        
+        # add important settings variables to save
+        burst_count['smooth_millisec'] = int(SMOOTH_MILLISEC)
+        burst_count['threshold_origin'] = THRESH_ORIGIN
+        burst_count['data_version'] = getattr(ssd_dat, list(thresh.keys())[0]).settings['DATA_VERSION']
+    
+        with open(join(store_dir, fname), 'w') as f:
+            json.dump(burst_count, f)
 
+    if not TO_PLOT_FIG and not TO_SAVE_FIG:
+        return burst_count
 
-    # plot results
+    # plot results (only executed when not save AND not plot)
     clrs = list(get_colors().values())  # list with colorcodes
+
+    if SPLIT_OFF_ON:
+        # get off/on definitions for subject
+        fts = ssdFeatures(sub_list=[sub,])  # load features for CDRS scores
 
     for burstType in ['short', 'long']:
 
@@ -238,6 +258,15 @@ def get_burst_features_SSD(
             for i_d, dType in enumerate(thresh.keys()):
 
                 if SPLIT_OFF_ON:
+                    # get off/on definitions for subject
+                    win_sel = {}
+                    win_sel['off'], win_sel['on'] = define_OFF_ON_times(
+                        feat_times=getattr(ssd_dat, dType).times.copy(),
+                        cdrs_scores=getattr(fts, f'sub{sub}').scores.total.copy(),
+                        cdrs_times=getattr(fts, f'sub{sub}').scores.times.copy(),
+                        incl_tasks='rest',
+                        sub=sub, data_version=ssd_dat.lfp_left.settings['DATA_VERSION'],
+                    )
                     off_bursts = list(compress(
                         burst_count[beta_bw][dType][burstType],
                         win_sel['off']))
@@ -254,7 +283,6 @@ def get_burst_features_SSD(
                         label=f'{beta_bw} - {dType}: ON',
                         color=clrs[i_d],
                         alpha=.4,)
-
 
                 else:
                     axes[i_d, i_bw].hist(burst_count[beta_bw][dType][burstType],
@@ -280,10 +308,13 @@ def get_burst_features_SSD(
                 join(FIG_DIR, fig_name),
                 dpi=150, facecolor='w',
             )
-            plt.close()
-        else:
+        
+        if TO_PLOT_FIG:
             plt.show()
+        else:
+            plt.close()
 
+    return burst_count
 
 def store_and_plot_beta_burst_thresholds(
     sub: str, ssd_dat, PERCENTILE: int = 75,

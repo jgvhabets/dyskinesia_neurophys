@@ -120,6 +120,91 @@ class extract_local_SSD_powers():
                   f'{feat_fname} in {self.feat_path}')
 
 
+
+@dataclass(init=True, repr=True, )
+class extract_bursts():
+    """
+    Extract bursts from SSD-d data
+    """
+    sub: str
+    sub_SSD: str
+    settings_dict: dict
+    ephys_sources: list
+    feat_path: str
+    incl_ecog: bool = True
+    incl_stn: bool = True
+    overwrite_features: bool = False
+    
+    def __post_init__(self,):
+        SETTINGS = self.settings_dict    
+        
+        # loop over possible datatypes
+        for dType in self.ephys_sources:
+            print(f'\n\tstart ({dType}) extracting local SSD powers')
+            data = getattr(self.sub_SSD, dType)  # assign datatype data
+            # check if features already exist
+            feat_fname = f'SSDfeats_{self.sub}_{dType}_local_spectralFeatures.csv'
+
+            if exists(join(self.feat_path, feat_fname)) and not self.overwrite_features:
+                print(f'...\tfeatures already exist for {dType}'
+                      ' and are NOT overwritten, skip!')
+
+            ### Create storing of features
+            fts_incl = SETTINGS['FEATS_INCL']  # get features to include
+            feats_out = []  # list to store lists per window
+            feat_names = []  # feature names
+            for band in SETTINGS['SPECTRAL_BANDS'].keys():
+                # NOTE: order has to be identical of order of adding features
+                n_spec_feats = 0
+                for ft_name in fts_incl:
+                    # to feats_out (via temporarily list feats_win)
+                    if fts_incl[ft_name] and ft_name.startswith('SSD_'):
+                        feat_names.append(f'{band}_{ft_name[4:]}')
+                        n_spec_feats += 1
+            
+            # loop over windows
+            for i_w, t in enumerate(data.times):
+                # temporary list to store features of current window
+                feats_win = []
+                
+                # loop over defined frequency bands
+                for bw in SETTINGS['SPECTRAL_BANDS']:
+                    f_range = SETTINGS['SPECTRAL_BANDS'][bw]
+                    
+                    # check for unconverted nan array
+                    if np.isnan(list(getattr(data, bw)[i_w])).all():
+                        # fill with nan values for feature and go to next band
+                        feats_win.extend([np.nan] * n_spec_feats)
+                        continue
+
+                    # Convert SSD'd signal into Power Spectrum
+                    f, psd = welch(getattr(data, bw)[i_w], axis=-1,
+                                    nperseg=data.fs, fs=data.fs)
+                    f_sel = [f_range[0] < freq < f_range[1] for freq in f]  # select psd in freq of interest
+
+                    # CALCULATE SPECTRAL PEAK FEATURES
+                    # loop over ft-names and ft-funcs ensures correct ft-order
+                    for ft_name in fts_incl:
+                        if fts_incl[ft_name] and ft_name.startswith('SSD_'):
+                            # get value from function corresponding to ft-name
+                            ft_func = getattr(specFeats.Spectralfunctions(
+                                psd=psd, ssd_sig=getattr(data, bw)[i_w],
+                                f=f, f_sel=f_sel
+                            ), f'get_{ft_name}')
+                            feats_win.append(ft_func())
+                       
+                # END OF WINDOW -> STORE list with window features to total list
+                feats_out.append(feats_win)
+
+            # AFTER ALL WINDOWS OF DATA TYPE ARE DONE -> STORE FEATURE DATAFRAME
+            feats_out = np.array(feats_out, dtype='object')
+            feats_out = DataFrame(data=feats_out, columns=feat_names, index=data.times,)
+            feats_out.to_csv(join(self.feat_path, feat_fname),
+                             index=True, header=True,)
+            print(f'Saved FEATURES for sub-{self.sub} {dType} as '
+                  f'{feat_fname} in {self.feat_path}')
+
+
 from lfpecog_features.feats_phases import calculate_PAC_matrix
 
 @dataclass(init=True, repr=True,)

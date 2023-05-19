@@ -7,7 +7,7 @@ from os import getcwd, listdir, makedirs
 from os.path import join, exists, dirname
 from numpy import (
     logical_and, save, ndarray, where,
-    ravel, arange, array, float64
+    ravel, arange, array, float64, int64
 )
 from csv import writer
 import pickle
@@ -287,6 +287,54 @@ def load_class_pickle(
 
 
     return output
+
+def convert_dtype_for_json(obj):
+    if isinstance(obj, ndarray): obj = list(obj)
+    elif isinstance(obj, float64): obj = float(obj)
+    elif isinstance(obj, int64): obj = int(obj)
+
+    return obj
+
+
+def make_dict_jsonable(d):
+    """
+    give dict (d) to convert content 
+    to json-compatible datatypes (list instead
+    of array, no np floats or integers)
+    """
+    if isinstance(d, ndarray):
+        d = list(d)
+        # TODO
+        return d
+    elif isinstance(d, float64):
+        d = float(d)
+        return d
+    elif isinstance(d, int64):
+        d = int(d)
+        return d
+
+    # create isinstance d, list
+    elif isinstance(d, dict):
+        for k in d.keys():
+            
+            obj = d[k]
+            obj = convert_dtype_for_json(obj)
+            d[k] = obj
+
+            if isinstance(obj, list):
+                for i, obj2 in enumerate(obj):
+                    obj2 = convert_dtype_for_json(obj2)
+                    d[k][i] = obj2
+
+            elif isinstance(obj, dict):
+                for k2 in obj.keys():
+                    obj2 = obj[k2]
+                    obj2 = convert_dtype_for_json(obj2)
+                    d[k][k2] = obj2
+    
+        return d
+
+    return d
 
 
 def correct_acc_class(acc):

@@ -63,6 +63,15 @@ if __name__ == '__main__':
                 feat_path=feat_path, ephys_sources=ephys_sources,
             )
         
+        # Extract local spectral power features
+        if SETTINGS['FEATS_INCL']['TO_EXTRACT_BURSTS']:
+
+            print(f'\n\tSTART local powers sub-{sub}...')
+            ssd_feats.extract_local_SSD_powers(
+                sub=sub, sub_SSD=sub_SSD, settings_dict=SETTINGS,
+                feat_path=feat_path, ephys_sources=ephys_sources,
+            )
+        
         # create local PAC features
         if SETTINGS['FEATS_INCL']['TO_EXTRACT_LOCAL_PAC']:
             print(f'\n\tSTART local-PAC sub-{sub}...')
@@ -81,7 +90,6 @@ if __name__ == '__main__':
                 feat_path=feat_path, ephys_sources=ephys_sources,
                 sources='STN_STN',
             )
-
 
         if SETTINGS['FEATS_INCL']['TO_EXTRACT_COH_STN_ECOG']:
             

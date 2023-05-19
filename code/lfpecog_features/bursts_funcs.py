@@ -228,7 +228,7 @@ def calc_bursts_from_env(
         burst_starts, burst_ends = get_burst_indices(envelop, burst_thr)
 
     if not isinstance(burst_ends, np.ndarray):
-        return 0, 0, 0, 0
+        return 0, 0, 0, 0, []
     
     # calculate length all bursts (in samples)
     burst_lengths = burst_ends - burst_starts
@@ -243,6 +243,6 @@ def calc_bursts_from_env(
     rateShort = n_short / (len(envelop) / fs)
     rateLong = n_long / (len(envelop) / fs)
 
-    return n_short, n_long, rateShort, rateLong
+    return n_short, n_long, rateShort, rateLong, burst_lengths
 
 
