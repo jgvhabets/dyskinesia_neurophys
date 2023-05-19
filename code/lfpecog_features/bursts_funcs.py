@@ -184,10 +184,10 @@ def get_burst_indices(envelop, burst_thr,):
     
     # correct for burst at beginning or end
     if exceedThr[0]:
-        startBursts = np.concatenate([np.array[0], startBursts])
+        startBursts = np.concatenate([np.array([0]), startBursts])
     
     if exceedThr[-1]:
-        endBursts = np.concatenate([endBursts, np.array[len(exceedThr) - 1]])
+        endBursts = np.concatenate([endBursts, np.array([len(exceedThr) - 1])])
     
     return startBursts, endBursts
 
@@ -222,18 +222,16 @@ def calc_bursts_from_env(
         # if one envelop -> create tuple with start- and end-indices
 
         # TODO: APPLY SMOOTHING
-        
+
 
 
         burst_starts, burst_ends = get_burst_indices(envelop, burst_thr)
 
     if not isinstance(burst_ends, np.ndarray):
-        return None, None, None, None
+        return 0, 0, 0, 0
     
     # calculate length all bursts (in samples)
     burst_lengths = burst_ends - burst_starts
-    print(burst_lengths)
-
 
     # count number of short and long bursts as defined
     n_short = sum(np.logical_and(

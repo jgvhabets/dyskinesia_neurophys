@@ -227,7 +227,8 @@ def define_OFF_ON_times(
     min_ON_minutes=45,
     max_ON_CDRS=5,
     incl_tasks='all',
-    labels_df=None
+    labels_df=None,
+    sub=None, data_version=None,
 ):
     """
     Finds binary medication moments OFF and ON, based on
@@ -271,11 +272,14 @@ def define_OFF_ON_times(
     
     # perform selection on task
     if incl_tasks != 'all':
-        assert isinstance(labels_df, DataFrame), (
-            'if time-windows need to be selected on '
-            'tasks, labels_df has to DataFrame resulting'
-            ' from load_acc_and_task()'
-        )
+        if not isinstance(labels_df, DataFrame):
+            _, labels_df = load_acc_and_task(
+                sub=sub, dataversion='v3.0',
+                resample_freq=500)
+            # if time-windows need to be selected on '
+            # tasks, labels_df has to DataFrame resulting'
+            #  from load_acc_and_task()'
+
         task_sel = select_task_in_features(
             ft_times=feat_times, label_df=labels_df,
             task=incl_tasks)
