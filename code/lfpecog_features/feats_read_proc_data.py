@@ -241,12 +241,8 @@ def load_stored_merged_data(
             col_names (list), and indices (floats)        
     """
     data_path = fileMng.get_project_path('data')
-    # set subject-spec pathbase
-    path = os.path.join(
-        data_path,
-        'merged_sub_data',
-        data_version,
-    )
+    path = os.path.join(data_path, 'merged_sub_data',
+                        data_version,)
     files = os.listdir(path)
     files = [f for f in files if sub in f]
 

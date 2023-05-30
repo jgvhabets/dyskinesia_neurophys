@@ -35,7 +35,7 @@ def subplot_cdrs(
     
     # Plot CDRS every 10 minutes
     try:
-        scores, _, _ = importClin.run_import_clinInfo(sub=sub)
+        scores = importClin.run_import_clinInfo(sub=sub)
         # check if scores are present
         if type(scores) == type(None):
             print(f'None CDRS-scores loaded for sub {sub}')

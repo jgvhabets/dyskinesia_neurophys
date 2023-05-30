@@ -21,6 +21,7 @@ def run_import_clinInfo(
     return_CDRS: bool = True,
     return_annotations: bool = False,
     return_tapTimes: bool = False,
+    cdrs_rater: str = 'Patricia',
     verbose=False,
 ):
     """
@@ -48,7 +49,7 @@ def run_import_clinInfo(
     
     if return_annotations:
         try:
-            annot_dict = read_annotations(sub, data_path)
+            annot_dict = read_annotations(sub, data_path=data_path,)
             if return_list: list_out.append(annot_dict)
             else: return annot_dict
         except:
@@ -57,7 +58,8 @@ def run_import_clinInfo(
     
     if return_CDRS:
         try:
-            scores = read_clinical_scores(sub, data_path)
+            scores = read_clinical_scores(sub, data_path=data_path,
+                                          rater=cdrs_rater)
             # delete Nan Columns from scoring administration
             for c in ['dopa_time_hhmmss', 'video_starttime',
                       'video_name', 'video_time']:
@@ -131,7 +133,7 @@ def extract_video_tapTimes(
                 f'{event}_time'].reset_index(
                 drop=True)[0
             ]
-            if t[-1] == "'": t = t[:-1]  # delete redundant "'" froim xlsx-string
+            if t[-1] == "'": t = t[:-1]  # delete redundant "'" from xlsx-string
             times[event] = dt.datetime.strptime(t, '%d-%m-%Y %H:%M')
 
         # video-start time relative to dopa-intake

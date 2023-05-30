@@ -71,7 +71,7 @@ if __name__ == '__main__':
         # save new class
         save_class_pickle(class_to_save=fullClass,
                           path=pickle_path,
-                          filename=f'{sub}_mergedDataClass_{data_version}_noEphys')
+                          filename=f'{sub}_mergedDataClass_{data_version}_noEphys.P')
         
         print(f'saved noEphys mergedData for sub {sub}')
         del(fullClass)

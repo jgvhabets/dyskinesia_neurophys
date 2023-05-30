@@ -88,10 +88,10 @@ if __name__ == '__main__':
 
     Output:
         - dataframe data/ index/ columnnames stored
-            in path: data/merged_sub_dfs/DATAVERSION/
+            in path: data/merged_sub_data/DATAVERSION/
     """
     # create separate pickles (mergedData) per LFP-L/R and ECOG
-    PICKLE_PER_SOURCE = True
+    PICKLE_PER_SOURCE = False  # False for MNE-MVC pipeline, true for SSD pipeline
     OVERWRITE = False  # if False, existing files are not new created and overwritten
 
     ### get and check variables out of run-command
@@ -212,7 +212,7 @@ if __name__ == '__main__':
                 class_to_save=merged_class,
                 path=join(get_project_path(), 'data',
                         'merged_sub_data', f'{DATA_VERSION}'),
-                filename=f'{SUB}_mergedDataClass_{DATA_VERSION}',
+                filename=f'{SUB}_mergedDataClass_{DATA_VERSION}.P',
             )
             print(f'...pickled new mergedData sub-{SUB}')
         

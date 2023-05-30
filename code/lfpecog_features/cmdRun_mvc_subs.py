@@ -31,6 +31,6 @@ if __name__ == '__main__':
         python -m lfpecog_features.cmdRun_mvc_subs "010" "012" "013"
     """
     for sub in sys.argv[1:]:
-        print(sub)
+        print(f'Multivariate connectivity feature extraction: sub {sub}')
         run_mvc_per_sub(sub)
 
