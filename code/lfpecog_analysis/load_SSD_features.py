@@ -60,7 +60,7 @@ class ssdFeatures:
                     self.data_version,
                     f'windows_{self.win_len_sec}s_'
                     f'{self.win_overlap_part}overlap')
-        assert exists(self.feat_path), f'feat_path ([{self.feat_path}]) does not exist'
+        assert exists(self.feat_path), f'feat_path ({self.feat_path}) does not exist'
         # take all available subjects from feature path if sub_list is not defined
         if self.sub_list == []:
             self.sub_list = list(set([name.split('_')[1]

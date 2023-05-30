@@ -220,11 +220,6 @@ def calc_bursts_from_env(
 
     else:
         # if one envelop -> create tuple with start- and end-indices
-
-        # TODO: APPLY SMOOTHING
-
-
-
         burst_starts, burst_ends = get_burst_indices(envelop, burst_thr)
 
     if not isinstance(burst_ends, np.ndarray):

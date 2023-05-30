@@ -288,53 +288,61 @@ def load_class_pickle(
 
     return output
 
-def convert_dtype_for_json(obj):
-    if isinstance(obj, ndarray): obj = list(obj)
-    elif isinstance(obj, float64): obj = float(obj)
-    elif isinstance(obj, int64): obj = int(obj)
 
-    return obj
-
-
-def make_dict_jsonable(d):
+def make_object_jsonable(obj):
     """
-    give dict (d) to convert content 
+    give object to convert content 
     to json-compatible datatypes (list instead
     of array, no np floats or integers)
     """
-    if isinstance(d, ndarray):
-        d = list(d)
-        # TODO
-        return d
-    elif isinstance(d, float64):
-        d = float(d)
-        return d
-    elif isinstance(d, int64):
-        d = int(d)
-        return d
+    if isinstance(obj, ndarray):
 
-    # create isinstance d, list
-    elif isinstance(d, dict):
-        for k in d.keys():
+        obj = list(obj)
+
+        new_list = []
+
+        for item in obj:
             
-            obj = d[k]
-            obj = convert_dtype_for_json(obj)
-            d[k] = obj
+            new_item = make_object_jsonable(item)
+            new_list.append(new_item)
+        
+        return new_list
+            
+    elif isinstance(obj, float64):
 
-            if isinstance(obj, list):
-                for i, obj2 in enumerate(obj):
-                    obj2 = convert_dtype_for_json(obj2)
-                    d[k][i] = obj2
+        obj = float(obj)
 
-            elif isinstance(obj, dict):
-                for k2 in obj.keys():
-                    obj2 = obj[k2]
-                    obj2 = convert_dtype_for_json(obj2)
-                    d[k][k2] = obj2
+        return obj
     
-        return d
+    elif isinstance(obj, int64):
 
-    return d
+        obj = int(obj)
+
+        return obj
+
+    elif isinstance(obj, dict):
+        
+        for k in obj.keys():
+            
+            item = obj[k]
+            new_item = make_object_jsonable(item)
+            obj[k] = new_item
+
+        return obj
+
+    elif isinstance(obj, list):
+        
+        new_list = []
+
+        for item in obj:
+            
+            new_item = make_object_jsonable(item)
+            new_list.append(new_item)
+        
+        return new_list
+
+
+    return obj
 
 
 def correct_acc_class(acc):
