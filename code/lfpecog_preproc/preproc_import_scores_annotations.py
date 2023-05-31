@@ -7,7 +7,7 @@ annotations for the dyskinesia-protocol
 # Import public packages and functions
 import os
 import numpy as np
-from pandas import read_excel, isna
+from pandas import read_excel, isna, DataFrame
 import datetime as dt
 from dataclasses import dataclass
 import json
@@ -289,43 +289,82 @@ def get_cdrs_specific(
         - times
         - scores
     """
-    scores = read_clinical_scores(sub, rater=rater)
-    times = scores['dopa_time']
+    if rater.capitalize() in ['Patricia', 'Jeroen']:
+        scores = read_clinical_scores(sub, rater=rater)
+        times = scores['dopa_time']
 
-    if side == 'both':
-        scores = scores['CDRS_total']
-    
-    elif np.logical_and(
-        'contra' in side.lower(),
-        'ecog' in side.lower()
-    ):
-        ecogside = get_ecog_side(sub)
-        if ecogside == 'left': side = 'right'
-        elif ecogside == 'right': side = 'left'
-        scores = scores[f'CDRS_total_{side}']
-    
-    elif np.logical_or(
-        side.lower() == 'left',
-        side.lower() == 'right',
-    ):
-        side = side.lower()
-        scores = scores[f'CDRS_total_{side}']
-    
-    else:
-        raise ValueError('side should be "left", '
-                '"right", "both" or "contra ecog"')
+        if side == 'both':
+            scores = scores['CDRS_total']
+        
+        elif np.logical_and(
+            'contra' in side.lower(),
+            'ecog' in side.lower()
+        ):
+            ecogside = get_ecog_side(sub)
+            if ecogside == 'left': side = 'right'
+            elif ecogside == 'right': side = 'left'
+            scores = scores[f'CDRS_total_{side}']
+        
+        elif np.logical_or(
+            side.lower() == 'left',
+            side.lower() == 'right',
+        ):
+            side = side.lower()
+            scores = scores[f'CDRS_total_{side}']
+        
+        else:
+            raise ValueError('side should be "left", '
+                    '"right", "both" or "contra ecog"')
 
-    if regularize:
-        og_scores = traces.TimeSeries()
-        for t, s in zip(times, scores):
-            og_scores[t] = s  # add times and scores
-        # interpolate to a score every minute
-        reg_scores = np.array(og_scores.sample(sampling_period=1,
-                              start=int(min(times)), end=int(max(times)),
-                              interpolate='linear'))
-        nan_sel = isna(reg_scores[:, 1])  # remove None scores
-        reg_scores = reg_scores[~nan_sel]
-        times = reg_scores[:, 0]
-        scores = reg_scores[:, 1]
-    
-    return times, scores
+        if regularize:
+            og_scores = traces.TimeSeries()
+            for t, s in zip(times, scores):
+                og_scores[t] = s  # add times and scores
+
+            # interpolate to a score every minute
+            reg_scores = np.array(og_scores.sample(sampling_period=1,
+                                start=int(min(times)), end=int(max(times)),
+                                interpolate='linear'))
+            nan_sel = isna(reg_scores[:, 1])  # remove None scores
+            reg_scores = reg_scores[~nan_sel]
+
+            times = reg_scores[:, 0]
+            scores = reg_scores[:, 1]
+        
+        return times, scores
+
+    elif rater.capitalize() == 'Mean':
+
+        ext_times, ext_scores = {}, {}
+        ext_times['J'], ext_scores['J'] = get_cdrs_specific(
+            sub=sub, rater='Jeroen', side=side, regularize=True)
+        ext_times['P'], ext_scores['P'] = get_cdrs_specific(
+            sub=sub, rater='Patricia', side=side, regularize=True)
+
+        min_idx = np.arange(
+            min(min(ext_times['P']), min(ext_times['J'])),
+            max(max(ext_times['P']), max(ext_times['J'])) + 1
+        )
+
+        times_df = DataFrame(index=min_idx, columns=['P', 'J'])
+
+        for r in ['P', 'J']:
+            for i, t in enumerate(ext_times[r]):
+                times_df[r].loc[i] = ext_scores[r][i]
+        
+        times = times_df.index.values
+        times_nan = isna(times)
+        scores_nan = isna(times_df.values)
+
+        scores_nan = [(scores_nan[i, :] == [True, True]).all() for i in np.arange(len(scores_nan))]
+        
+        sel = np.logical_and(~times_nan, ~np.array(scores_nan))
+        times = times[sel]
+        scores = times_df.values[sel]
+
+
+        scores = np.nanmean(scores, axis=1)
+
+        print(sub, times, scores)
+
+        return times, scores
