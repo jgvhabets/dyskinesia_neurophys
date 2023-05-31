@@ -365,6 +365,6 @@ def get_cdrs_specific(
 
         scores = np.nanmean(scores, axis=1)
 
-        print(sub, times, scores)
+        # print(sub, times, scores)
 
         return times, scores
