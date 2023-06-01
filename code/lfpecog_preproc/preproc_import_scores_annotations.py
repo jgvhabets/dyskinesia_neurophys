@@ -294,15 +294,25 @@ def get_cdrs_specific(
         times = scores['dopa_time']
 
         if side == 'both':
+            # take total (INCL AXIAL SCORES)
             scores = scores['CDRS_total']
         
         elif np.logical_and(
             'contra' in side.lower(),
             'ecog' in side.lower()
         ):
+            # take CORRESPONDING BODY SIDE to ECOG
             ecogside = get_ecog_side(sub)
             if ecogside == 'left': side = 'right'
             elif ecogside == 'right': side = 'left'
+            scores = scores[f'CDRS_total_{side}']
+        
+        elif np.logical_and(
+            'ipsi' in side.lower(),
+            'ecog' in side.lower()
+        ):
+            # take NONE-CORRESPONDING BODY SIDE to ECOG
+            side = get_ecog_side(sub)
             scores = scores[f'CDRS_total_{side}']
         
         elif np.logical_or(
