@@ -127,8 +127,6 @@ def perform_prediction(
             perm_conf_pred[i_perm] = y_pred_conf_all
 
             # calculate False and True Positive Rates for Rec Oper Curve
-            print(y_true_all)
-            print(X_test.shape)
             fpr, tpr, _ = roc_curve(y_true_all, y_pred_conf_all)
             # resample both for averaging later
             # tpr = resample(tpr, num=100)
