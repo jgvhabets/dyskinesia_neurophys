@@ -4,6 +4,7 @@ Predict Helpers
 
 # import functions
 import numpy as np
+from pandas import DataFrame
 from scipy.signal import resample
 
 # import cross-validation functions
@@ -20,6 +21,7 @@ from sklearn.metrics import (
     auc, roc_curve, RocCurveDisplay
 )
 
+import matplotlib.pyplot as plt
 
 def perform_prediction(
     X, y, groups, cv_method, clf_method,
@@ -29,7 +31,9 @@ def perform_prediction(
     perm_return_ROC: bool = False,
     perm_return_labels: bool = False,
     return_dict_per_sub: bool = False,
+    ft_names = None,  # only needed for ft-importance
     verbose: bool = False,
+    plot_importances: bool = False,
 ):
     # dict to store results per random-permutation
     perm_y_true, perm_y_pred, perm_conf_pred = {}, {}, {}
@@ -45,6 +49,7 @@ def perform_prediction(
 
     # create dict to store subject-specific results
     sub_results = {}
+    if not perform_random_perm: importance_list = []
 
     for i_perm in np.arange(n_perms):
         # set random state    
@@ -75,17 +80,15 @@ def perform_prediction(
                     np.random.shuffle(
                         y_shf[sub_indices[n_sub]:sub_indices[n_sub + 1]]
                     )
-                    y_train = y_shf[train_index]
-
-                
+                y_train = y_shf[train_index]
 
             
             if cv_method == LeaveOneGroupOut:
                 test_sub = groups[test_index[0]]
                 sub_results[test_sub] = {}
                 if verbose:
-                    print(f'FOLD # {F}')
-                    print(f'\tfold tests sub-{test_sub}')
+                    print(f'\n ######## FOLD {F} ########')
+                    if cv_method == LeaveOneGroupOut: print(f'\tfold tests sub-{test_sub}')
                     print(f'\t# of samples: train {len(X_train)}, test {len(X_test)}')
             
             # fit model
@@ -96,6 +99,8 @@ def perform_prediction(
             conf_scores[F] = clf.decision_function(X=X_test)
             y_true_dict[F] = y_test
 
+            if not perform_random_perm: importance_list.append(clf.coef_[0])
+
             # store per subject if defined
             if return_dict_per_sub and cv_method == LeaveOneGroupOut:
                 sub_results[test_sub]['proba'] = y_proba_dict[F]
@@ -103,11 +108,30 @@ def perform_prediction(
                 sub_results[test_sub]['true'] = y_true_dict[F]
 
             # show metrics
-            if verbose:
-                print(
-                    f'\n ######## FOLD {F} ########',
-                    classification_report(y_test, y_pred_dict[F])
-                )
+            if verbose and not perform_random_perm:
+
+                print(classification_report(y_test, y_pred_dict[F]))
+                # plot feature importance for current model
+                assert isinstance(ft_names, list), ('ft_names should be defined '
+                                                    'for ft-importance-plot')
+                assert len(ft_names) == X_train.shape[1], ('ft_names should have'
+                                                           ' size of X')
+                
+                
+                if plot_importances:
+                    importances = DataFrame(data={'Feature': ft_names,
+                                              'Importance': clf.coef_[0]})
+                    importances = importances.sort_values(by='Importance',
+                                                        ascending=False)
+                    plt.figure(figsize=(len(ft_names) // 2, 8))
+                    plt.bar(x=importances['Feature'], height=importances['Importance'],
+                            color='#087E8B')
+                    plt.title('Feature importances obtained from'
+                            f' coefficients {clf_method}',
+                            size=20)
+                    plt.xticks(rotation=45, ha='right', fontsize=14)
+                    plt.tick_params(axis='both', size=14, labelsize=14)
+                    plt.show()
 
         # merge CROSSVAL outcomes
         y_true_all, y_pred_all, y_pred_conf_all = [], [], []
@@ -117,8 +141,14 @@ def perform_prediction(
 
         # directly return the results if there is no permutation ongoing
         if not perform_random_perm:
-            if return_dict_per_sub: return sub_results
-            else: return y_true_all, y_pred_all, y_pred_conf_all
+
+            importance_df = DataFrame(importance_list, columns=ft_names)
+
+            if return_dict_per_sub:
+                return sub_results, importance_df
+            
+            else:
+                return y_true_all, y_pred_all, y_pred_conf_all, importance_df
         
         # gather permutation results in dict
         else:
@@ -136,6 +166,8 @@ def perform_prediction(
 
     if perm_return_labels: return perm_y_true, perm_y_pred, perm_conf_pred
     elif perm_return_ROC: return perm_tpr, perm_fpr
+
+
 
 def get_crossVal_split(
     cv_method: str, X, y,
