@@ -54,7 +54,7 @@ def get_idx_discardNonEcogLid(
 
 def load_feature_df_for_pred(
     sub, INCL_POWER: bool, INCL_COH_UNILAT: bool,
-    sel_bandwidths = 'all',
+    sel_bandwidths = 'all', sel_source = 'all',
 ):
     # load all features
     fts = ssdFeatures(sub_list=[sub],)
@@ -91,13 +91,31 @@ def load_feature_df_for_pred(
     if max(feat_sel.index) > 120: feat_sel.index = feat_sel.index / 60
 
     # select specific bandwidths
-    if not sel_bandwidths == 'all':
+    if sel_bandwidths != 'all' and sel_bandwidths != ['all']:
+        sel_array = np.array([False] * feat_sel.shape[1])
         for bw in sel_bandwidths:
+            # select based on current bandwidth and add to total selector
             sel = [bw in k for k in feat_sel.keys()]
-            feat_sel = DataFrame(data=feat_sel.values[:, sel],
-                        columns=list(compress(feat_sel.keys(), sel)),
-                        index=feat_sel.index)
-            print(f'\tsub-{sub}, MERGED FEATS SHAPE after {bw} selection: {feat_sel.shape}')
+            sel_array += np.array(sel)
+
+        # keep selected columns in feature df
+        feat_sel = DataFrame(data=feat_sel.values[:, sel_array],
+                    columns=feat_sel.keys()[sel_array],
+                    index=feat_sel.index)
+        print(f'\tsub-{sub}, MERGED FEATS SHAPE after {sel_bandwidths} selection: {feat_sel.shape}')
+    
+    # select specific feature sources
+    if sel_source != 'all' and sel_source != 'both':
+        assert sel_source in ['lfp', 'ecog'], 'incorrect source'
+
+        # select based on current bandwidth and add to total selector
+        sel_array = np.array([sel_source in k for k in feat_sel.keys()])
+        # keep selected columns in feature df
+        feat_sel = DataFrame(data=feat_sel.values[:, sel_array],
+                    columns=feat_sel.keys()[sel_array],
+                    index=feat_sel.index)
+        print(f'\tsub-{sub}, MERGED FEATS SHAPE after {sel_source} selection: {feat_sel.shape}')
+        print(f'\tIncluded feats for {sel_source}: {feat_sel.keys()}')
 
     return feat_sel
 
