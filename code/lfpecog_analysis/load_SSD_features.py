@@ -51,12 +51,19 @@ class ssdFeatures:
 
     def __post_init__(self,):
         # load feature extraction settings
-        extract_settings = load_ft_ext_cfg(cfg_fname=self.settings_json)
+        ftExtract_settings = load_ft_ext_cfg(cfg_fname=self.settings_json)
+
+        # adjust SSD destination folder to SSD-flank-definition
+        try: ssd_flanks = ftExtract_settings['SSD_flanks']
+        except: ssd_flanks = 'narrow'
+
+        if ssd_flanks == 'broadband': ssd_folder = 'SSD_feats_broad'
+        else: ssd_folder = 'SSD_feats'
 
         # define feature path and check existence
         self.feat_path = join(get_project_path('results'),
                     'features',
-                    'SSD_feats',
+                    ssd_folder,
                     self.data_version,
                     f'windows_{self.win_len_sec}s_'
                     f'{self.win_overlap_part}overlap')
@@ -74,7 +81,7 @@ class ssdFeatures:
                     f'sub{sub}',
                     ssdFeats_perSubject(sub=sub, feat_path=self.feat_path,
                                         settings=keywords,
-                                        extract_settings=extract_settings),)
+                                        ftExtract_settings=ftExtract_settings),)
             
 
 
@@ -83,7 +90,7 @@ class ssdFeats_perSubject:
     sub: str = 'default'  # default given to prevent inheritance error
     feat_path: str = 'default'
     settings: dict = field(default_factory=lambda: {})
-    extract_settings: dict = field(default_factory=lambda: {})
+    ftExtract_settings: dict = field(default_factory=lambda: {})
     verbose: bool = False
 
     def __post_init__(self,):
@@ -103,17 +110,17 @@ class ssdFeats_perSubject:
         
         if self.settings['incl_localPAC']:
             if self.verbose: print(f'load local PAC - {self.sub}')
-            pac_freqs = self.extract_settings['FEATS_INCL']['local_PAC_freqs']
+            pac_freqs = self.ftExtract_settings['FEATS_INCL']['local_PAC_freqs']
             self.localPAC = load_ssd_localPAC(self.sub, feat_path=self.feat_path,
                                               pac_freqs=pac_freqs,
-                                              extr_settings=self.extract_settings)
+                                              extr_settings=self.ftExtract_settings)
         
         if self.settings['incl_coherence']:
             if self.verbose: print(f'TODO: load COHERENCES - {self.sub}')
             self.coherences = load_ssd_coherences(
                 self.sub,
                 feat_path=self.feat_path,
-                bandwidths=self.extract_settings['SPECTRAL_BANDS'].keys()
+                bandwidths=self.ftExtract_settings['SPECTRAL_BANDS'].keys()
             )
 
         

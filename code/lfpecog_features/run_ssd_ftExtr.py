@@ -29,10 +29,17 @@ if __name__ == '__main__':
     INCL_ECOG = True
     SETTINGS = load_ft_ext_cfg(json_fname)
 
+    # adjust SSD destination folder to SSD-flank-definition
+    try: ssd_flanks = SETTINGS['SSD_flanks']
+    except: ssd_flanks = 'narrow'
+
+    if ssd_flanks == 'broadband': ssd_folder = 'SSD_feats_broad'
+    else: ssd_folder = 'SSD_feats'
+
     ### Define paths
     feat_path = join(get_project_path('results'),
                     'features',
-                    'SSD_feats',
+                    ssd_folder,
                     SETTINGS["DATA_VERSION"],
                     f'windows_{SETTINGS["WIN_LEN_sec"]}s_'
                     f'{SETTINGS["WIN_OVERLAP_part"]}overlap')
@@ -51,8 +58,10 @@ if __name__ == '__main__':
             ephys_sources.extend(['lfp_left', 'lfp_right'])
 
         # load or create SSD windows for subject
-        sub_SSD = get_subject_SSDs(sub=sub, settings=SETTINGS,
-                                   incl_ecog=INCL_ECOG, incl_stn=INCL_STN)
+        sub_SSD = get_subject_SSDs(sub=sub,
+                                   settings=SETTINGS,
+                                   incl_ecog=INCL_ECOG,
+                                   incl_stn=INCL_STN)
 
         # Extract local spectral power features
         if SETTINGS['FEATS_INCL']['TO_EXTRACT_POWERS']:

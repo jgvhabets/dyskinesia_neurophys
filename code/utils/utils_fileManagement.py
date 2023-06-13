@@ -265,10 +265,16 @@ def load_class_pickle(
         - output: variable containing the class
     """
 
-    with open(file_to_load, 'rb') as f:
-        output = pickle.load(f)
-        f.close()
-    
+    try:
+        with open(file_to_load, 'rb') as f:
+            output = pickle.load(f)
+            f.close()
+    except:
+        print(f'ERROR while pickle loading of {file_to_load}')
+        with open(file_to_load, 'rb') as f:
+            output = pickle.load(f)
+            f.close()
+
     # if times is just indices 0,1,2,...
     if 'times' in vars(output).keys():
         if (output.times[:5] == arange(5)).all():

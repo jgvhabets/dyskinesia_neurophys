@@ -73,14 +73,17 @@ def get_SSD_component(
             assert c < data_2d.shape[1], (
                 'return_comp_n cannot be larger than n-channels'
             )
-    
 
+    # set bandrange of interest    
     freqOfInt_range = np.r_[fband_interest]
-    flank_range = np.r_[freqOfInt_range[0] - flank_distance,
-                        freqOfInt_range[1] + flank_distance]
+    # set bandrange of flanks (SSD values of interest are normalized versus the full flank and bw-of-int)
+    if flank_distance == 'broadband':
+        flank_range = np.r_[4, 198]
+    else:
+        flank_range = np.r_[freqOfInt_range[0] - flank_distance,
+                            freqOfInt_range[1] + flank_distance]
     # correct negative freq-values to 1 Hz
-    if (flank_range < 1).any(): flank_range[flank_range < 1] = 1
-
+    flank_range[flank_range < 1] = 1
 
     # filter signals for SSD
     interestBand_filt = meet.iir.butterworth(data_2d, fp=freqOfInt_range,
@@ -125,27 +128,26 @@ class SSD_bands_per_window:
     """
     Store SSD filtered timeseries per freq-band,
     is used per window
-    TO DO: add functionality for several windows
-        optional: current version for one window
-        create 2d array for each freqband with n-windows and n-samples
-        attr data contains the 2d array, attr times contains the times
-        attr s_rate the fs
 
     - data: 2d array n-channels x n-samples
     - s_rate: sampling rate
     - freq_bands_incl: dict like {'alpha': [4, 8],
         'lo_beta': [12, 20], etc}
+    - ssd_flanks: either the width in Hz, or 'broadband'
+        which defines the flanks always between 4 and 198 Hz
     """
     data: np.ndarray
     s_rate: int
     freq_bands_incl: dict
+    ssd_flanks = 5
 
     def __post_init__(self,):
         for f_band in self.freq_bands_incl.keys():
             ssd_ts, _, _ = get_SSD_component(
                 data_2d=self.data,
                 fband_interest=self.freq_bands_incl[f_band],
-                s_rate=self.s_rate
+                s_rate=self.s_rate,
+                flank_distance=self.ssd_flanks,
             )
             setattr(self, f_band, ssd_ts)
 
@@ -183,6 +185,7 @@ class SSD_bands_windowed:
                 setattr(self, fband, data[:, i_f, :])  # [n-windows x n-samples]
             self.times = meta['timestamps']
             self.fs = meta['fs']
+            if 'ssd_flanks' in list(meta.keys()): self.flanks = meta['ssd_flanks']
         
         # create data if not found
         except FileNotFoundError:
@@ -228,6 +231,13 @@ def load_windowed_ssds(sub, dType, settings: dict):
                     settings['DATA_VERSION'],
                     f'sub-{sub}')
     ssd_win_fname = f'SSD_windowedBands_{sub}_{dType}'
+
+    try:
+        if settings['SSD_flanks'] == 'broadband':
+            ssd_win_fname = f'broad{ssd_win_fname}'
+    except:
+        ssd_win_fname=ssd_win_fname
+
     meta_f = join(win_path, ssd_win_fname + '.json')
     data_f = join(win_path, ssd_win_fname + '.npy')
     
@@ -300,6 +310,11 @@ class create_SSDs():
             SETTINGS = load_ft_ext_cfg(self.ft_setting_fname)
         else:
             SETTINGS = self.settings
+        # define SSD flank setting
+        try:
+            SSD_FLANKS = SETTINGS['SSD_flanks']
+        except:
+            SSD_FLANKS = 5
         
         # define ephys_sources
         self.ephys_sources = []
@@ -326,6 +341,8 @@ class create_SSDs():
         for dType in self.ephys_sources:
             print(f'\n\tstart create SSDs: {dType}')
             ssd_windows_name = f'SSD_windowedBands_{self.sub}_{dType}'
+            # add broadband flanks to SSD-naming
+            if SSD_FLANKS == 'broadband': ssd_windows_name = f'broad{ssd_windows_name}'
             # check existence of ssd windowed data
             if (SETTINGS['OVERWRITE_DATA'] == False and
                 exists(join(windows_path, ssd_windows_name+'.json')) and
@@ -341,7 +358,7 @@ class create_SSDs():
             # Create windowed SSDd data 
             print('create windowed ssd data...')
 
-            # define path for windows of dType
+            # define path for windowed preprocessed data of dType
             dType_fname = (f'sub-{self.sub}_windows_'
                            f'{SETTINGS["WIN_LEN_sec"]}s_'
                            f'{SETTINGS["DATA_VERSION"]}_{dType}.P')
@@ -419,6 +436,7 @@ class create_SSDs():
                             data_2d=win_dat.T,
                             fband_interest=f_range,
                             s_rate=windows.fs,
+                            flank_distance=SSD_FLANKS,
                             use_freqBand_filtered=True,
                             return_comp_n=0,
                         )
@@ -453,11 +471,13 @@ class create_SSDs():
                 meta = {'npy_filename': ssd_windows_name,
                         'fs': windows.fs,
                         'bandwidths': SETTINGS['SPECTRAL_BANDS'],
+                        'ssd_flanks': SSD_FLANKS,
                         'timestamps': windows.win_starttimes}
                 
                 with open(join(windows_path, ssd_windows_name+'.json'), 'w') as f:
                     json.dump(meta, f)
                 
-                print(f'Saved SSD windowed data and meta for sub-{self.sub}'
-                  f' {dType} as {ssd_windows_name} in {windows_path}')
+                print(f'Saved SSD windowed data (SSD-flanks: {SSD_FLANKS})'
+                      f' and meta for sub-{self.sub}: {dType}'
+                      f' as {ssd_windows_name} in {windows_path}')
             

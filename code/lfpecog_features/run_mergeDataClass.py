@@ -90,8 +90,6 @@ if __name__ == '__main__':
         - dataframe data/ index/ columnnames stored
             in path: data/merged_sub_data/DATAVERSION/
     """
-    # create separate pickles (mergedData) per LFP-L/R and ECOG
-    PICKLE_PER_SOURCE = False  # False for MNE-MVC pipeline, true for SSD pipeline
     OVERWRITE = False  # if False, existing files are not new created and overwritten
 
     ### get and check variables out of run-command
@@ -116,7 +114,14 @@ if __name__ == '__main__':
         else:
             TO_SAVE = 'P'  # save as pickle
 
-
+    # create separate pickles (mergedData) per LFP-L/R and ECOG
+    if DATA_VERSION == 'v3.0':
+        PICKLE_PER_SOURCE = True  # true for SSD pipeline
+    elif DATA_VERSION == 'v3.1':
+        PICKLE_PER_SOURCE = False  # False for MNE-MVC pipeline
+    else:
+        raise ValueError(f'define PICKLE_PER_SOURCE info for dataversion: {DATA_VERSION}')
+    
     
     ### create dataclass with data per source as attribute
     # (lfp-L/R / ecog / acc-L/R) as dopaTimedDf Class
@@ -194,7 +199,7 @@ if __name__ == '__main__':
                               'merged_sub_data',
                               f'{DATA_VERSION}',
                               f'sub-{SUB}'),
-                    filename=f'{SUB}_mergedData_{DATA_VERSION}_{dType}',
+                    filename=f'{SUB}_mergedData_{DATA_VERSION}_{dType}.P',
                 )
                 print(f'...pickled mergedData sub-{SUB}: {dType}')
 
