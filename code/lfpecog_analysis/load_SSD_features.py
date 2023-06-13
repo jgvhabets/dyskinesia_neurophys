@@ -51,10 +51,10 @@ class ssdFeatures:
 
     def __post_init__(self,):
         # load feature extraction settings
-        ftExtract_settings = load_ft_ext_cfg(cfg_fname=self.settings_json)
+        self.ftExtract_settings = load_ft_ext_cfg(cfg_fname=self.settings_json)
 
         # adjust SSD destination folder to SSD-flank-definition
-        try: ssd_flanks = ftExtract_settings['SSD_flanks']
+        try: ssd_flanks = self.ftExtract_settings['SSD_flanks']
         except: ssd_flanks = 'narrow'
 
         if ssd_flanks == 'broadband': ssd_folder = 'SSD_feats_broad'
@@ -81,7 +81,7 @@ class ssdFeatures:
                     f'sub{sub}',
                     ssdFeats_perSubject(sub=sub, feat_path=self.feat_path,
                                         settings=keywords,
-                                        ftExtract_settings=ftExtract_settings),)
+                                        ftExtract_settings=self.ftExtract_settings),)
             
 
 
@@ -113,7 +113,7 @@ class ssdFeats_perSubject:
             pac_freqs = self.ftExtract_settings['FEATS_INCL']['local_PAC_freqs']
             self.localPAC = load_ssd_localPAC(self.sub, feat_path=self.feat_path,
                                               pac_freqs=pac_freqs,
-                                              extr_settings=self.ftExtract_settings)
+                                              ftExtract_settings=self.ftExtract_settings)
         
         if self.settings['incl_coherence']:
             if self.verbose: print(f'TODO: load COHERENCES - {self.sub}')
@@ -156,7 +156,7 @@ def load_ssd_powers(sub, feat_path):
 
 
 def load_ssd_localPAC(
-    sub, feat_path, pac_freqs, extr_settings
+    sub, feat_path, pac_freqs, ftExtract_settings
 ):
     """
     
@@ -191,12 +191,12 @@ def load_ssd_localPAC(
                     dat = np.load(join(feat_path, f), allow_pickle=True)
                 # get pac bins for phase and ampl
                 pha_bins = get_pac_bins(
-                    freq_range=extr_settings['SPECTRAL_BANDS'][pha_f],
-                    binwidth=extr_settings['FEATS_INCL']['PAC_binwidths']['phase']
+                    freq_range=ftExtract_settings['SPECTRAL_BANDS'][pha_f],
+                    binwidth=ftExtract_settings['FEATS_INCL']['PAC_binwidths']['phase']
                 )
                 amp_bins = get_pac_bins(
-                    freq_range=extr_settings['SPECTRAL_BANDS'][amp_f],
-                    binwidth=extr_settings['FEATS_INCL']['PAC_binwidths']['ampl']
+                    freq_range=ftExtract_settings['SPECTRAL_BANDS'][amp_f],
+                    binwidth=ftExtract_settings['FEATS_INCL']['PAC_binwidths']['ampl']
                 )
             assert len(times) == dat.shape[-1], (
                 f'loaded PACs times ({len(times)}) and data ({dat.shape})'
@@ -240,6 +240,7 @@ def load_ssd_coherences(
     for source in ['STN_STN', 'STN_ECOG']:
         COHs_per_bw = {}
         for bw in bandwidths:
+            print(f'load COH: {source}: {bw}')
 
             sel_files = [f for f in os.listdir(feat_path) if
                         sub in f and source in f and bw in f]

@@ -55,9 +55,12 @@ def get_idx_discardNonEcogLid(
 def load_feature_df_for_pred(
     sub, INCL_POWER: bool, INCL_COH_UNILAT: bool,
     sel_bandwidths = 'all', sel_source = 'all',
+    settings_json: str = 'ftExtr_spectral_v1.json',
 ):
     # load all features
-    fts = ssdFeatures(sub_list=[sub],)
+    fts = ssdFeatures(sub_list=[sub],
+                      settings_json=settings_json,)
+    incl_bws = list(fts.ftExtract_settings['SPECTRAL_BANDS'].keys())
     sub_fts = getattr(fts, f'sub{sub}')  # get sub-specific feature-class
 
     # create dataframe to store feature in
@@ -80,7 +83,8 @@ def load_feature_df_for_pred(
 
     # LOAD COHERENCES
     if INCL_COH_UNILAT:
-        coh_fts = select_coh_feats(sub_fts=sub_fts, coh_sides='STN_ECOG')
+        coh_fts = select_coh_feats(sub_fts=sub_fts, coh_sides='STN_ECOG',
+                                   incl_bandws=incl_bws,)
         print(f'\tsub-{sub}, COH FEATS SHAPE INCLUDED: {coh_fts.shape}')
         
         feat_sel = concat([feat_sel, coh_fts], axis=1, ignore_index=False)
@@ -120,9 +124,11 @@ def load_feature_df_for_pred(
     return feat_sel
 
 
-def select_coh_feats(sub_fts, coh_sides = 'STN_ECOG'):
+def select_coh_feats(
+    sub_fts, incl_bandws, coh_sides = 'STN_ECOG'
+):
 
-    for i_bw, bw in enumerate(['alpha', 'lo_beta', 'hi_beta', 'narrow_gamma']):
+    for i_bw, bw in enumerate(incl_bandws):
 
         for i_coh, coh_type in enumerate(['sq_coh', 'imag_coh']):
             
