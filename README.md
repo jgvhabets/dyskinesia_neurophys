@@ -13,6 +13,7 @@ from prof. Neumann.
   - `conda install mne-bids`
   - `conda install mne_connectivity` (NOT FOR MULTIVARIATE CONN ANALYSES)
   - `pip install traces` (for regularization of CDRS scores from different raters)
+  - `pip install gpboost`  (for generalized linear mixed effect models)
   - `pip install tensorpac`  (for PAC calculation)
 
   for the mne mvc analyses:

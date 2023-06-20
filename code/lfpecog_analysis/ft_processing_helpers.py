@@ -56,6 +56,7 @@ def load_feature_df_for_pred(
     sub, INCL_POWER: bool, INCL_COH_UNILAT: bool,
     sel_bandwidths = 'all', sel_source = 'all',
     settings_json: str = 'ftExtr_spectral_v1.json',
+    verbose: bool = False,
 ):
     # load all features
     fts = ssdFeatures(sub_list=[sub],
@@ -78,18 +79,18 @@ def load_feature_df_for_pred(
         # if necessary: convert to minutes to agree with CDRS score
         if max(power_fts.index) > 120: power_fts.index = power_fts.index / 60
         
-        print(f'\tsub-{sub}, POWER FEATS SHAPE INCLUDED: {power_fts.shape}')
+        if verbose: print(f'\tsub-{sub}, POWER FEATS SHAPE INCLUDED: {power_fts.shape}')
         feat_sel = concat([feat_sel, power_fts], axis=1, ignore_index=False)
 
     # LOAD COHERENCES
     if INCL_COH_UNILAT:
         coh_fts = select_coh_feats(sub_fts=sub_fts, coh_sides='STN_ECOG',
                                    incl_bandws=incl_bws,)
-        print(f'\tsub-{sub}, COH FEATS SHAPE INCLUDED: {coh_fts.shape}')
+        if verbose: print(f'\tsub-{sub}, COH FEATS SHAPE INCLUDED: {coh_fts.shape}')
         
         feat_sel = concat([feat_sel, coh_fts], axis=1, ignore_index=False)
     
-    print(f'\tsub-{sub}, MERGED FEATS SHAPE INCLUDED: {feat_sel.shape}')
+    if verbose: print(f'\tsub-{sub}, MERGED FEATS SHAPE INCLUDED: {feat_sel.shape}')
 
     # if necessary: convert to minutes to agree with CDRS score
     if max(feat_sel.index) > 120: feat_sel.index = feat_sel.index / 60
@@ -106,7 +107,7 @@ def load_feature_df_for_pred(
         feat_sel = DataFrame(data=feat_sel.values[:, sel_array],
                     columns=feat_sel.keys()[sel_array],
                     index=feat_sel.index)
-        print(f'\tsub-{sub}, MERGED FEATS SHAPE after {sel_bandwidths} selection: {feat_sel.shape}')
+        if verbose: print(f'\tsub-{sub}, MERGED FEATS SHAPE after {sel_bandwidths} selection: {feat_sel.shape}')
     
     # select specific feature sources
     if sel_source != 'all' and sel_source != 'both':
@@ -118,8 +119,8 @@ def load_feature_df_for_pred(
         feat_sel = DataFrame(data=feat_sel.values[:, sel_array],
                     columns=feat_sel.keys()[sel_array],
                     index=feat_sel.index)
-        print(f'\tsub-{sub}, MERGED FEATS SHAPE after {sel_source} selection: {feat_sel.shape}')
-        print(f'\tIncluded feats for {sel_source}: {feat_sel.keys()}')
+        if verbose: print(f'\tsub-{sub}, MERGED FEATS SHAPE after {sel_source} selection: {feat_sel.shape}')
+        if verbose: print(f'\tIncluded feats for {sel_source}: {feat_sel.keys()}')
 
     return feat_sel
 

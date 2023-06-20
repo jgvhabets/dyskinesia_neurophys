@@ -288,7 +288,7 @@ class get_subject_SSDs:
             )
             
 
-
+import matplotlib.pyplot as plt
 
 @dataclass(init=True, repr=True, )
 class create_SSDs():
@@ -410,14 +410,55 @@ class create_SSDs():
             ### empty list to store all SSD-bands per window
             ssd_arr_3d = []
 
+            NaN_accept_part = .33
+            n_samples_win = windows.fs * SETTINGS["WIN_LEN_sec"]
             # loop over windows
             for i_w, win_dat in enumerate(windows.data):
-
+                
                 win_dat = win_dat.astype(np.float64)
-                # select only rows without missings in current window
-                nan_rows = np.array([isna(win_dat[:, i]).any()
-                            for i in range(win_dat.shape[-1])])
-                win_dat = win_dat[:, ~nan_rows]
+                
+                if NaN_accept_part == 0:
+                    # select only rows without missings in current window
+                    nan_rows = np.array([isna(win_dat[:, i]).any()
+                                for i in range(win_dat.shape[-1])])
+                    win_dat = win_dat[:, ~nan_rows]
+                else:
+                    # select rows with less than threshold NaNs
+                    nan_rows_parts = np.array([sum(isna(win_dat[:, i])) / len(win_dat)
+                                for i in range(win_dat.shape[-1])])
+                    nan_rows = nan_rows_parts > NaN_accept_part
+                    win_dat = win_dat[:, ~nan_rows]
+                    # select out nan-timings
+                    i_nan = isna(win_dat).any(axis=1)
+                    win_dat = win_dat[~i_nan, :]
+
+                
+                # check data shape after nan-removal
+                # dont perform SSD on empty array
+                if win_dat.shape[1] == 0 or win_dat.shape[0] < NaN_accept_part:
+                    print(f'{dType}: window # {i_w} no NON-NAN data')
+                    i_nan = isna(windows.data[i_w]).any(axis=1)
+                    
+                    ssd_arr_2d = []
+                    # add nan-list for every bandwidth
+                    for i_temp in np.arange(len(SETTINGS['SPECTRAL_BANDS'])):
+                        ssd_arr_2d.append([np.nan] * n_samples_win)  # add nans if not converted
+                    # add all lists of window to 3d array
+                    ssd_arr_2d = np.array(ssd_arr_2d, dtype='object')  # convert list to 2d array
+                    ssd_arr_3d.append(ssd_arr_2d)
+
+                    # visualise window before nan-removal
+                    for i_row in np.arange(windows.data.shape[2]):
+                        plt.plot(windows.data[i_w, :, i_row],
+                                 label=windows.keys[i_row])
+                    plt.plot(i_nan.astype(int) * 2e-4,
+                             label='NAN')
+
+                    plt.legend()
+                    plt.title(f'window # {i_w}, removed due to NaNs')
+                    plt.show()
+                    # raise ValueError('DEBUG: after plot error')
+                    continue
 
                 # empty list to store ssd-signals for this window
                 ssd_arr_2d = []
@@ -440,11 +481,26 @@ class create_SSDs():
                             use_freqBand_filtered=True,
                             return_comp_n=0,
                         )
+                        if len(ssd_filt_data) < n_samples_win:
+                            n_pad = n_samples_win - len(ssd_filt_data)
+                            ssd_filt_data = np.concatenate([
+                                ssd_filt_data, [np.nan] * n_pad
+                            ])
+                            # TODO: remove NaNs in feature selection
+                        
                         ssd_arr_2d.append(ssd_filt_data)  # add band to current window
 
                     except ValueError:
                         print(f'{dType}: window # {i_w} failed on {bw}')
                         ssd_arr_2d.append([np.nan] * win_dat.shape[0])  # add nans if not converted
+
+                        # DEBUG: why SSD failed
+                        print(f'shpe of win_dat: {win_dat.shape}')
+                        print(f'win_dat nans or inf: {np.isnan(win_dat)}'
+                              f', max: {np.max(win_dat, axis=0)}'
+                              f', nan-max: {np.nanmax(win_dat, axis=0)}'
+                              )
+
                         continue
 
                 # End of window: add 2d-data of window to 3d overall list

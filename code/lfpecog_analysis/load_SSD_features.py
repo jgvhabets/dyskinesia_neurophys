@@ -48,6 +48,7 @@ class ssdFeatures:
     incl_powers: bool = True
     incl_localPAC: bool = True
     incl_coherence: bool = True
+    verbose: bool = False
 
     def __post_init__(self,):
         # load feature extraction settings
@@ -76,7 +77,7 @@ class ssdFeatures:
         keywords = vars(self)
 
         for sub in self.sub_list:
-            print(f'\nload SSDd features for sub-{sub}')
+            if self.verbose: print(f'\nload SSDd features for sub-{sub}')
             setattr(self,
                     f'sub{sub}',
                     ssdFeats_perSubject(sub=sub, feat_path=self.feat_path,
@@ -227,6 +228,7 @@ def load_ssd_coherences(
     bandwidths: list = ['alpha', 'lo_beta',
                         'hi_beta', 'narrow_gamma',
                         'broad_gamma'],
+    verbose: bool = False,
 ):
     scores_to_incl = []
     if incl_sq_coh: scores_to_incl.append('sq_coh')
@@ -240,7 +242,7 @@ def load_ssd_coherences(
     for source in ['STN_STN', 'STN_ECOG']:
         COHs_per_bw = {}
         for bw in bandwidths:
-            print(f'load COH: {source}: {bw}')
+            if verbose: print(f'load COH: {source}: {bw}')
 
             sel_files = [f for f in os.listdir(feat_path) if
                         sub in f and source in f and bw in f]
