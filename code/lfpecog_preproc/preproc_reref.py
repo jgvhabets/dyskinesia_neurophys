@@ -158,7 +158,7 @@ def reref_common_average(
         )
 
     if len(data.shape) == 3:
-### FIX timeRows
+        ### FIX timeRows
         newdata[:, 0, :] = data[:, 0, :]  # copy time rows
         for w in np.arange(data.shape[0]):  # loop over windows
             refdata = data[w, 1:, :].copy()
@@ -593,6 +593,85 @@ def reref_segm_contacts(
     return reref_data, reref_names, report
 
 
+def no_reref(
+    data: array,
+    lead: Any,
+    time_rowNames: list,
+    ephys_rowNames: list,
+    ephys_type: str,
+    report: str = '',
+    alternative_stn_naming: bool = False,
+):
+    """
+    Function to NOT digitally re-reference the channels.
+
+    Arguments:
+        - data (array): 3d or 2d data array with data
+            from one group (lfp R or L)
+        - lead: class with info of segmented contacts
+        per level
+        - timerowNames: list with 1 or 2 time col-names
+        - report (str): string to put in report file
+        - alternative_stn_naming: if True relative channel
+            -rereferencing coding is used
+
+    Returns:
+        - reref_data (array): rereferenced signals
+        - names (list): list with corresponding ch-names
+    """
+    if report:
+        report += (
+            f'\nSegmented LFP-rereferencing: {lead.name}'
+            f'({lead.side})\n\tchannels are returned '
+             'without re-referencing (segment or ring)\n\n'
+            f'present segment per level: {lead.levels_str}\n'
+        )
+    
+    if alternative_stn_naming: alt_name = True
+    else: alt_name = False
+
+    print(f'\n NO SEGMENTED REREFFF {lead.name} ({lead.side})')
+
+    array_names = time_rowNames + ephys_rowNames
+
+    # START reref data with time-rows
+    if len(data.shape) == 3:
+        reref_data = data[
+            :, :len(time_rowNames), :]
+
+    if len(data.shape) == 2:
+        reref_data = data[
+            :len(time_rowNames), :]
+
+    reref_names = time_rowNames
+
+    for ind_l, l in enumerate(lead.levels_str.keys()):  # loop over level
+        print(ind_l, l)
+        level_chs = lead.levels_str[l]  # channelnames in row
+        
+        if report: report += (f'\nAdding unrerefd level {l}, containing {level_chs}')
+        
+        # skip if not consisting any channel
+        if len(level_chs) == 0: continue
+
+        for ch_name in level_chs:
+            index = np.where([ch_name in n for n in array_names])[0][0]
+            ch_data = data[index, :]
+
+            reref_data = np.vstack([reref_data, ch_data])
+            reref_names.append(ch_name)
+
+            if report: report += (f'\n\t{ch_name} --> {ch_name}')
+            
+    if report:
+        report += (
+            f'\nResulting reref"d channel names: {reref_names}\n\t'
+            f'{len(reref_names)} channels, data is shape {reref_data.shape}\n'
+        )
+
+
+    return reref_data, reref_names, report
+
 def main_rereferencing(
     dataDict: dict,
     chNameDict,
@@ -691,6 +770,8 @@ def main_rereferencing(
                 reref_function = reref_segm_levels
             elif reref_setup[ephys_type] == 'segments':
                 reref_function = reref_segm_contacts
+            elif reref_setup[ephys_type] in ['no', 'none']:
+                reref_function = no_reref
 
             rerefData[group], rerefNames[group], report = reref_function(
                 data=dataDict[group],
