@@ -29,6 +29,9 @@ from utils.utils_fileManagement import (
     load_class_pickle, save_class_pickle,
     load_ft_ext_cfg
 )
+from lfpecog_features.feats_helper_funcs import (
+    check_matrix_properties, regularize_matrix
+)
 
 def get_SSD_component(
     data_2d, fband_interest, s_rate,
@@ -303,6 +306,8 @@ class create_SSDs():
     incl_stn: bool = True
     use_stored_windows: bool = True
     save_ssd_windows: bool = True
+    check_matrix: bool = False
+    MATRIX_REGULARIZATION: bool = False
     
     def __post_init__(self,):
         ### load settings from json
@@ -356,7 +361,7 @@ class create_SSDs():
                 continue
             
             # Create windowed SSDd data 
-            print('create windowed ssd data...')
+            print('\tcreate windowed ssd data...')
 
             # define path for windowed preprocessed data of dType
             dType_fname = (f'sub-{self.sub}_windows_'
@@ -367,7 +372,7 @@ class create_SSDs():
             # check if windows are already available
             if np.logical_and(self.use_stored_windows,
                               exists(dType_win_path)):
-                print(f'load data from {windows_path}....')
+                print(f'\tload data from {windows_path}....')
                 windows = load_class_pickle(dType_win_path)
                 print(f'\tWINDOWS LOADED from {dType_fname} in {windows_path}')
 
@@ -416,12 +421,14 @@ class create_SSDs():
             for i_w, win_dat in enumerate(windows.data):
                 
                 win_dat = win_dat.astype(np.float64)
-                
+                # print(f'start win # {i_w}, win_dat shape: {win_dat.shape}')
+
                 if NaN_accept_part == 0:
                     # select only rows without missings in current window
                     nan_rows = np.array([isna(win_dat[:, i]).any()
                                 for i in range(win_dat.shape[-1])])
                     win_dat = win_dat[:, ~nan_rows]
+                    # if sum(nan_rows) > 0: print(f'{sum(nan_rows)} rows deleted')
                 else:
                     # select rows with less than threshold NaNs
                     nan_rows_parts = np.array([sum(isna(win_dat[:, i])) / len(win_dat)
@@ -431,6 +438,7 @@ class create_SSDs():
                     # select out nan-timings
                     i_nan = isna(win_dat).any(axis=1)
                     win_dat = win_dat[~i_nan, :]
+                    # if sum(i_nan) > 0: print(f'{sum(i_nan)} indices deleted')
 
                 
                 # check data shape after nan-removal
@@ -464,12 +472,21 @@ class create_SSDs():
                 ssd_arr_2d = []
                 
                 ### CALCULATE SSD timeseries per band
-
+                
+                if self.check_matrix:
+                    check_matrix_properties(M=win_dat, verbose=True)
+                    # if self.MATRIX_REGULARIZATION:
+                    #     win_dat = regularize_matrix(M=win_dat, lasso_alpha=.1,)
+                    #     check_matrix_properties(M=win_dat, verbose=True)
+    
+                        
+                
                 # loop over defined frequency bands
                 for bw in SETTINGS['SPECTRAL_BANDS']:
                     f_range = SETTINGS['SPECTRAL_BANDS'][bw]
                     
                     try:
+                        # print(f'\tSSD for {bw}')
                         (ssd_filt_data,
                             ssd_pattern,
                             ssd_eigvals
@@ -486,16 +503,17 @@ class create_SSDs():
                             ssd_filt_data = np.concatenate([
                                 ssd_filt_data, [np.nan] * n_pad
                             ])
+                            # print(f'padded n={n_pad}')
                             # TODO: remove NaNs in feature selection
                         
                         ssd_arr_2d.append(ssd_filt_data)  # add band to current window
 
                     except ValueError:
-                        print(f'{dType}: window # {i_w} failed on {bw}')
+                        print(f'{dType}: SSD in window # {i_w} failed on {bw}')
                         ssd_arr_2d.append([np.nan] * win_dat.shape[0])  # add nans if not converted
 
                         # DEBUG: why SSD failed
-                        print(f'shpe of win_dat: {win_dat.shape}')
+                        print(f'shape of win_dat: {win_dat.shape}')
                         print(f'win_dat nans or inf: {np.isnan(win_dat)}'
                               f', max: {np.max(win_dat, axis=0)}'
                               f', nan-max: {np.nanmax(win_dat, axis=0)}'

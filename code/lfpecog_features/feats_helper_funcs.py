@@ -125,22 +125,49 @@ def smoothing(
     return sig
     
 
-# sig = accDat['40'].On
-# dfsig = np.diff(sig)
+def check_matrix_properties(M, verbose=True):
+    """
+    Input:
+        - M: np.ndarray, to check
+    """
+    # Check if the matrix is singular
+    rank = np.linalg.matrix_rank(M)
+    if verbose: print(f'shape {M.shape}, rank: {rank}')
+    
+    # Compute the singular values
+    singular_values = np.linalg.svd(M, compute_uv=False)
+    
+    # Check the magnitude of the smallest singular value
+    smallest_singular_value = singular_values[-1]
+    tolerance = 1e-6  # Define a tolerance for singularity
+    # calculate condition number
+    condition_number = np.max(singular_values) / np.min(singular_values)
+    if verbose: print(f'matrix-condition number is {condition_number}')
+    
+    if smallest_singular_value < tolerance:
+        if verbose:
+            print('The matrix is nearly singular (smallest '
+                  f'sing-value: {smallest_singular_value}).')
 
-# kernel_size = 10
-# kernel = np.ones(kernel_size) / kernel_size
-# sigSm = np.convolve(sig, kernel, mode='same')
-# dfSm = np.convolve(dfsig, kernel, mode='same')
 
-# count = 0
-# for i, df in enumerate(dfSm[1:]):
-#     if df * dfSm[i] < 0: count += 1
+from sklearn.linear_model import Lasso
+from sklearn.preprocessing import StandardScaler
 
-# plt.plot(sigSm)
-# plt.plot(dfSm)
+def regularize_matrix(M, lasso_alpha=1e-3,):
+    """
+    """
 
-# plt.xlim(1000, 1500)
+    # Perform column-wise Lasso regularization
+    lasso = Lasso(alpha=lasso_alpha)  # Specify the regularization strength (alpha)
+    scaler = StandardScaler()
 
+    M_regularized = np.zeros_like(M)
 
-# print(count)
+    for i in range(M.shape[1]):
+        column = M[:, i]
+        column_scaled = scaler.fit_transform(column.reshape(-1, 1))  # Reshape to a column vector and scale
+        lasso.fit(column_scaled, column_scaled)  # Perform Lasso regularization
+        column_regularized = lasso.coef_.flatten()  # Retrieve the regularized column
+        M_regularized[:, i] = column_regularized
+    
+    return M_regularized

@@ -92,8 +92,12 @@ class extract_local_SSD_powers():
                         feats_win.extend([np.nan] * n_spec_feats)
                         continue
 
+                    ssd_signal = getattr(data, bw)[i_w].copy()
+                    # remove NaNs padded to SSD timeseries in create_SSDs()
+                    ssd_signal = ssd_signal[~isna(ssd_signal)]
+
                     # Convert SSD'd signal into Power Spectrum
-                    f, psd = welch(getattr(data, bw)[i_w], axis=-1,
+                    f, psd = welch(ssd_signal, axis=-1,
                                     nperseg=data.fs, fs=data.fs)
                     f_sel = [f_range[0] < freq < f_range[1] for freq in f]  # select psd in freq of interest
 
@@ -103,7 +107,7 @@ class extract_local_SSD_powers():
                         if fts_incl[ft_name] and ft_name.startswith('SSD_'):
                             # get value from function corresponding to ft-name
                             ft_func = getattr(specFeats.Spectralfunctions(
-                                psd=psd, ssd_sig=getattr(data, bw)[i_w],
+                                psd=psd, ssd_sig=ssd_signal,
                                 f=f, f_sel=f_sel
                             ), f'get_{ft_name}')
                             feats_win.append(ft_func())
@@ -125,6 +129,8 @@ class extract_local_SSD_powers():
 class extract_bursts():
     """
     Extract bursts from SSD-d data
+
+    #TODO: ADD AND IMPLEMENT BURST FUNCTION
     """
     sub: str
     sub_SSD: str
@@ -140,7 +146,7 @@ class extract_bursts():
         
         # loop over possible datatypes
         for dType in self.ephys_sources:
-            print(f'\n\tstart ({dType}) extracting local SSD powers')
+            print(f'\n\tstart ({dType}) extracting bursts')
             data = getattr(self.sub_SSD, dType)  # assign datatype data
             # check if features already exist
             feat_fname = f'SSDfeats_{self.sub}_{dType}_local_spectralFeatures.csv'
@@ -177,8 +183,12 @@ class extract_bursts():
                         feats_win.extend([np.nan] * n_spec_feats)
                         continue
 
+                    ssd_signal = getattr(data, bw)[i_w].copy()
+                    # remove NaNs padded to SSD timeseries in create_SSDs()
+                    ssd_signal = ssd_signal[~isna(ssd_signal)]
+
                     # Convert SSD'd signal into Power Spectrum
-                    f, psd = welch(getattr(data, bw)[i_w], axis=-1,
+                    f, psd = welch(ssd_signal, axis=-1,
                                     nperseg=data.fs, fs=data.fs)
                     f_sel = [f_range[0] < freq < f_range[1] for freq in f]  # select psd in freq of interest
 
@@ -188,7 +198,7 @@ class extract_bursts():
                         if fts_incl[ft_name] and ft_name.startswith('SSD_'):
                             # get value from function corresponding to ft-name
                             ft_func = getattr(specFeats.Spectralfunctions(
-                                psd=psd, ssd_sig=getattr(data, bw)[i_w],
+                                psd=psd, ssd_sig=ssd_signal,
                                 f=f, f_sel=f_sel
                             ), f'get_{ft_name}')
                             feats_win.append(ft_func())
@@ -247,7 +257,7 @@ class extract_local_SSD_PACs:
                     print(f'...\tlocal PAC already exist for {dType} '
                           f'{pha}_{ampl} and are NOT overwritten, skip!')
                     continue
-
+                
                 # calculate 3d array with pac values (n-windows, n-ampl, n-phase bins)
                 pac_values, pac_times = calculate_PAC_matrix(
                     sig_pha=getattr(data, pha),
@@ -363,7 +373,7 @@ def calculate_coherence_per_band(
     seed_windows = getattr(seed_data, band_name).astype(np.float64)
     seed_times = seed_data.times
     target_windows = getattr(target_data, band_name).astype(np.float64)
-    target_times = target_data.times
+    target_times = target_data.times   
 
     if DOWN_SAMPLE:
         new_fs = 800
@@ -386,11 +396,21 @@ def calculate_coherence_per_band(
         zip(seed_windows, target_windows)
     ):
 
-        if np.isnan(seed_win).any() or np.isnan(target_win).any():
+        if np.isnan(seed_win).all() or np.isnan(target_win).all():
             # skip window bcs of NaNs in data
             continue
 
-        # if all data present
+        elif np.isnan(seed_win).any() or np.isnan(target_win).any():
+            idx_nan = np.isnan(seed_win) + np.isnan(target_win)  # bool-array for seed or target is false
+            if (sum(idx_nan) / len(idx_nan)) > .66:
+                # skip window if too many nan-points in both arrays
+                continue
+
+            else:
+                seed_win = seed_win[~idx_nan]
+                target_win = target_win[~idx_nan]
+
+        # if enough/all data present, and coh-values will be calculated
         coh_values['times'].append(seed_times[i_win])
         
         # COHERENCE EXTRACTION
