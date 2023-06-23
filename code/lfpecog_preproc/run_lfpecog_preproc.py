@@ -91,6 +91,7 @@ if __name__ == '__main__':
                 runInfo=runInfo,
                 Fs=rawRun.bids.info['sfreq'],
                 to_plot=mainSettings['report_plots'],
+                settingsVersion=mainSettings['settingsVersion'],
             )
 
             dataDict, chNameDict = loadData.remove_flatlines_empties(
@@ -139,6 +140,7 @@ if __name__ == '__main__':
                     chNameDict=chNameDict,
                     runInfo=runInfo,
                     moment='pre-artefact-removal',
+                    settingsVersion=mainSettings['settingsVersion']
                 )
 
             # Artefact Removal
@@ -148,6 +150,7 @@ if __name__ == '__main__':
                 namesDict=chNameDict,
                 runInfo=runInfo,
                 edge_removal_sec=5,
+                settingsVersion=mainSettings['settingsVersion'],
             )
 
             # Rereferencing with clean, corrected signals
@@ -166,7 +169,8 @@ if __name__ == '__main__':
                     chNameDict=chNameDict,
                     runInfo=runInfo,
                     moment='post-reref',
-                )
+                    settingsVersion=mainSettings['settingsVersion']
+            )
 
             # Saving Preprocessed Data
             dataMng.save_dict(
@@ -175,7 +179,6 @@ if __name__ == '__main__':
                 FsDict=Fs_dict,
                 runInfo=runInfo,
             )
-            # PM TODO: add saving as pickled dataclass
             
             print(f'\nFINISHED PREPROCESSING SUB {sub} Run: {run}\n')
 

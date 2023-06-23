@@ -11,6 +11,7 @@ import lfpecog_preproc.preproc_plotting as plotting
 
 def get_data_and_channels(
     rawRun, runInfo, Fs: int, to_plot: bool=False,
+    settingsVersion: str = 'vX',
 ):
     """
     Loading and importing (getting) of
@@ -73,7 +74,7 @@ def get_data_and_channels(
             plotting.plot_groupChannels(
                 ch_names=ch_names[g], groupData=data_arrays[g],
                 Fs=Fs, groupName=g, runInfo=runInfo,
-                moment='raw',
+                moment='raw', settingsVersion=settingsVersion,
             )
 
         

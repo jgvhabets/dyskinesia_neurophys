@@ -13,6 +13,8 @@ from os import makedirs
 def plot_groupChannels(
     ch_names: list, groupData, groupName:str,
     Fs, runInfo, moment: str, artf_data=None,
+    settingsVersion='vX',
+
 ):
     moment_strings = {
         'raw': {
@@ -41,10 +43,10 @@ def plot_groupChannels(
     nTimeRows = len(timerowNames)
     x_ind = ch_names.index('dopa_time')
 
-    fig, axes = plt.subplots(
-        len(ch_names) - nTimeRows, 1, figsize=(16, 24),
-        sharex=True,
-    )
+    groupData = groupData[:, int(5 * Fs):int(-5 * Fs)]  # do not plot first and last 5 seconds, just as in data selection
+
+    fig, axes = plt.subplots(len(ch_names) - nTimeRows, 1,
+                             figsize=(16, 24), sharex=True,)
 
     for n in range(len(ch_names) - nTimeRows):
 
@@ -56,35 +58,27 @@ def plot_groupChannels(
         if moment == 'post-artefact-removal':
 
             y1, y2 = axes[n].get_ylim()
+            print(f'check nan in plotting: {np.isnan(groupData[n + nTimeRows, :]).any()}')
             axes[n].fill_between(
                 x=groupData[x_ind, :],
                 y1=y1, y2=y2,
                 where=np.isnan(groupData[n + nTimeRows, :]),
                 color='red',
                 alpha=.4,
-                label='Artefact cleaned',
+                label='Artefact cleaned (stddev cutoff: '
+                      f'{runInfo.mainSettings["ephys"]["artf_sd"]})',
             )
 
             try:
-                artf_data.shape
-
-                axes[n].plot(
-                    artf_data[x_ind, :],
-                    artf_data[n + nTimeRows, :],
-                    color='k', alpha=.6,
-                    label=(
-                        'Removed as "artefact" (# StdDev cutoff: '
-                        f'{runInfo.mainSettings["ephys"]["artf_sd"]})'
-                    ),
-                )
+                axes[n].plot(artf_data[x_ind, :],
+                             artf_data[n + nTimeRows, :],
+                             color='k', alpha=.6,)
             except:
                 print('No artefact to plot next to clean data')
             
             axes[n].set_ylim(y1, y2)
 
-        axes[n].set_ylabel(
-            ch_names[n + 2], fontsize=18, rotation=30,
-        )
+        axes[n].set_ylabel(ch_names[n + 2], fontsize=18, rotation=30,)
     
     axes[-1].legend(
         bbox_to_anchor=[.1, -.15],
@@ -105,22 +99,24 @@ def plot_groupChannels(
 
     fig.suptitle(
         f'{moment_strings[moment]["title"]}\n({runInfo.store_str})',
-        size=20, x=.5, y=.95, ha='center',
+        size=20, x=.5, y=1.03, ha='center',
     )
-
+    if '.' in settingsVersion: settingsVersion = settingsVersion.replace('.', '_')
     fname = (f'{runInfo.store_str}_{groupName}_'
-             f'{moment_strings[moment]["fname"]}_v3')
+             f'{moment_strings[moment]["fname"]}_'
+             f'{settingsVersion}')
     print(f'\n\n\tFIGURE TO BE SAVED: {fname}')
-    plt.savefig(
-        join(save_path, fname),
-        dpi=150, facecolor='w',
-    )
+    
+    plt.tight_layout()
+    plt.savefig(join(save_path, fname),
+                dpi=150, facecolor='w',)
     plt.close()
 
 
 def dict_plotting(
     dataDict: dict, Fs_dict:dict,
     chNameDict: dict, runInfo, moment,
+    settingsVersion='vX',
 ):
     """
     Calls plotting function for all groups
@@ -135,4 +131,5 @@ def dict_plotting(
             groupName=group,
             runInfo=runInfo,
             moment=moment,
+            settingsVersion=settingsVersion,
         )

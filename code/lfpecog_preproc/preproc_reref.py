@@ -595,11 +595,12 @@ def reref_segm_contacts(
 
 def no_reref(
     data: array,
-    lead: Any,
     time_rowNames: list,
     ephys_rowNames: list,
     ephys_type: str,
-    report: str = ''
+    report: str = '',
+    lead: Any = None,
+    alternative_stn_naming: bool = False,
 ):
     """
     Function to NOT digitally re-reference the channels.
@@ -776,7 +777,7 @@ def main_rereferencing(
                     ephys_type=ephys_type,
                     report=report,
                 )
-            elif reref_setup[ephys_type] == 'common-average':
+            elif reref_setup[ephys_type] == 'none':
                 rerefData[group], rerefNames[group], report = no_reref(
                     data=dataDict[group],
                     ephys_rowNames=ephys_rowNames,
@@ -809,10 +810,10 @@ def main_rereferencing(
                 alternative_stn_naming=reref_setup['LFP_alt_naming'],
             )
 
-        rerefData[group], rerefNames[group], report = removeNaNchannels(
-            rerefData[group], rerefNames[group],
-            group, report,
-        )
+            rerefData[group], rerefNames[group], report = removeNaNchannels(
+                rerefData[group], rerefNames[group],
+                group, report,
+            )
 
     if reportPath:
 
