@@ -277,10 +277,10 @@ class extract_local_SSD_PACs:
                            X=pac_times, delimiter=',',)
 
 
-
+from lfpecog_features.feats_phases import get_phase_synchrony_index
 
 @dataclass(init=True, repr=True, )
-class extract_SSD_coherences:
+class extract_SSD_connectivity:
     """
     Extract of Connectivity features per segments
 
@@ -289,6 +289,7 @@ class extract_SSD_coherences:
     sub: str
     sub_SSD: str
     sources: str
+    connectivity_metric: str
     settings_dict: dict
     ephys_sources: list
     feat_path: int
@@ -314,31 +315,45 @@ class extract_SSD_coherences:
             target_data = getattr(self.sub_SSD, ecog_source)
 
         for bw in bands_to_extract:
-                
-            coh_values = calculate_coherence_per_band(
+            
+            if self.connectivity_metric == 'PSI':
+                if bw in ['delta', 'alpha']: continue  # no PSI for low frequencies
+
+            values = calculate_connectivity_per_band(
                 seed_data=seed_data, target_data=target_data,
+                connectivity_metric=self.connectivity_metric,
                 band_name=bw, band_range=bands_to_extract[bw],
                 incl_sq_coh=SETTINGS['FEATS_INCL']['sq_coh'],
                 incl_imag_coh=SETTINGS['FEATS_INCL']['imag_coh'],
                 coh_segment_sec=SETTINGS['FEATS_INCL']['coherence_segment_sec'],
             )
-            
-            for COH in ['sq_coh', 'imag_coh']:
 
-                if SETTINGS['FEATS_INCL'][COH]:
-                    fname = f'SSDfeats_{self.sub}_{self.sources}_{bw}_{COH}.csv'
-                    coh_df = DataFrame(index=coh_values['times'],
-                                       columns=coh_values['freqs'],
-                                       data=coh_values[COH])
-                    coh_df.to_csv(join(self.feat_path, fname))
-                    print(f'\tCOH saved: {fname} (n-windows, n-freq-bins: {coh_df.shape})')
-
+            if self.connectivity_metric == 'COH':
+                for COH in ['sq_coh', 'imag_coh']:
+                    if SETTINGS['FEATS_INCL'][COH]:
+                        fname = f'SSDfeats_{self.sub}_{self.sources}_{bw}_{COH}.csv'
+                        coh_df = DataFrame(index=values['times'],
+                                           columns=values['freqs'],
+                                           data=values[COH])
+                        coh_df.to_csv(join(self.feat_path, fname))
+                        print(f'\tCOH saved: {fname} (n-windows, n-freq-bins: {coh_df.shape})')
             
+            elif self.connectivity_metric == 'PSI':
+                fname = f'SSDfeats_{self.sub}_{self.sources}_{bw}_PSI.csv'
+                psi_df = DataFrame(index=values['times'],
+                                columns=['PSI'],
+                                data=values['PSI'])
+                psi_df.to_csv(join(self.feat_path, fname))
+                print(f'\tPSI saved: {fname}')
+
+
+
 from mne.filter import resample            
         
 
-def calculate_coherence_per_band(
+def calculate_connectivity_per_band(
     seed_data, target_data,
+    connectivity_metric: str,
     band_name: str, band_range: list,
     incl_sq_coh: bool = True,
     incl_imag_coh: bool = True,
@@ -386,16 +401,20 @@ def calculate_coherence_per_band(
         'times arrays should be equal between seed and target'
     )
     
-    coh_values = {'times': []}
-    if incl_sq_coh: coh_values['sq_coh'] = []
-    if incl_imag_coh: coh_values['imag_coh'] = []
+    # create dict to store values
+    values = {'times': []}
+    if connectivity_metric == 'COH':
+        if incl_sq_coh: values['sq_coh'] = []
+        if incl_imag_coh: values['imag_coh'] = []
+    elif connectivity_metric == 'PSI':
+        values['PSI'] = []
 
     freq_sel = None
     
     for i_win, (seed_win, target_win) in enumerate(
         zip(seed_windows, target_windows)
     ):
-
+        # check and correct for NaNs
         if np.isnan(seed_win).all() or np.isnan(target_win).all():
             # skip window bcs of NaNs in data
             continue
@@ -410,35 +429,42 @@ def calculate_coherence_per_band(
                 seed_win = seed_win[~idx_nan]
                 target_win = target_win[~idx_nan]
 
-        # if enough/all data present, and coh-values will be calculated
-        coh_values['times'].append(seed_times[i_win])
+        # if enough/all data present, and values will be calculated
+        values['times'].append(seed_times[i_win])
         
         # COHERENCE EXTRACTION
-        # print(f'fs: {fs}, seg: {coh_segment_sec}; nperseg IN: {int(fs * coh_segment_sec)}')
-        f, _, icoh_abs, _, sq_coh = specFeats.calc_coherence(
-            sig1=seed_win,
-            sig2=target_win,
-            fs=fs,
-            nperseg=int(fs * coh_segment_sec),
-        )
+        if connectivity_metric == 'COH':
+            f, _, icoh_abs, _, sq_coh = specFeats.calc_coherence(
+                sig1=seed_win,
+                sig2=target_win,
+                fs=fs,
+                nperseg=int(fs * coh_segment_sec),
+            )
 
-        if not isinstance(freq_sel, np.ndarray):
-            # if freq_sel is still None, create boolean for freq-bin selection
-            freq_sel = np.logical_and(f > band_range[0],
-                                      f < band_range[1])
-            coh_values['freqs'] = list(f[freq_sel])
+            if not isinstance(freq_sel, np.ndarray):
+                # if freq_sel is still None, create boolean for freq-bin selection
+                freq_sel = np.logical_and(f > band_range[0],
+                                        f < band_range[1])
+                values['freqs'] = list(f[freq_sel])
 
-        if incl_imag_coh:
-            icoh_abs = icoh_abs[freq_sel]
-            coh_values['imag_coh'].append(list(icoh_abs))
-        if incl_sq_coh:
-            sq_coh = sq_coh[freq_sel]
-            coh_values['sq_coh'].append(list(sq_coh))
+            if incl_imag_coh:
+                icoh_abs = icoh_abs[freq_sel]
+                values['imag_coh'].append(list(icoh_abs))
+            if incl_sq_coh:
+                sq_coh = sq_coh[freq_sel]
+                values['sq_coh'].append(list(sq_coh))
+
+        elif connectivity_metric == 'PSI':
+            psi = get_phase_synchrony_index(sig1=seed_win, sig2=target_win)
+            values['PSI'].append(psi)
+
     
-    coh_values['sq_coh'] = np.array(coh_values['sq_coh'], dtype='object')
-    coh_values['imag_coh'] = np.array(coh_values['imag_coh'], dtype='object')
+    if connectivity_metric == 'COH':
+        values['sq_coh'] = np.array(values['sq_coh'], dtype='object')
+        values['imag_coh'] = np.array(values['imag_coh'], dtype='object')
+    
 
-    return coh_values
+    return values
 
 
 def get_clean2d(data3d, times=None):

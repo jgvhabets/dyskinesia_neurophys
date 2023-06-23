@@ -65,7 +65,7 @@ if __name__ == '__main__':
     
     for sub in mainSettings['subs_include']:
 
-        sub_runs = dataMng.get_sub_runs(sub)
+        sub_runs = dataMng.get_sub_runs(sub)  # get bids info from subject-specific-json and scans.tsv
 
         for run in list(sub_runs.values()):
         

@@ -174,6 +174,14 @@ def get_envelop(
 
 
 def get_burst_indices(envelop, burst_thr,):
+    """
+    calculate burst start and end indeices based 
+    on envelop and threshold
+
+    Returns:
+        - startBursts (array of indices)
+        - endBursts (array of indices)
+    """
     exceedThr = envelop > burst_thr
 
     if sum(exceedThr) == 0: return None, None
@@ -241,3 +249,12 @@ def calc_bursts_from_env(
     return n_short, n_long, rateShort, rateLong, burst_lengths
 
 
+def get_burst_duration_profile():
+    """
+    Calculate average burst duration profiles, as found
+    to be a predictive marker for medication-state,
+    INDEPENDENT OF ARBITRARY BURST-THRESHOLDS, by
+    Duchet et al, PLOS Comp Biol 2021
+    (https://doi.org/10.1371/journal.pcbi.1009116).
+
+    """

@@ -40,18 +40,17 @@ def get_bursts_main(
     burstCutoffPerc = 75,
     min_shortBurst_sec = 0.1,
     min_longBurst_sec = 0.2,  # consider more detailed distribution
-):
-    """
-    
-    """
-    # set burst-calculation variables
     bp_dict = {
         'alpha': [8, 13],
         'beta': [13, 30],
         'lowBeta': [13, 20],
         'highBeta': [20, 30],
         'midGamma': [60, 90]
-    }
+    },
+):
+    """
+    
+    """    
 
     # determine resulting variables
     winLen_sec = winLen_minutes * 60
@@ -124,8 +123,98 @@ def get_bursts_main(
 
 from lfpecog_plotting.plotHelpers import get_colors
 from lfpecog_plotting.beta_burstrate_plotting import plot_beta_bursts
+from utils.utils_fileManagement import get_project_path
+from itertools import product
 
-def get_burst_features_SSD(
+def get_ssd_bursts(
+    sub_SSD,
+    SMOOTH_MILLISEC = {'beta': 250, 'gamma': 100, 'lowfreq': 250},
+    bands_include = ['lo_beta', 'hi_beta', 'gamma'],
+    OVERWRITE=True,
+):
+    """
+    Extracts bursts for every window, using a threshold based
+    on the windows itself
+
+    Arguments:
+        - sub: e.g. '008'
+        - SMOOTH_MILLISEC: milliseconds window for envelop smoothing
+        - THRESH_ORIGIN: off or on or combi
+        - TO_SAVE_FIG: to save or not
+        - FIG_DIR: needed if figure should be saved
+        - sub_SSD_class: result from ssd.get_subject_SSDs(),
+            if given, this will decrease computational time
+        - LOAD_STORED_RESULTS: make use previsouly created brust-values
+    """
+    print(f'start {sub_SSD.sub}, burst / phase feature-extraction')
+
+    ssd_folder = 'SSD_feats'
+    if sub_SSD.settings['SSD_flanks'] == 'broadband': ssd_folder += '_broad'
+    feat_dir = join(get_project_path('results'), 'features',
+                    ssd_folder, sub_SSD.settings['DATA_VERSION'],
+                    f'windows_{sub_SSD.settings["WIN_LEN_sec"]}_'
+                    f'{sub_SSD.settings["WIN_OVERLAP_part"]}overlap')
+
+    for source, bw in product(sub_SSD.ephys_sources, bands_include):
+        print(f'start getting {bw} bursts from {source}')
+        if 'beta' in bw: SMOOTH = SMOOTH_MILLISEC['beta']
+        elif 'gamma' in 'bw': SMOOTH = SMOOTH_MILLISEC['gamma']
+        else: SMOOTH = SMOOTH_MILLISEC['lowfreq']
+
+        filename = f'SSDfeats_{sub_SSD.sub}_{source}_{bw}.csv'
+
+        # select SSD'd data to extract from
+        tempdat = getattr(sub_SSD, source)
+        fs = tempdat.fs
+        tempdat = getattr(tempdat, bw)  # 2d array of shape n-windows, n-samples (per window) 
+        temp_times = tempdat.times.copy()  # store timestamps corresponding to n-windows
+
+        for sig in tempdat:  # loops over all windows
+
+            env = abs(hilbert(sig))  # env from SSD'd timeseries of one window
+
+            if SMOOTH > 0:
+                env = ftHelpers.smoothing(sig=env, fs=fs, win_ms=SMOOTH_MILLISEC)
+            
+            THRESH = np.percentile(env, 75)
+            start_idx, end_idx = burstFuncs.get_burst_indices(envelop=env, burst_thr=THRESH)
+            burst_lengths = end_idx - start_idx
+        #### TODO
+        if TO_STORE_BURST_LENGTHS:
+            
+            store_dir = join(get_beta_project_path('results'), 'bursts')
+            if not exists(store_dir): makedirs(store_dir)
+            fname = f'sub{sub}_bursts.json'
+            
+            # save values in json
+            for bw in burst_count.keys():
+                for dtype in burst_count[bw].keys():
+                    burst_count[bw][dtype] = make_object_jsonable(
+                        burst_count[bw][dtype])
+            
+            # add important settings variables to save
+            burst_count['smooth_millisec'] = int(SMOOTH_MILLISEC)  # convert to json writable int
+            burst_count['threshold_origin'] = THRESH_ORIGIN  # string is json writable
+            burst_count['win_len_sec'] = float(tempdat.settings['WIN_LEN_sec'])
+            burst_count['data_version'] = getattr(ssd_dat, list(thresh.keys())[0]).settings['DATA_VERSION']  # string is json writable
+
+            with open(join(store_dir, fname), 'w') as f:
+                json.dump(burst_count, f)
+    
+    elif LOAD_STORED_RESULTS:
+        bursts_path = join(get_beta_project_path('results'),
+                           'bursts', f'sub{sub}_bursts.json')
+
+        with open(bursts_path, 'r') as f:
+            burst_count = json.load(f)
+                
+
+    if not TO_PLOT_FIG and not TO_SAVE_FIG:
+        return burst_count
+    
+
+
+def get_burst_features_SSD_baselineThreshold(
     sub: str,
     SMOOTH_MILLISEC: int = 250,
     THRESH_ORIGIN: str = 'off',
@@ -161,13 +250,12 @@ def get_burst_features_SSD(
                 sub=sub, incl_stn=True,
                 ft_setting_fname='ftExtr_spectral_v1.json',)
 
-        for beta_bw in ['lo_beta', 'hi_beta']:
-            burst_count[beta_bw] = {}
+        for bw in ['lo_beta', 'hi_beta', 'gamma']:
+            burst_count[bw] = {}
             # load thresholds from JSON
-            burst_thresh_dir = join(
-                get_beta_project_path('results'),
-                'bursts', 'thresholds')
-            thrsh_fname = f'burst_thresholds_{beta_bw}.json'
+            burst_thresh_dir = join(get_beta_project_path('results'),
+                                    'bursts', 'thresholds')
+            thrsh_fname = f'burst_thresholds_{bw}.json'
             thrsh_path = join(burst_thresh_dir, thrsh_fname)
 
             with open(thrsh_path, 'r') as t:
@@ -181,7 +269,7 @@ def get_burst_features_SSD(
                 thresh = json.load(t)
 
             assert sub in thresh.keys(), (
-                f'{sub} has no {beta_bw} thresholds saved'
+                f'{sub} has no {bw} thresholds saved'
                 f' in {thrsh_path}')
                 
             thresh = thresh[sub]
@@ -190,7 +278,7 @@ def get_burst_features_SSD(
 
             for dType in thresh.keys():  # loop over lfp_left/right and ecog_side
                 
-                burst_count[beta_bw][dType] = {
+                burst_count[bw][dType] = {
                     'short': [],  # store n-short / n-seconds bursts per window
                     'long': [],  # store n-long / n-seconds bursts per window
                     'burst_lengths': [],  # store lists with burst-lengths per window
@@ -199,8 +287,8 @@ def get_burst_features_SSD(
                 # select SSD'd data to extract from
                 tempdat = getattr(ssd_dat, dType)
                 fs = tempdat.fs
-                sig_array = getattr(tempdat, beta_bw)  # 2d array of shape n-windows, n-samples (per window) 
-                burst_count[beta_bw][dType]['win_times'] = tempdat.times.copy()  # store timestamps corresponding to n-windows
+                sig_array = getattr(tempdat, bw)  # 2d array of shape n-windows, n-samples (per window) 
+                burst_count[bw][dType]['win_times'] = tempdat.times.copy()  # store timestamps corresponding to n-windows
 
                 for sig in sig_array:
                     # loops over all windows                
@@ -220,9 +308,9 @@ def get_burst_features_SSD(
                         min_shortBurst_sec=.1,
                         min_longBurst_sec=.6,
                     )
-                    burst_count[beta_bw][dType]['short'].append(short_rate)
-                    burst_count[beta_bw][dType]['long'].append(long_rate)
-                    burst_count[beta_bw][dType]['burst_lengths'].append(burst_lengths)
+                    burst_count[bw][dType]['short'].append(short_rate)
+                    burst_count[bw][dType]['long'].append(long_rate)
+                    burst_count[bw][dType]['burst_lengths'].append(burst_lengths)
         
         if TO_STORE_BURST_LENGTHS:
             

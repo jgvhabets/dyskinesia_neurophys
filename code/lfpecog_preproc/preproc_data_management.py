@@ -22,18 +22,13 @@ import json
 from utils.utils_fileManagement import get_project_path, get_onedrive_path
 
 
-def get_sub_runs(
-    sub,
-):
+def get_sub_runs(sub,):
     """
     Extract which runs to preprocess
     """
     onedrive_data_path = get_onedrive_path('data')
-    sub_json_path = join(
-        onedrive_data_path,
-        'preprocess_jsons',
-        f'runInfo_{sub}.json'
-    )
+    sub_json_path = join(onedrive_data_path, 'preprocess_jsons',
+                         f'runInfo_{sub}.json')
     sub_runs = {}
         
     with open(sub_json_path) as f:
@@ -53,15 +48,18 @@ def get_sub_runs(
     
     assert sub_json, print('\n JSON FILE COULDNOT BE LOADED')
 
-    scans_df = read_csv(
-        join(
-            get_onedrive_path('bids_rawdata'),
-            f'sub-EL{sub}',
-            f'ses-{sub_json["ses"]}',
-            f'sub-EL{sub}_ses-{sub_json["ses"]}_scans.tsv'
-        ),
-        sep='\t',
-    )
+    # adjust preamble of subject code to ECoG or STN-only
+    if 'stn_only' in sub_json.keys():
+        if sub_json['stn_only']:
+            bids_sub = sub_json['bids_sub']
+    else:
+        bids_sub = f'EL{sub}'
+
+    scans_df = read_csv(join(get_onedrive_path('bids_rawdata'),
+                             f'sub-{bids_sub}',
+                             f'ses-{sub_json["ses"]}',
+                             f'sub-{bids_sub}_ses-{sub_json["ses"]}_scans.tsv'),
+                        sep='\t',)
     
     for i in range(scans_df.shape[0]):
         skip_file = False
@@ -80,6 +78,7 @@ def get_sub_runs(
         # if skip_file is not set True, then include file in sub_runs
         sub_runs[i] = {
             'sub': sub,
+            'bids_sub': bids_sub,
             'ses': sub_json["ses"],
             'task': splits[2][5:],
             'acq': splits[3][4:],
@@ -106,7 +105,7 @@ class RunInfo:
         self.rawdata_path = get_onedrive_path('bids_rawdata')
         
         self.bidspath = mne_bids.BIDSPath(
-            subject=f'EL{self.runDict["sub"]}',
+            subject=f'{self.runDict["bids_sub"]}',
             session=self.runDict["ses"],
             task=self.runDict["task"],
             acquisition=self.runDict["acq"],
@@ -118,8 +117,6 @@ class RunInfo:
         )
 
         self.data_groups = self.runDict["data_include"]
-        print(self.runDict["acq_time"])
-        print(type(self.runDict["acq_time"]))
         
         acq_time = datetime.datetime.fromisoformat(
             self.runDict["acq_time"]
@@ -129,57 +126,42 @@ class RunInfo:
         )
         self.dopa_time_delta = acq_time - ldopa_intake_time
 
-        self.store_str = (
-            f'{self.runDict["sub"]}_{self.runDict["task"]}_'
-            f'{self.runDict["acq"]}'
-        )
+        self.store_str = (f'{self.runDict["sub"]}_{self.runDict["task"]}'
+                          f'_{self.runDict["acq"]}')
         
-        self.fig_path = join(
-            self.project_path,
-            'figures',
-            f'preprocessing/sub-{self.runDict["sub"]}',
-            self.mainSettings["settingsVersion"],
-        )
+        self.fig_path = join(self.project_path, 'figures',
+                             'preprocessing', f'sub-{self.runDict["sub"]}',
+                             self.mainSettings["settingsVersion"],)
         
-        self.data_path = join(
-            self.project_path,
-            'data',
-            f'preprocessed_data/sub-{self.runDict["sub"]}',
-            self.mainSettings["settingsVersion"],
-        )
+        self.data_path = join(self.project_path, 'data',
+                              'preprocessed_data', f'sub-{self.runDict["sub"]}',
+                              self.mainSettings["settingsVersion"],)
         
         for folder in [self.data_path, self.fig_path]:
-
             if not exists(folder): makedirs(folder)
 
         if self.mainSettings['report_file']:
 
-            report_folder = join(
-                self.project_path, 'data',
-                f'preproc_reports/sub-{self.runDict["sub"]}'
-            )
+            report_folder = join(self.project_path, 'data',
+                                 f'preproc_reports', f'sub-{self.runDict["sub"]}')
             if not exists(report_folder): makedirs(report_folder)
 
             now = datetime.datetime.now()
             now = now.strftime("%Y%m%d_%H%M")
-            report_fname =  (
-                f'preprocReport_{self.runDict["sub"]}_'
-                f'{self.runDict["task"]}{self.runDict["acq"][-6:]}'
-                f'_{self.mainSettings["settingsVersion"]}'
-                f'_{now}.txt'
-            )
+            report_fname =  (f'preprocReport_{self.runDict["sub"]}_'
+                             f'{self.runDict["task"]}{self.runDict["acq"][-6:]}'
+                             f'_{self.mainSettings["settingsVersion"]}'
+                             f'_{now}.txt')
             self.reportTxt_path = join(
                 report_folder, report_fname, 
             )
             with open(self.reportTxt_path, 'w') as f:
 
-                print(
-                    f'\n\tWRITING TXT FOR {self.store_str}'
-                    f'\n\t\ton path: {self.reportTxt_path}'    
-                )
+                print(f'\n\tWRITING TXT FOR {self.store_str}'
+                      f'\n\t\ton path: {self.reportTxt_path}')
                 f.write(
                     '##### PREPROCESSING REPORT #####\n\n'
-                    f'\tSub-EL{self.runDict["sub"]}\n\t'
+                    f'\tSub-{self.runDict["sub"]} (bids-subject: {self.runDict["bids_sub"]})\n\t'
                     f'Task: {self.runDict["task"]}\n\t'
                     f'Acquisition: {self.runDict["acq"]}\n\t'
                     f'Settings-Version: {self.mainSettings["settingsVersion"]}'
@@ -189,7 +171,6 @@ class RunInfo:
                     f' LT intake): {self.dopa_time_delta} (hh:mm:ss)'  
                 )
                 f.close()
-
 
         self.lead_type = self.runDict["lead_type"]
 
@@ -225,12 +206,9 @@ class defineMneRunData:
                     
                     if group[:4] == 'ecog':
                         ecog_group = group
-                        setattr(
-                            self,
-                            ecog_group,
-                            self.bids.copy().pick_types(
-                                ecog=True, exclude='bads'
-                            )
+                        setattr(self,
+                                ecog_group,
+                                self.bids.copy().pick_types(ecog=True, exclude='bads')
                         )
                         ecogBool = True
             
@@ -370,21 +348,18 @@ def save_array(
         - None
     '''
     # save data array as .npy
-    f_name = (
-        f'data_{runInfo.store_str}_'
-        f'{runInfo.mainSettings["settingsVersion"]}'
-        f'_{group}_{Fs}Hz.npy'
-    )
+    f_name = (f'data_{runInfo.store_str}_'
+              f'{runInfo.mainSettings["settingsVersion"]}'
+              f'_{group}_{Fs}Hz.npy')
     np.save(join(runInfo.data_path, f_name), data)
 
     print(f'Data (npy) saved\n\t{f_name} @ {runInfo.data_path})')
 
     # save list of channel-names as .csv
-    f_name = (
-        f'names_{runInfo.store_str}_'
-        f'{runInfo.mainSettings["settingsVersion"]}'
-        f'_{group}.csv'
-    )
+    f_name = (f'names_{runInfo.store_str}_'
+              f'{runInfo.mainSettings["settingsVersion"]}'
+              f'_{group}.csv')
+    
     with open(join(runInfo.data_path, f_name), 'w') as f:
         write = csv.writer(f)
         write.writerow(names)

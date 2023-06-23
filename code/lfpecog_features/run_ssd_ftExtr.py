@@ -94,19 +94,37 @@ if __name__ == '__main__':
         if SETTINGS['FEATS_INCL']['TO_EXTRACT_COH_STN_STN']:
 
             print(f'\n\tSTART bi-hemispheric-coherence sub-{sub}...')
-            ssd_feats.extract_SSD_coherences(
+            ssd_feats.extract_SSD_connectivity(
                 sub=sub, sub_SSD=sub_SSD, settings_dict=SETTINGS,
                 feat_path=feat_path, ephys_sources=ephys_sources,
-                sources='STN_STN',
+                sources='STN_STN',  connectivity_metric='COH',
             )
 
         if SETTINGS['FEATS_INCL']['TO_EXTRACT_COH_STN_ECOG']:
             
             print(f'\n\tSTART stn-cortex-coherence sub-{sub}...')
-            ssd_feats.extract_SSD_coherences(
+            ssd_feats.extract_SSD_connectivity(
                 sub=sub, sub_SSD=sub_SSD, settings_dict=SETTINGS,
                 feat_path=feat_path, ephys_sources=ephys_sources,
-                sources='STN_ECOG',
+                sources='STN_ECOG', connectivity_metric='COH',
+            )
+        
+        if SETTINGS['FEATS_INCL']['TO_EXTRACT_PSI_STN_ECOG']:
+            
+            print(f'\n\tSTART stn-cortex-phase-synch sub-{sub}...')
+            ssd_feats.extract_SSD_connectivity(
+                sub=sub, sub_SSD=sub_SSD, settings_dict=SETTINGS,
+                feat_path=feat_path, ephys_sources=ephys_sources,
+                sources='STN_ECOG', connectivity_metric='PSI',
+            )
+        
+        if SETTINGS['FEATS_INCL']['TO_EXTRACT_PSI_STN_STN']:
+            
+            print(f'\n\tSTART bi-hemispheric-phase-synch sub-{sub}...')
+            ssd_feats.extract_SSD_connectivity(
+                sub=sub, sub_SSD=sub_SSD, settings_dict=SETTINGS,
+                feat_path=feat_path, ephys_sources=ephys_sources,
+                sources='STN_STN', connectivity_metric='PSI',
             )
         
         

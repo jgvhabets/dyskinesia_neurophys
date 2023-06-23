@@ -124,9 +124,8 @@ def artf_removal_array(
         if not kernel:
             ### DEFINE if artf removal is necessary
             sig_absmedian = np.nanmedian(abs(data[ch, :]))
-            # sig_sd_thr = sd_cut * np.nanstd(data[ch, :])  # was v3
-            # sd_ratio = sig_sd_thr / sig_absmedian  # was v3
-            sd_ratio = np.nanmax(data[ch, :]) / sig_absmedian
+            sig_max = np.max([abs(np.nanmin(data[ch, :])), np.nanmax(data[ch, :])])
+            sd_ratio = sig_max / sig_absmedian
             if verbose: print(f'ARTEFACT REMOVAL CHECK: ratio Max / median-abs: {sd_ratio}')
 
             if sd_ratio < 12:  # was 2 in v3
