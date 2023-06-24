@@ -47,16 +47,9 @@ if __name__ == '__main__':
     
     # create SSD'd signals per freq-band, per window
     for sub in SETTINGS['SUBS_INCL']:
+        
         print(f'\n\tSTART SSD feature extraction: sub-{sub}...')
-
-        # define ephys_sources
-        ephys_sources = []
-        if INCL_ECOG:
-            ecog_side = get_ecog_side(sub)
-            ephys_sources.append(f'ecog_{ecog_side}')
-        if INCL_STN:
-            ephys_sources.extend(['lfp_left', 'lfp_right'])
-
+        
         # load or create SSD windows for subject
         sub_SSD = get_subject_SSDs(sub=sub,
                                    settings=SETTINGS,
@@ -67,65 +60,55 @@ if __name__ == '__main__':
         if SETTINGS['FEATS_INCL']['TO_EXTRACT_POWERS']:
 
             print(f'\n\tSTART local powers sub-{sub}...')
-            ssd_feats.extract_local_SSD_powers(
-                sub=sub, sub_SSD=sub_SSD, settings_dict=SETTINGS,
-                feat_path=feat_path, ephys_sources=ephys_sources,
-            )
+            ssd_feats.extract_local_SSD_powers(sub=sub, sub_SSD=sub_SSD,
+                                               feat_path=feat_path,)
         
         # Extract local spectral power features
         if SETTINGS['FEATS_INCL']['TO_EXTRACT_BURSTS']:
 
             print(f'\n\tSTART local powers sub-{sub}...')
-            ssd_feats.extract_local_SSD_powers(
-                sub=sub, sub_SSD=sub_SSD, settings_dict=SETTINGS,
-                feat_path=feat_path, ephys_sources=ephys_sources,
-            )
+            ssd_feats.get_ssd_bursts(sub=sub, sub_SSD=sub_SSD,
+                                     feat_path=feat_path,)
         
         # create local PAC features
         if SETTINGS['FEATS_INCL']['TO_EXTRACT_LOCAL_PAC']:
+            
             print(f'\n\tSTART local-PAC sub-{sub}...')
-
-            ssd_feats.extract_local_SSD_PACs(
-                sub=sub, sub_SSD=sub_SSD, settings_dict=SETTINGS,
-                feat_path=feat_path, ephys_sources=ephys_sources,   
-            )
+            ssd_feats.extract_local_SSD_PACs(sub=sub, sub_SSD=sub_SSD,
+                                             feat_path=feat_path,)
         
         # create Coherence features
         if SETTINGS['FEATS_INCL']['TO_EXTRACT_COH_STN_STN']:
 
             print(f'\n\tSTART bi-hemispheric-coherence sub-{sub}...')
-            ssd_feats.extract_SSD_connectivity(
-                sub=sub, sub_SSD=sub_SSD, settings_dict=SETTINGS,
-                feat_path=feat_path, ephys_sources=ephys_sources,
-                sources='STN_STN',  connectivity_metric='COH',
-            )
+            ssd_feats.extract_SSD_connectivity(sub=sub, sub_SSD=sub_SSD,
+                                               feat_path=feat_path,
+                                               sources='STN_STN',
+                                               connectivity_metric='COH',)
 
         if SETTINGS['FEATS_INCL']['TO_EXTRACT_COH_STN_ECOG']:
             
             print(f'\n\tSTART stn-cortex-coherence sub-{sub}...')
-            ssd_feats.extract_SSD_connectivity(
-                sub=sub, sub_SSD=sub_SSD, settings_dict=SETTINGS,
-                feat_path=feat_path, ephys_sources=ephys_sources,
-                sources='STN_ECOG', connectivity_metric='COH',
-            )
+            ssd_feats.extract_SSD_connectivity(sub=sub, sub_SSD=sub_SSD,
+                                               feat_path=feat_path,
+                                               sources='STN_ECOG',
+                                               connectivity_metric='COH',)
         
         if SETTINGS['FEATS_INCL']['TO_EXTRACT_PSI_STN_ECOG']:
             
             print(f'\n\tSTART stn-cortex-phase-synch sub-{sub}...')
-            ssd_feats.extract_SSD_connectivity(
-                sub=sub, sub_SSD=sub_SSD, settings_dict=SETTINGS,
-                feat_path=feat_path, ephys_sources=ephys_sources,
-                sources='STN_ECOG', connectivity_metric='PSI',
-            )
+            ssd_feats.extract_SSD_connectivity(sub=sub, sub_SSD=sub_SSD,
+                                               feat_path=feat_path,
+                                               sources='STN_ECOG',
+                                               connectivity_metric='PSI',)
         
         if SETTINGS['FEATS_INCL']['TO_EXTRACT_PSI_STN_STN']:
             
             print(f'\n\tSTART bi-hemispheric-phase-synch sub-{sub}...')
-            ssd_feats.extract_SSD_connectivity(
-                sub=sub, sub_SSD=sub_SSD, settings_dict=SETTINGS,
-                feat_path=feat_path, ephys_sources=ephys_sources,
-                sources='STN_STN', connectivity_metric='PSI',
-            )
+            ssd_feats.extract_SSD_connectivity(sub=sub, sub_SSD=sub_SSD,
+                                               feat_path=feat_path,
+                                               sources='STN_STN',
+                                               connectivity_metric='PSI',)
         
         
     

@@ -13,7 +13,7 @@ import numpy as np
 from os.path import join, exists, splitext
 from os import listdir, makedirs
 from pandas import isna, DataFrame
-from scipy.signal import welch
+from scipy.signal import welch, hilbert
 from scipy.stats import variation
 from array import array
 from dataclasses import dataclass, field
@@ -22,16 +22,10 @@ import matplotlib.pyplot as plt
 
 
 # import own functions
-from utils.utils_fileManagement import (
-    get_project_path, get_onedrive_path,
-    load_class_pickle, save_class_pickle,
-    load_ft_ext_cfg
-)
-from lfpecog_preproc.preproc_import_scores_annotations import get_ecog_side
-
-from utils.utils_windowing import get_windows, windowedData
+from utils.utils_fileManagement import make_object_jsonable
 import lfpecog_features.feats_spectral_features as specFeats
-
+from lfpecog_features.feats_helper_funcs import smoothing
+from lfpecog_features.bursts_funcs import get_burst_indices
 
 
 
@@ -43,18 +37,16 @@ class extract_local_SSD_powers():
     """
     sub: str
     sub_SSD: str
-    settings_dict: dict
-    ephys_sources: list
     feat_path: str
     incl_ecog: bool = True
     incl_stn: bool = True
     overwrite_features: bool = False
     
     def __post_init__(self,):
-        SETTINGS = self.settings_dict    
-        
+        SETTINGS = self.settings_dict
+
         # loop over possible datatypes
-        for dType in self.ephys_sources:
+        for dType in self.sub_SSD.ephys_sources:
             print(f'\n\tstart ({dType}) extracting local SSD powers')
             data = getattr(self.sub_SSD, dType)  # assign datatype data
             # check if features already exist
@@ -125,94 +117,88 @@ class extract_local_SSD_powers():
 
 
 
-@dataclass(init=True, repr=True, )
-class extract_bursts():
+def get_ssd_bursts(
+    sub_SSD,
+    feat_path: str,
+    SMOOTH_MILLISEC = {'beta': 250, 'gamma': 100, 'lowfreq': 250},
+    bands_include = ['lo_beta', 'hi_beta', 'gamma'],
+    OVERWRITE=True,
+):
     """
-    Extract bursts from SSD-d data
+    Extracts bursts for every window, using a threshold based
+    on the windows itself
 
-    #TODO: ADD AND IMPLEMENT BURST FUNCTION
+    Arguments:
+        - sub: e.g. '008'
+        - SMOOTH_MILLISEC: milliseconds window for envelop smoothing
+        - THRESH_ORIGIN: off or on or combi
+        - TO_SAVE_FIG: to save or not
+        - FIG_DIR: needed if figure should be saved
+        - sub_SSD_class: result from ssd.get_subject_SSDs(),
+            if given, this will decrease computational time
+        - LOAD_STORED_RESULTS: make use previsouly created brust-values
     """
-    sub: str
-    sub_SSD: str
-    settings_dict: dict
-    ephys_sources: list
-    feat_path: str
-    incl_ecog: bool = True
-    incl_stn: bool = True
-    overwrite_features: bool = False
+    print(f'start {sub_SSD.sub}, burst / phase feature-extraction')
     
-    def __post_init__(self,):
-        SETTINGS = self.settings_dict    
-        
-        # loop over possible datatypes
-        for dType in self.ephys_sources:
-            print(f'\n\tstart ({dType}) extracting bursts')
-            data = getattr(self.sub_SSD, dType)  # assign datatype data
-            # check if features already exist
-            feat_fname = f'SSDfeats_{self.sub}_{dType}_local_spectralFeatures.csv'
+    filename = f'SSDfeats_{sub_SSD.sub}_BURSTS.csv'
 
-            if exists(join(self.feat_path, feat_fname)) and not self.overwrite_features:
-                print(f'...\tfeatures already exist for {dType}'
-                      ' and are NOT overwritten, skip!')
 
-            ### Create storing of features
-            fts_incl = SETTINGS['FEATS_INCL']  # get features to include
-            feats_out = []  # list to store lists per window
-            feat_names = []  # feature names
-            for band in SETTINGS['SPECTRAL_BANDS'].keys():
-                # NOTE: order has to be identical of order of adding features
-                n_spec_feats = 0
-                for ft_name in fts_incl:
-                    # to feats_out (via temporarily list feats_win)
-                    if fts_incl[ft_name] and ft_name.startswith('SSD_'):
-                        feat_names.append(f'{band}_{ft_name[4:]}')
-                        n_spec_feats += 1
+    values_store = {}  # to store final values
+
+    for source, bw in product(sub_SSD.ephys_sources, bands_include):
+        print(f'start getting {bw} bursts from {source}')
+        # define burst-settings for bw and source
+        Fs = getattr(sub_SSD, source).fs
+        if 'beta' in bw:
+            SMOOTH = SMOOTH_MILLISEC['beta']
+            MIN_BURST_SEC = 1 / 12  # samples for cycle-length
+        elif 'gamma' in 'bw':
+            SMOOTH = SMOOTH_MILLISEC['gamma']
+            MIN_BURST_SEC = 1 / 60  # samples for cycle-length
+        else:
+            SMOOTH = SMOOTH_MILLISEC['lowfreq']
+            MIN_BURST_SEC = 1 / 4  # samples for cycle-length
+
+        # select SSD'd data to extract from
+        tempdat = getattr(sub_SSD, source)
+        fs = tempdat.fs
+        tempdat = getattr(tempdat, bw)  # 2d array of shape n-windows, n-samples (per window) 
+        temp_values={'times': tempdat.times.copy(),
+                      'mean_buration_sec': [],
+                      'burst_prob': []}  # store timestamps corresponding to n-windows
+
+        for sig in tempdat:  # loops over all windows
+            # clean signal from NaNs
+            sig = sig[~np.isnan(sig)]
+            # get envelop and apply smoothing
+            env = abs(hilbert(sig))  # env from SSD'd timeseries of one window
+            if SMOOTH > 0:
+                env = smoothing(sig=env, fs=fs, win_ms=SMOOTH_MILLISEC)
+            # get burst-lengths and exclude too short bursts
+            THRESH = np.percentile(env, 75)
+            start_idx, end_idx = get_burst_indices(envelop=env, burst_thr=THRESH)
+            burst_lengths_sec = (end_idx - start_idx) / Fs
+            burst_lengths_sec = burst_lengths_sec[burst_lengths_sec >= MIN_BURST_SEC]
+            temp_values['mean_buration_sec'].append(np.nanmean(burst_lengths_sec))
+            temp_values['burst_prob'].append(sum(burst_lengths_sec) / (len(sig) / Fs))
             
-            # loop over windows
-            for i_w, t in enumerate(data.times):
-                # temporary list to store features of current window
-                feats_win = []
-                
-                # loop over defined frequency bands
-                for bw in SETTINGS['SPECTRAL_BANDS']:
-                    f_range = SETTINGS['SPECTRAL_BANDS'][bw]
-                    
-                    # check for unconverted nan array
-                    if np.isnan(list(getattr(data, bw)[i_w])).all():
-                        # fill with nan values for feature and go to next band
-                        feats_win.extend([np.nan] * n_spec_feats)
-                        continue
+        # save values correct in json
+        for key in temp_values.keys():
+            temp_values[key] = make_object_jsonable(temp_values[key])
+            
+        # add important settings variables to save
+        temp_values['win_len_sec'] = float(sub_SSD.settings['WIN_LEN_sec'])
+        temp_values['smooth_millisec'] = int(SMOOTH)  # convert to json writable int
+        temp_values['min_burst_sec'] = float(MIN_BURST_SEC)
+        temp_values['data_version'] = sub_SSD.settings['DATA_VERSION']  # string is json writable
 
-                    ssd_signal = getattr(data, bw)[i_w].copy()
-                    # remove NaNs padded to SSD timeseries in create_SSDs()
-                    ssd_signal = ssd_signal[~isna(ssd_signal)]
+    
+        values_store[f'{source}_{bw}'] = temp_values
 
-                    # Convert SSD'd signal into Power Spectrum
-                    f, psd = welch(ssd_signal, axis=-1,
-                                    nperseg=data.fs, fs=data.fs)
-                    f_sel = [f_range[0] < freq < f_range[1] for freq in f]  # select psd in freq of interest
+    with open(join(feat_path, filename), 'w') as f:
+        json.dump(values_store, f)
+    
 
-                    # CALCULATE SPECTRAL PEAK FEATURES
-                    # loop over ft-names and ft-funcs ensures correct ft-order
-                    for ft_name in fts_incl:
-                        if fts_incl[ft_name] and ft_name.startswith('SSD_'):
-                            # get value from function corresponding to ft-name
-                            ft_func = getattr(specFeats.Spectralfunctions(
-                                psd=psd, ssd_sig=ssd_signal,
-                                f=f, f_sel=f_sel
-                            ), f'get_{ft_name}')
-                            feats_win.append(ft_func())
-                       
-                # END OF WINDOW -> STORE list with window features to total list
-                feats_out.append(feats_win)
-
-            # AFTER ALL WINDOWS OF DATA TYPE ARE DONE -> STORE FEATURE DATAFRAME
-            feats_out = np.array(feats_out, dtype='object')
-            feats_out = DataFrame(data=feats_out, columns=feat_names, index=data.times,)
-            feats_out.to_csv(join(self.feat_path, feat_fname),
-                             index=True, header=True,)
-            print(f'Saved FEATURES for sub-{self.sub} {dType} as '
-                  f'{feat_fname} in {self.feat_path}')
 
 
 from lfpecog_features.feats_phases import calculate_PAC_matrix
@@ -227,8 +213,6 @@ class extract_local_SSD_PACs:
     """
     sub: str
     sub_SSD: str
-    settings_dict: dict
-    ephys_sources: list
     feat_path: int
     incl_ecog: bool = True
     incl_stn: bool = True
@@ -238,7 +222,7 @@ class extract_local_SSD_PACs:
         SETTINGS = self.settings_dict    
         
         # loop over possible datatypes
-        for dType in self.ephys_sources:
+        for dType in self.sub_SSD.ephys_sources:
             print(f'\n\tstart ({dType}) extracting local SSD PACs')
             data = getattr(self.sub_SSD, dType)  # assign datatype data
             # data is here class with per bandwidth a 2d array (n-windows, n-samples)
@@ -290,8 +274,6 @@ class extract_SSD_connectivity:
     sub_SSD: str
     sources: str
     connectivity_metric: str
-    settings_dict: dict
-    ephys_sources: list
     feat_path: int
     incl_stn_ecog: bool = True
     incl_stn_stn: bool = True
@@ -309,7 +291,7 @@ class extract_SSD_connectivity:
             target_data = self.sub_SSD.lfp_right
         
         elif self.sources == 'STN_ECOG':
-            ecog_source = [s for s in self.ephys_sources if 'ecog' in s][0]
+            ecog_source = [s for s in self.sub_SSD.ephys_sources if 'ecog' in s][0]
             stn_ecog_side = f"lfp_{ecog_source.split('_')[1]}"
             seed_data = getattr(self.sub_SSD, stn_ecog_side)
             target_data = getattr(self.sub_SSD, ecog_source)
