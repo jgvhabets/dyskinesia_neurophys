@@ -259,15 +259,13 @@ def get_ecog_side(sub):
 
     xldat = read_excel(os.path.join(data_path, f),
                       sheet_name='recording_info',)
-    sub_match = [type(s) == str and sub in s for s in xldat['bids_id'].values]
+    sub_match = [type(s) == str and sub in s for s in xldat['study_id'].values]
     i_sub = np.where(sub_match)[0][0]
     ecog_side = xldat.iloc[i_sub]['ecog']
 
     if ecog_side == 1: ecog_side = 'left'
     elif ecog_side == 2: ecog_side = 'right'
-    else:
-        print(f'No ECoG-side found for sub-{sub}')
-        return None
+    elif ecog_side == 0: False
 
     return ecog_side
 
@@ -284,6 +282,7 @@ def get_cdrs_specific(
         - sub
         - side: should be left, right, both,
             or 'contra ecog'
+        - rater: should be Patricia, Jeroen or Mean
     
     Returns:
         - times
@@ -371,10 +370,10 @@ def get_cdrs_specific(
         sel = np.logical_and(~times_nan, ~np.array(scores_nan))
         times = times[sel]
         scores = times_df.values[sel]
-
-
         scores = np.nanmean(scores, axis=1)
+    
+    else:
+        raise ValueError('rater should be: '
+                         'Patricia, Jeroen or Mean')
 
-        # print(sub, times, scores)
-
-        return times, scores
+    return times, scores

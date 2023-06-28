@@ -7,7 +7,7 @@ dyskinesia scores
 # import public functions
 import numpy as np
 from pandas import DataFrame, concat
-from itertools import compress
+from itertools import compress, product
 
 # import own custom functions
 from lfpecog_preproc.preproc_import_scores_annotations import(
@@ -16,12 +16,21 @@ from lfpecog_preproc.preproc_import_scores_annotations import(
 from lfpecog_analysis.load_SSD_features import ssdFeatures
 
 def get_idx_discardNonEcogLid(
-    sub, ft_times, cdrs_rater: str = 'Patricia'
+    sub, ft_times, LATERALITY: str,
+    cdrs_rater: str = 'Patricia'
 ):
     """
-    Select timestamps of epühys-features that
+    Select timestamps of ephys-features that
     are closest to moment where there was only
     Dyskinesia in the NONE-ECoG bodyside
+
+    Input:
+        - sub: three-letter sub code
+        - ft_times: array with all ft_times to
+            be selected
+        - LATERALITY: should be UNILAT OR BILAT,
+            unilat is only ECoG side
+        - cdrs_rater: should be: Patricia, Jeroen or Mean
 
     Returns:
         - select_bool: boolean array with length
@@ -31,98 +40,171 @@ def get_idx_discardNonEcogLid(
             corresponding to ECoG hemisphere, for
             every timestamp in ft_times
     """
-    # get timestamps and values of clinical CDRS LID assessment
-    lid_t_ecog, lid_y_ecog = get_cdrs_specific(
-        sub=sub, rater=cdrs_rater, side='contralat ecog',)
-    lid_t_nonecog, lid_y_nonecog = get_cdrs_specific(
-        sub=sub, rater=cdrs_rater, side='ipsilat ecog',)
-    
-    # find closest CDRS value for ft-values based on timestamps
-    cdrs_idx_fts = [np.argmin(abs(t - lid_t_ecog)) for t in ft_times]
-    ecog_cdrs_for_fts = lid_y_ecog[cdrs_idx_fts]
-    nonecog_cdrs_for_fts = lid_y_nonecog[cdrs_idx_fts]
+    if LATERALITY.upper() == 'UNILAT':
+        # get timestamps and values of clinical CDRS LID assessment
+        lid_t_ecog, lid_y_ecog = get_cdrs_specific(
+            sub=sub, rater=cdrs_rater, side='contralat ecog',)
+        lid_t_nonecog, lid_y_nonecog = get_cdrs_specific(
+            sub=sub, rater=cdrs_rater, side='ipsilat ecog',)
+        
+        # find closest CDRS value for ft-values based on timestamps
+        cdrs_idx_fts = [np.argmin(abs(t - lid_t_ecog)) for t in ft_times]
+        cdrs_for_fts = lid_y_ecog[cdrs_idx_fts]
+        nonecog_cdrs_for_fts = lid_y_nonecog[cdrs_idx_fts]
 
-    select_bool = ~np.logical_and(ecog_cdrs_for_fts == 0,
-                                  nonecog_cdrs_for_fts > 0)
+        select_bool = ~np.logical_and(cdrs_for_fts == 0,
+                                    nonecog_cdrs_for_fts > 0)
+        
+        
+    elif LATERALITY.upper() == 'BILAT':
+        # get timestamps and values of clinical CDRS LID assessment
+        lid_t, lid_y = get_cdrs_specific(
+            sub=sub, rater=cdrs_rater, side='both',)
+        
+        # find closest CDRS value for ft-values based on timestamps
+        cdrs_idx_fts = [np.argmin(abs(t - lid_t)) for t in ft_times]
+        cdrs_for_fts = lid_y[cdrs_idx_fts]
+
+        select_bool = np.array([True] * len(cdrs_for_fts))
     
+    
+    else:
+        raise ValueError('LATERALITY should be: UNILAT or BILAT')
+    
+
     if not isinstance(select_bool, np.ndarray):
         select_bool = select_bool.values
-    if not isinstance(ecog_cdrs_for_fts, np.ndarray):
-        ecog_cdrs_for_fts = ecog_cdrs_for_fts.values
+    if not isinstance(cdrs_for_fts, np.ndarray):
+        cdrs_for_fts = cdrs_for_fts.values
     
-    return select_bool, ecog_cdrs_for_fts
+    return select_bool, cdrs_for_fts
+
+
 
 def load_feature_df_for_pred(
-    sub, INCL_POWER: bool, INCL_COH_UNILAT: bool,
-    sel_bandwidths = 'all', sel_source = 'all',
+    sub,
+    LATERALITY: str,
+    INCL_PSD = ['mean_psd',],
+    INCL_COH: bool = True,
+    INCL_BURSTS: bool = True,
+    sel_bandwidths = 'all',
+    sel_source = 'all',
     settings_json: str = 'ftExtr_spectral_v1.json',
+    preproc_data_version='vX',
     verbose: bool = False,
 ):
+    """
+    Inputs:
+        - sub
+        - LATERALITY: has to be unilat or bilat (all/STN only, or one-sided-ECOG)
+        - INCL_PSD: list with 'max_psd' and/or 'mean_psd',
+            'variation', 'peak_freq'; False if no powers included
+        - INCL_COH: bool, always include both squared and imag
+        - INCL_BURSTS_ bool
+        - sel_bandwidths: 'all', otherwise selects out features at end
+        - sel_source: 'all', otherwise selects out features at end (lfp or ecog)
+    """
     # load all features
     fts = ssdFeatures(sub_list=[sub],
-                      settings_json=settings_json,)
+                      settings_json=settings_json,
+                      data_version=preproc_data_version,
+                      incl_bursts=INCL_BURSTS,
+                      )
     incl_bws = list(fts.ftExtract_settings['SPECTRAL_BANDS'].keys())
     sub_fts = getattr(fts, f'sub{sub}')  # get sub-specific feature-class
 
     # create dataframe to store feature in
-    feat_sel = DataFrame()
+    features = DataFrame()
 
-    # select ECoG-side power-features
-    if INCL_POWER:
-        s = get_ecog_side(sub)
-        col_sel = [
-            (f'ecog_{s}' in c or f'lfp_{s}' in c) and
-            ('peak_freq' not in c and 'broad_gamma' not in c)
-            for c in list(sub_fts.powers.keys())
-        ]
-        power_fts = sub_fts.powers.iloc[:, col_sel]
+    # check bilateral or unilateral feature inclusion
+    assert LATERALITY.upper() in ['BILAT', 'UNILAT'], 'LATERALITY should be bilat or unilat'
+
+    if LATERALITY.upper() == 'BILAT':
+        SIDE = 'ALL'
+    elif LATERALITY.upper() == 'UNILAT':
+        if sub.startswith('1'):
+            raise ValueError(f'sub-{sub} DOESNOT HAVE ECOG')
+        SIDE = get_ecog_side(sub)
+
+    
+    # select power-features
+    if isinstance(INCL_PSD, list):
+        # create bool for sides
+        if SIDE == 'ALL': 
+            col_side_sel = np.array([True] * sub_fts.powers.shape[1])
+        else:
+            col_side_sel = np.array([SIDE in k for k in sub_fts.powers.keys()])
+
+        # select on featue type and bw
+        ft_sel = np.array([False] * sub_fts.powers.shape[1])
+        for f, b in product(INCL_PSD, incl_bws):
+            temp_sel = np.array([f in k and b in k
+                                 for k in sub_fts.powers.keys()])
+            ft_sel += temp_sel  # change every feature-bandwidth combination to True
+        
+        column_sel = col_side_sel * ft_sel  # take only columns with selected side and ft-band
+        power_fts = sub_fts.powers.iloc[:, column_sel]
+        
         # if necessary: convert to minutes to agree with CDRS score
         if max(power_fts.index) > 120: power_fts.index = power_fts.index / 60
         
         if verbose: print(f'\tsub-{sub}, POWER FEATS SHAPE INCLUDED: {power_fts.shape}')
-        feat_sel = concat([feat_sel, power_fts], axis=1, ignore_index=False)
+        features = concat([features, power_fts], axis=1, ignore_index=False)
 
     # LOAD COHERENCES
-    if INCL_COH_UNILAT:
-        coh_fts = select_coh_feats(sub_fts=sub_fts, coh_sides='STN_ECOG',
-                                   incl_bandws=incl_bws,)
-        if verbose: print(f'\tsub-{sub}, COH FEATS SHAPE INCLUDED: {coh_fts.shape}')
-        
-        feat_sel = concat([feat_sel, coh_fts], axis=1, ignore_index=False)
+    if INCL_COH:
+        if sub.startswith('0'):  # skip STN-only patients
+            coh_fts = select_coh_feats(sub_fts=sub_fts, coh_sides='STN_ECOG',
+                                    incl_bandws=incl_bws,)
+            if verbose: print(f'\tsub-{sub}, ECoG-STN COH FEATS SHAPE INCLUDED: {coh_fts.shape}')
+            features = concat([features, coh_fts], axis=1, ignore_index=False)
     
-    if verbose: print(f'\tsub-{sub}, MERGED FEATS SHAPE INCLUDED: {feat_sel.shape}')
+    if INCL_COH and LATERALITY == 'BILAT':
+        coh_fts = select_coh_feats(sub_fts=sub_fts, coh_sides='STN_STN',
+                                   incl_bandws=incl_bws,)
+        if verbose: print(f'\tsub-{sub}, STN-STN COH FEATS SHAPE INCLUDED: {coh_fts.shape}')
+        features = concat([features, coh_fts], axis=1, ignore_index=False)
 
-    # if necessary: convert to minutes to agree with CDRS score
-    if max(feat_sel.index) > 120: feat_sel.index = feat_sel.index / 60
 
-    # select specific bandwidths
+    # INCL BURSTS
+    if INCL_BURSTS:
+        burst_df = sub_fts.bursts
+        if max(burst_df.index) > 120: burst_df.index = burst_df.index / 60
+
+        if SIDE != 'ALL':
+            col_sel = [SIDE in col for col in burst_df.keys()]
+            burst_df = burst_df.iloc[:, col_sel]
+        features = concat([features, burst_df], axis=1, ignore_index=False)
+        
+
+    # select specific bandwidths if defined
     if sel_bandwidths != 'all' and sel_bandwidths != ['all']:
-        sel_array = np.array([False] * feat_sel.shape[1])
+        sel_array = np.array([False] * features.shape[1])
         for bw in sel_bandwidths:
             # select based on current bandwidth and add to total selector
-            sel = [bw in k for k in feat_sel.keys()]
+            sel = [bw in k for k in features.keys()]
             sel_array += np.array(sel)
 
         # keep selected columns in feature df
-        feat_sel = DataFrame(data=feat_sel.values[:, sel_array],
-                    columns=feat_sel.keys()[sel_array],
-                    index=feat_sel.index)
-        if verbose: print(f'\tsub-{sub}, MERGED FEATS SHAPE after {sel_bandwidths} selection: {feat_sel.shape}')
+        features = DataFrame(data=features.values[:, sel_array],
+                    columns=features.keys()[sel_array],
+                    index=features.index)
+        if verbose: print(f'\tsub-{sub}, MERGED FEATS SHAPE after {sel_bandwidths} selection: {features.shape}')
     
     # select specific feature sources
     if sel_source != 'all' and sel_source != 'both':
         assert sel_source in ['lfp', 'ecog'], 'incorrect source'
 
         # select based on current bandwidth and add to total selector
-        sel_array = np.array([sel_source in k for k in feat_sel.keys()])
+        sel_array = np.array([sel_source in k for k in features.keys()])
         # keep selected columns in feature df
-        feat_sel = DataFrame(data=feat_sel.values[:, sel_array],
-                    columns=feat_sel.keys()[sel_array],
-                    index=feat_sel.index)
-        if verbose: print(f'\tsub-{sub}, MERGED FEATS SHAPE after {sel_source} selection: {feat_sel.shape}')
-        if verbose: print(f'\tIncluded feats for {sel_source}: {feat_sel.keys()}')
+        features = DataFrame(data=features.values[:, sel_array],
+                    columns=features.keys()[sel_array],
+                    index=features.index)
+        if verbose: print(f'\tsub-{sub}, MERGED FEATS SHAPE after {sel_source} selection: {features.shape}')
+        if verbose: print(f'\tIncluded feats for {sel_source}: {features.keys()}')
 
-    return feat_sel
+    return features
 
 
 def select_coh_feats(
@@ -141,7 +223,7 @@ def select_coh_feats(
             # temp_values = np.concatenate((np.atleast_2d(coh_means.values).T,
             #                               np.atleast_2d(coh_maxs.values).T), axis=1)
             temp_values = coh_means
-            coh_labels = [f'{coh_type}_{bw}_mn']  # f'{coh_type}_{bw}_mx'  # max coh left out, too similar to mean
+            coh_labels = [f'{coh_type}_{coh_sides}_{bw}']
 
             if i_bw == i_coh == 0:
                 coh_values = DataFrame(index=temp_index,
@@ -161,4 +243,5 @@ def select_coh_feats(
     if max(coh_values.index) > 120: coh_values.index = coh_values.index / 60
 
     return coh_values
+
 

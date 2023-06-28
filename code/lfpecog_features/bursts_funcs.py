@@ -249,12 +249,34 @@ def calc_bursts_from_env(
     return n_short, n_long, rateShort, rateLong, burst_lengths
 
 
-def get_burst_duration_profile():
-    """
-    Calculate average burst duration profiles, as found
-    to be a predictive marker for medication-state,
-    INDEPENDENT OF ARBITRARY BURST-THRESHOLDS, by
-    Duchet et al, PLOS Comp Biol 2021
-    (https://doi.org/10.1371/journal.pcbi.1009116).
 
+def calc_burst_profiles(env, bw, Fs,
+                        min_burst_sec,
+                        window_length_sec=None):
     """
+    Based on Duchet PLOS Comp Biol 2021:
+        https://doi.org/10.1371/journal.pcbi.1009116
+    and Lofredi eLife 2018:
+        https://doi.org/10.7554/eLife.31895.001
+    """
+    if 'beta' in bw: metric = 'duration'
+    elif 'gamma' in bw: metric = 'rate'
+
+    thresh_list = np.linspace(5, 95, num=50)
+    thresh_list = [np.percentile(env, t) for t in thresh_list]
+
+    value_list = []
+    for t in thresh_list:
+        start_idx, end_idx = get_burst_indices(envelop=env, burst_thr=t)
+        burst_lengths_sec = (end_idx - start_idx) / Fs
+        burst_lengths_sec = burst_lengths_sec[burst_lengths_sec >= min_burst_sec]
+
+        if metric == 'duration':
+            value_list.append(np.mean(burst_lengths_sec))
+        elif metric == 'rate':
+            value_list.append(len(burst_lengths_sec) / 
+                              window_length_sec)
+    
+    integral_line = np.trapz(value_list)
+
+    return integral_line

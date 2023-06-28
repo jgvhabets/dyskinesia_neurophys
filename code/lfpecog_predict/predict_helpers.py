@@ -10,7 +10,7 @@ from scipy.signal import resample
 # import cross-validation functions
 from sklearn.model_selection import StratifiedKFold, LeaveOneGroupOut
 # import classifiers
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
@@ -35,6 +35,20 @@ def perform_prediction(
     verbose: bool = False,
     plot_importances: bool = False,
 ):
+    # define binary input
+    if len(np.unique(y)) > 2: BINARY = False
+    elif len(np.unique(y)) == 2: BINARY = True
+    else: raise ValueError('y has less than 2 unique values')
+
+    if BINARY:
+        assert clf_method in ['lda', 'logreg', 'rf',
+                              'svm', 'svc', 'randomforest'], (
+            f'clf method "{clf_method}" incorrect for BINARY DATA'
+                              )
+    elif not BINARY:
+        assert clf_method in ['linreg', 'rf', 'randomforest'], (
+            f'clf method "{clf_method}" incorrect for CONTINUOUS DATA'
+                              )
     # dict to store results per random-permutation
     perm_y_true, perm_y_pred, perm_conf_pred = {}, {}, {}
     perm_tpr, perm_fpr = [], []
@@ -94,9 +108,14 @@ def perform_prediction(
             # fit model
             clf.fit(X=X_train, y=y_train)        
             # save predictions for posthoc analysis and conf matrix
-            y_proba_dict[F] = clf.predict_proba(X=X_test)
+            try:
+                y_proba_dict[F] = clf.predict_proba(X=X_test)
+                conf_scores[F] = clf.decision_function(X=X_test)
+            except AttributeError:
+                y_proba_dict[F] = np.array([np.nan] * len(y_test))
+                conf_scores[F] = np.array([np.nan] * len(y_test))
+            
             y_pred_dict[F] = clf.predict(X=X_test)
-            conf_scores[F] = clf.decision_function(X=X_test)
             y_true_dict[F] = y_test
 
             if not perform_random_perm: importance_list.append(clf.coef_[0])
@@ -211,7 +230,7 @@ def get_classifier(
             random_state=random_state,
         )
         
-    elif clf_sel.lower() == 'rf' or clf.lower() == 'randomforest':
+    elif clf_sel.lower() == 'rf' or clf_sel.lower() == 'randomforest':
         clf = RandomForestClassifier(
             n_estimators=1000,  # 500
             max_depth=None,
@@ -220,5 +239,8 @@ def get_classifier(
             random_state=random_state,
             class_weight='balanced',
         )
+    
+    elif clf_sel.lower() == 'linreg':
+        clf = LinearRegression()
 
     return clf

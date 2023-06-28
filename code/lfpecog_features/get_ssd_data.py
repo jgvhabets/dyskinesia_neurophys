@@ -276,7 +276,10 @@ class get_subject_SSDs:
         self.ephys_sources = []
         if self.incl_ecog:
             ecog_side = get_ecog_side(self.sub)
-            self.ephys_sources.append(f'ecog_{ecog_side}')
+            if ecog_side:
+                self.ephys_sources.append(f'ecog_{ecog_side}')
+            else:
+                print(f'\n\tsubject {self.sub} has STN ONLY recordings')
         if self.incl_stn:
             self.ephys_sources.extend(['lfp_left', 'lfp_right'])
 
@@ -455,16 +458,16 @@ class create_SSDs():
                     ssd_arr_2d = np.array(ssd_arr_2d, dtype='object')  # convert list to 2d array
                     ssd_arr_3d.append(ssd_arr_2d)
 
-                    # visualise window before nan-removal
-                    for i_row in np.arange(windows.data.shape[2]):
-                        plt.plot(windows.data[i_w, :, i_row],
-                                 label=windows.keys[i_row])
-                    plt.plot(i_nan.astype(int) * 2e-4,
-                             label='NAN')
+                    # # visualise window before nan-removal
+                    # for i_row in np.arange(windows.data.shape[2]):
+                    #     plt.plot(windows.data[i_w, :, i_row],
+                    #              label=windows.keys[i_row])
+                    # plt.plot(i_nan.astype(int) * 2e-4,
+                    #          label='NAN')
 
-                    plt.legend()
-                    plt.title(f'window # {i_w}, removed due to NaNs')
-                    plt.show()
+                    # plt.legend()
+                    # plt.title(f'window # {i_w}, removed due to NaNs')
+                    # plt.show()
                     # raise ValueError('DEBUG: after plot error')
                     continue
 

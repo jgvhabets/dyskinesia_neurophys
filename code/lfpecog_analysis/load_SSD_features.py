@@ -7,6 +7,7 @@ analysis
 import os
 from os.path import join, exists
 from os import listdir, makedirs
+import json
 import numpy as np
 import pandas as pd
 from collections import namedtuple
@@ -20,7 +21,7 @@ from utils.utils_fileManagement import (
 from lfpecog_preproc.preproc_import_scores_annotations import (
     read_clinical_scores
 )
-from lfpecog_features.feats_phases import get_pac_bins
+from lfpecog_features.feats_phase_amp_coupling import get_pac_bins
 
 
 @dataclass(init=True, repr=True)
@@ -43,16 +44,17 @@ class ssdFeatures:
     settings_json: str = 'ftExtr_spectral_v1.json'
     sub_list: list = field(default_factory=lambda: [])
     data_version: str = 'v3.0'
-    win_len_sec: int or float = 10
-    win_overlap_part: float = 0.0
     incl_powers: bool = True
-    incl_localPAC: bool = True
+    incl_localPAC: bool = False
+    incl_bursts: bool = True
     incl_coherence: bool = True
     verbose: bool = False
 
     def __post_init__(self,):
         # load feature extraction settings
         self.ftExtract_settings = load_ft_ext_cfg(cfg_fname=self.settings_json)
+        self.win_len_sec = self.ftExtract_settings['WIN_LEN_sec']
+        self.win_overlap_part = self.ftExtract_settings['WIN_OVERLAP_part']
 
         # adjust SSD destination folder to SSD-flank-definition
         try: ssd_flanks = self.ftExtract_settings['SSD_flanks']
@@ -117,12 +119,17 @@ class ssdFeats_perSubject:
                                               ftExtract_settings=self.ftExtract_settings)
         
         if self.settings['incl_coherence']:
-            if self.verbose: print(f'TODO: load COHERENCES - {self.sub}')
+            if self.verbose: print(f'load COHERENCES - {self.sub}')
             self.coherences = load_ssd_coherences(
                 self.sub,
                 feat_path=self.feat_path,
                 bandwidths=self.ftExtract_settings['SPECTRAL_BANDS'].keys()
             )
+        
+        if self.settings['incl_bursts']:
+            if self.verbose: print(f'load BURSTS - {self.sub}')
+            self.bursts = load_ssd_bursts(self.sub,
+                                          feat_path=self.feat_path,)
 
         
 
@@ -225,9 +232,8 @@ def load_ssd_coherences(
     feat_path,
     incl_imag_coh: bool = True,
     incl_sq_coh: bool = True,
-    bandwidths: list = ['alpha', 'lo_beta',
-                        'hi_beta', 'narrow_gamma',
-                        'broad_gamma'],
+    bandwidths: list = ['delta', 'alpha', 'lo_beta',
+                        'hi_beta', 'gamma',],
     verbose: bool = False,
 ):
     scores_to_incl = []
@@ -248,13 +254,13 @@ def load_ssd_coherences(
                         sub in f and source in f and bw in f]
             
             coh_dfs = {}
+
             for score, f in product(scores_to_incl, sel_files):
                 # check if file contains sq_coh or imag_coh
                 if score not in f: continue  # skip incorrect file
                 # if score in file, load csv to df
-                coh_dfs[score] = pd.read_csv(
-                    join(feat_path, f),
-                    header=0, index_col=0)
+                coh_dfs[score] = pd.read_csv(join(feat_path, f),
+                                             header=0, index_col=0)
 
             # coh_dfs contains now all scores to incl
             # ._make needed to insert a list in the namedtuple
@@ -268,3 +274,28 @@ def load_ssd_coherences(
                            COHs_per_source['STN_ECOG'])
     
     return COHs_sub
+
+
+def load_ssd_bursts(sub: str, feat_path: str,):
+
+    with open(join(feat_path, f'SSDfeats_{sub}_BURSTS.json'),
+              'r') as f:
+        bursts = json.load(f)
+
+    burst_df = pd.DataFrame()
+
+    for key in bursts.keys():
+        splits = key.split('_')
+        source = f'{splits[0]}_{splits[1]}'
+
+        if 'lo_beta' in key: metric = f'lo_beta_duration'
+        if 'hi_beta' in key: metric = f'hi_beta_duration'
+        if 'gamma' in key: metric = f'gamma_rate'
+
+        temp_df = pd.DataFrame(data=bursts[key][metric],
+                               index=bursts[key]['times'],
+                               columns=[f'{source}_{metric}'])
+        burst_df = pd.concat([burst_df, temp_df], axis=1,
+                             ignore_index=False)
+    
+    return burst_df

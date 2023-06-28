@@ -85,7 +85,7 @@ if __name__ == '__main__':
     
     Running on WIN (from repo_folder/code):
         python -m lfpecog_features.run_mergeDataClass "012" "v3.0" (opt: "no_acc" "no_save")
-
+        OR: python -m lfpecog_features.run_mergeDataClass "all" "v4.0"
     Output:
         - dataframe data/ index/ columnnames stored
             in path: data/merged_sub_data/DATAVERSION/
@@ -119,8 +119,9 @@ if __name__ == '__main__':
     else:
         raise ValueError(f'define PICKLE_PER_SOURCE info for dataversion: {DATA_VERSION}')
     
-    all_subs = ['008', '009', '010', '012', '013', '014',
-                '016', '017']
+    # all_subs = ['008', '009', '010', '012', '013', '014',
+    #             '016', '017']
+    all_subs = ['101', '102', '103',]
     
     if SUB.lower() == 'all': sub_list = all_subs
     elif isinstance(SUB, str) and len(SUB) == 3: sub_list = [SUB,]
