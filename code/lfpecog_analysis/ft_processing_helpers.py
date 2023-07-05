@@ -80,6 +80,52 @@ def get_idx_discardNonEcogLid(
     return select_bool, cdrs_for_fts
 
 
+def multiclass_y(
+    y_full_scale, time_minutes,
+    first_minutes_mild=0,
+    cutoff_mildModerate=2.5,
+    cutoff_moderateSevere=4.5,
+):
+    """
+    Rescales CDRS scores into
+        - None [0]: 0 (excl 10 minutes before LID start),
+        - pre- and mild-LID [1]: 10 minutes before LID and up to 2,
+            also includes 0-moments after onset of LID
+        - moderate [2]: 3 to 5,
+        - severe [3]: more than 5.
+
+    Cutoff between mild and severe defaults to 4.5.
+    """
+    new_y = np.zeros_like(y_full_scale)
+
+    sel_mild = np.logical_and(y_full_scale > 0,
+                              y_full_scale < cutoff_mildModerate)
+    if first_minutes_mild > 0 and any(y_full_scale > 0):
+        # select x-minutes before LID start
+        i_start = np.where(y_full_scale)[0][0]
+        
+        if isinstance(i_start, np.int64) and i_start > 0:
+            t_start = time_minutes[i_start]
+            sel_pre_min = np.logical_and(
+                time_minutes > (t_start - first_minutes_mild),
+            #     time_minutes < t_start
+            # )
+            # sel_pre_min = np.logical_and(
+            #     sel_pre_min,
+                y_full_scale == 0
+            )
+            sel_mild += sel_pre_min
+    new_y[sel_mild] = 1
+
+    sel_moderate = np.logical_and(y_full_scale > cutoff_mildModerate,
+                              y_full_scale < cutoff_moderateSevere)
+    new_y[sel_moderate] = 2
+
+    sel_severe = y_full_scale >= cutoff_moderateSevere
+    new_y[sel_severe] = 3
+
+    return new_y
+
 
 def load_feature_df_for_pred(
     sub,

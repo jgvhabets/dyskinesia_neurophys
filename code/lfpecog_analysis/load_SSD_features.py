@@ -294,7 +294,7 @@ def load_ssd_bursts(sub: str, feat_path: str,):
 
         temp_df = pd.DataFrame(data=bursts[key][metric],
                                index=bursts[key]['times'],
-                               columns=[f'{source}_{metric}'])
+                               columns=[f'{source}_burst_{metric}'])
         burst_df = pd.concat([burst_df, temp_df], axis=1,
                              ignore_index=False)
     
