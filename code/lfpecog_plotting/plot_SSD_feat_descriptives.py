@@ -8,7 +8,9 @@ import numpy as np
 import pandas as pd
 from itertools import product
 
-from scipy.stats import mannwhitneyu, norm, pearsonr
+from scipy.stats import (
+    mannwhitneyu, norm, pearsonr, spearmanr
+)
 import gpboost as gpb
 import statsmodels.api as sm
 from statsmodels.formula.api import mixedlm
@@ -111,12 +113,14 @@ def plot_binary_featViolins(
         plt.close()
 
 
-def plot_multiclass_featBoxs(
+def plot_feats_on_categLID(
     X_all, y_all, sub_ids, ft_names,
     incl_ft_sources,
     sign_test='glmm', ALPHA = .05,
-    SHOW_PLOT=True, SAVE_PLOT=False,
-    fig_name=None, fig_path=None,
+    SHOW_FT_BOXPLOT=True, SAVE_FT_BOXPLOT=False,
+    SHOW_CORR_BARPLOT=True, SAVE_CORR_BARPLOT=False,
+    fig_path=None, fig_name_ftBox=None,
+    fig_name_corrBar=None,
 ):
     # select features based on source
     ecog_sel = np.array(['ecog' in f.lower() for f in ft_names])
@@ -131,64 +135,65 @@ def plot_multiclass_featBoxs(
     box_lists, box_ps = get_violin_ft_data(
         X_all, y_all, ft_names, sub_ids=sub_ids,
         sign_test=sign_test, binary_LID=False,)
-
-    fsize=24
+    box_ps = np.array(box_ps)
     # correct alpha for mult. comparisons
     ALPHA /= len(ft_names)
 
-    fig, ax = plt.subplots(1, 1, figsize=(24, 12))
+    fsize=24
 
-    color_names = ['lightblue', 'nightblue', 'sand','turquoise', ]
-    clrs = [get_colors()[c] for c in color_names] * len(ft_names)
+    if SAVE_FT_BOXPLOT or SHOW_FT_BOXPLOT:
+        fig, ax = plt.subplots(1, 1, figsize=(24, 12))
 
-    # Draw a nested violinplot and split the violins for easier comparison
-    box = ax.boxplot(x=box_lists,
-                     positions=[x + shift for x, shift in 
-                                product(np.arange(len(ft_names)), [-.3, -.1, .1, .3])],
-                     widths=.1,
-                     patch_artist=True,)
-    for patch, color in zip(box['boxes'], clrs):
-        patch.set_facecolor(color)
+        color_names = ['lightblue', 'nightblue', 'sand','turquoise', ]
+        clrs = [get_colors()[c] for c in color_names] * len(ft_names)
 
-    # # change transparency based on sign differences
-    # double_ps = []  # violin.collections desribes every half-violin, therefore double the p-values
-    # for p in violin_ps: double_ps.extend([p, p])
+        # Draw a nested violinplot and split the violins for easier comparison
+        box = ax.boxplot(x=box_lists,
+                        positions=[x + shift for x, shift in 
+                                    product(np.arange(len(ft_names)), [-.3, -.1, .1, .3])],
+                        widths=.1,
+                        patch_artist=True,)
 
-    # for body, p_ft in zip(violin.collections, double_ps):
+        for i_box, (patch, color) in enumerate(zip(box['boxes'], clrs)):
+            # set right color for box-body
+            patch.set_facecolor(color)
+            # if p-value is LARGER than ALPHA (not sign), reduce color-alpha
+            if box_ps[int(i_box / 4), 1] > ALPHA:
+                patch.set_alpha(.4)
+
+        ax.set_ylim(-5, 5)
+        ax.set_xticks(np.arange(len(ft_names)))
+        ft_names = readable_ftnames(ft_names)
+        ft_names = [f'{f} ({round(R, 2)})' for f, R in
+                    zip(ft_names, box_ps[:, 0])]
+        ax.set_xticklabels([n for n in ft_names], rotation=60, ha='right',
+                        size=fsize)
         
-    #     if p_ft < ALPHA: body.set_alpha(1)
-    #     else: body.set_alpha(.3)
+        for i_tick, p in enumerate(box_ps[:, 1]):
+            if p < ALPHA: ax.get_xticklabels()[i_tick].set_weight('bold')
+        
+        ax.set_ylabel('z-scored values (a.u.)', size=fsize + 8)
+        ax.set_xlabel('')
+        plt.tick_params(axis='both', size=fsize, labelsize=fsize+2)
+
+        # h, l = ax.get_legend_handles_labels()
+        # l = ['no LID', 'LID']
+        # ax.legend(h, l, fontsize=fsize+8, frameon=False,
+        #         ncol=2, loc='lower right')
+        
+        ax.set_title(f'{incl_ft_sources} Feature differences '
+                    '(10-s windows): categorical-LID'
+                    f'   (Bonf. corrected alpha = {round(ALPHA, 4)})',
+                    size=fsize + 8, weight='bold')
+
+        plt.tight_layout()
 
 
-    ax.set_ylim(-5, 5)
-    ax.set_xticks(np.arange(len(ft_names)))
-    ft_names = readable_ftnames(ft_names)
-    ax.set_xticklabels([n for n in ft_names], rotation=60, ha='right',
-                    size=fsize)
-    
-    # for i_tick, p in enumerate(violin_ps):
-    #     if p < ALPHA: ax.get_xticklabels()[i_tick].set_weight('bold')
-    
-    ax.set_ylabel('z-scored values (a.u.)', size=fsize + 8)
-    ax.set_xlabel('')
-    plt.tick_params(axis='both', size=fsize, labelsize=fsize+2)
+    if SAVE_FT_BOXPLOT:
+        plt.savefig(join(fig_path, fig_name_ftBox),
+                    facecolor='w', dpi=300,)
 
-    # h, l = ax.get_legend_handles_labels()
-    # l = ['no LID', 'LID']
-    # ax.legend(h, l, fontsize=fsize+8, frameon=False,
-    #         ncol=2, loc='lower right')
-    ax.set_title(f'{incl_ft_sources} Feature differences '
-                 '(10-s windows): multiclass-LID',
-                # f'   (Bonf. corrected alpha = {round(ALPHA, 4)})',
-                size=fsize + 8, weight='bold')
-
-    plt.tight_layout()
-
-
-    if SAVE_PLOT:
-        plt.savefig(join(fig_path, fig_name), facecolor='w', dpi=300,)
-
-    if SHOW_PLOT:
+    if SHOW_FT_BOXPLOT:
         plt.show()
     else:
         plt.close()
@@ -287,9 +292,8 @@ def get_violin_ft_data(
             
             # define correlation between LID-categories and feature-values
             R, p = pearsonr(x=ft_values, y=y_all)
-            print(f'{ft_names[i_ft]}, R: {round(R, 3)}, p = {round(p, 5)}')
-
             violin_ps.append([R, p])
+            
         
     return violin_data, violin_ps
 
