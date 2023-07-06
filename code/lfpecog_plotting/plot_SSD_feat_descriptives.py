@@ -122,6 +122,8 @@ def plot_feats_on_categLID(
     fig_path=None, fig_name_ftBox=None,
     fig_name_corrBar=None,
 ):
+    #
+    n_cat = len(np.unique(y_all))
     # select features based on source
     ecog_sel = np.array(['ecog' in f.lower() for f in ft_names])
     if incl_ft_sources == 'STN': sel = ~ecog_sel
@@ -144,13 +146,15 @@ def plot_feats_on_categLID(
     if SAVE_FT_BOXPLOT or SHOW_FT_BOXPLOT:
         fig, ax = plt.subplots(1, 1, figsize=(24, 12))
 
-        color_names = ['lightblue', 'nightblue', 'sand','turquoise', ]
+        color_names = ['lightblue', 'nightblue', 'sand', 'turquoise', 'softred']
+        color_names = color_names[:n_cat]
         clrs = [get_colors()[c] for c in color_names] * len(ft_names)
 
         # Draw a nested violinplot and split the violins for easier comparison
+        box_positions = np.linspace(-.3, .3, n_cat)
         box = ax.boxplot(x=box_lists,
                         positions=[x + shift for x, shift in 
-                                    product(np.arange(len(ft_names)), [-.3, -.1, .1, .3])],
+                                    product(np.arange(len(ft_names)), box_positions)],
                         widths=.1,
                         patch_artist=True,)
 
@@ -158,7 +162,7 @@ def plot_feats_on_categLID(
             # set right color for box-body
             patch.set_facecolor(color)
             # if p-value is LARGER than ALPHA (not sign), reduce color-alpha
-            if box_ps[int(i_box / 4), 1] > ALPHA:
+            if box_ps[int(i_box / n_cat), 1] > ALPHA:
                 patch.set_alpha(.4)
 
         ax.set_ylim(-5, 5)
@@ -180,7 +184,7 @@ def plot_feats_on_categLID(
         # l = ['no LID', 'LID']
         # ax.legend(h, l, fontsize=fsize+8, frameon=False,
         #         ncol=2, loc='lower right')
-        
+
         ax.set_title(f'{incl_ft_sources} Feature differences '
                     '(10-s windows): categorical-LID'
                     f'   (Bonf. corrected alpha = {round(ALPHA, 4)})',
@@ -209,9 +213,9 @@ def get_violin_ft_data(
     create lists for violinplots, include
     significance testing p-values
     """
-    assert sign_test.upper() in ['GLMM', 'MWU', 'MIXEDLM'], (
+    assert sign_test.upper() in ['GLMM', 'MWU', 'MIXEDLM', 'PEARSON'], (
         'sign_test hs to be GLMM (gen linear mixed effects model)'
-        f', or MWU (mann-whitney-u), or MIXEDLM (statsmodels), '
+        f', or MWU (mann-whitney-u), MIXEDLM (statsmodels), or PEARSON'
         f'{sign_test} was given'
     )
     
@@ -255,6 +259,8 @@ def get_violin_ft_data(
                 lmm_results.at[ft_name, 'coeff'] = coefs[0]
                 lmm_results.at[ft_name, 'p'] = p_values
 
+                # print(f'\n\n{ft_name}:\n{gp_model.summary()}')
+
             violin_ps = lmm_results['p'].values
 
         elif sign_test.upper() == 'MIXEDLM':
@@ -276,26 +282,90 @@ def get_violin_ft_data(
                 # Extract the p-value for the Condition variable
                 p_value = result.pvalues['LID']
                 violin_ps.append(p_value)
-
+        
+        # return for BINARY LID
+        return violin_data, violin_ps
+    
+    
     elif not binary_LID:
-        violin_data = []
-        violin_ps = []
 
-        for i_ft in np.arange(X_all.shape[1]):
+        categories = np.unique(y_all)
+        box_lists = []  # tos tore data for boxplots
+        stats_cols = ['coeff', 'p']
+        box_stats = pd.DataFrame(
+            data=np.zeros((len(ft_names), len(stats_cols))),
+            columns=stats_cols, index=ft_names
+        )  # to store statistics
+        
+        for i_ft, ft_name in enumerate(ft_names):
             # loop over all features
             ft_values = X_all[:, i_ft]
 
-            for score in [0, 1, 2, 3]:
+            # add lists for later boxplotting
+            for score in categories:
                 # select ft-value belonging to LID-score (multiclass)
                 score_values = list(ft_values[y_all == score])
-                violin_data.append(score_values)
+                box_lists.append(score_values)
             
-            # define correlation between LID-categories and feature-values
-            R, p = pearsonr(x=ft_values, y=y_all)
-            violin_ps.append([R, p])
+            # test for correlation/coefficients and significancy
+            if sign_test.upper() == 'PEARSON':
+                # define correlation between LID-categories and feature-values
+                R, p = pearsonr(x=ft_values, y=y_all)
+                box_stats.at[ft_name, 'coeff'] = R
+                box_stats.at[ft_name, 'p'] = p
+    
+            elif sign_test.upper() == 'GLMM':
+                
+                glmm_df = get_categorical_glmm_df(
+                    ft_values=ft_values,
+                    sub_ids=sub_ids,
+                    y_all_scale=y_all
+                )
+                gp_model = gpb.GPModel(group_data=glmm_df['sub'],
+                                       likelihood="poisson",)
+                gp_model.fit(y=glmm_df['category'], X=glmm_df['mean_feat'],
+                             params={'std_dev': True})
+                coefs = gp_model.get_coef().values.ravel()
+                z_values = coefs[0] / coefs[1]
+                p_values = 2 * norm.cdf(-np.abs(z_values))            
+                box_stats.at[ft_name, 'coeff'] = coefs[0]
+                box_stats.at[ft_name, 'p'] = p_values
+
+                print(f'start plotting {ft_name}')
+                
+                fig, ax = plt.subplots(1,1)
+                for s in np.unique(sub_ids):
+
+                    ax.scatter(
+                        glmm_df['category'][glmm_df['sub'] == s],
+                        glmm_df['mean_feat'][glmm_df['sub'] == s],
+                        label=s
+                    )
+                ax.set_title(f'{ft_name}, Coeff: {round(coefs[0], 2)}, p={round(p_values, 8)}')
+                ax.set_xlabel('CDRS category')
+                ax.set_xticks(np.arange(5))
+                ax.set_xticklabels(['None', 'Pre', 'Mild', 'Moderate', 'Severe'])
+                ax.set_ylabel('Mean feature')
+                ax.legend()
+                plt.show()
+
+                
+                # gp_model = gpb.GPModel(
+                #     group_data=sub_ids,
+                #     likelihood="poisson",
+                # )
+                # gp_model.fit(y=y_all, X=ft_values,
+                #             params={'std_dev': True})
+                # coefs = gp_model.get_coef().values.ravel()
+                # z_values = coefs[0] / coefs[1]
+                # p_values = 2 * norm.cdf(-np.abs(z_values))            
+                # box_stats.at[ft_name, 'coeff'] = coefs[0]
+                # box_stats.at[ft_name, 'p'] = p_values
+
+                # print(f'\n\n{ft_name}:\n{gp_model.summary()}')
             
         
-    return violin_data, violin_ps
+        return box_lists, box_stats
 
 
 def readable_ftnames(ft_names):
@@ -311,3 +381,36 @@ def readable_ftnames(ft_names):
         temp_ftnames.append(f.upper())
 
     return temp_ftnames
+
+
+def get_categorical_glmm_df(
+    ft_values, sub_ids, y_all_scale
+):
+    """
+    
+    
+    """
+    n_subs = len(np.unique(sub_ids))
+    n_categs = len(np.unique(y_all_scale))
+    # create dataframe with correct shape filled with NaN
+    mean_glmm_data = pd.DataFrame(
+        data=np.array([[np.nan] * 3] * (n_subs * n_categs)),
+        columns=['sub', 'category', 'mean_feat'],
+    )
+
+    # loop over every combi of sub and category
+    idx_to_drop = []
+    for i_row, (sub, score) in enumerate(product(np.unique(sub_ids),
+                                                 np.unique(y_all_scale))):
+        # select feature values per sub x score
+        sel = ft_values[np.logical_and(sub_ids == sub, y_all_scale == score)]
+        
+        if len(sel) == 0: idx_to_drop.append(i_row)
+        
+        # fill dataframe with values
+        mean_glmm_data.iloc[i_row] = [sub, score, np.nanmean(sel)]
+    
+    # drop rows with NaNs
+    mean_glmm_data = mean_glmm_data.drop(index=idx_to_drop).reset_index(drop=True)
+    
+    return mean_glmm_data

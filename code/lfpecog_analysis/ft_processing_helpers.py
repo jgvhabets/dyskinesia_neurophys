@@ -80,11 +80,13 @@ def get_idx_discardNonEcogLid(
     return select_bool, cdrs_for_fts
 
 
-def multiclass_y(
+def categorical_CDRS(
     y_full_scale, time_minutes,
-    first_minutes_mild=0,
+    preLID_minutes=10,
+    preLID_separate=True,
     cutoff_mildModerate=2.5,
     cutoff_moderateSevere=4.5,
+    convert_inBetween_zeros=False,
 ):
     """
     Rescales CDRS scores into
@@ -96,18 +98,27 @@ def multiclass_y(
 
     Cutoff between mild and severe defaults to 4.5.
     """
+    coding_dict = {'none': 0, 'mild': 1, 'moderate': 2, 'severe': 3}
+    if preLID_separate:
+        for cat in coding_dict.keys():
+            if cat == 'none': continue
+            coding_dict[cat] = coding_dict[cat] + 1
+        coding_dict['pre'] = 1    
+
+
     new_y = np.zeros_like(y_full_scale)
 
     sel_mild = np.logical_and(y_full_scale > 0,
                               y_full_scale < cutoff_mildModerate)
-    if first_minutes_mild > 0 and any(y_full_scale > 0):
+    
+    if not preLID_separate and preLID_minutes > 0 and any(y_full_scale > 0):
         # select x-minutes before LID start
         i_start = np.where(y_full_scale)[0][0]
         
         if isinstance(i_start, np.int64) and i_start > 0:
             t_start = time_minutes[i_start]
             sel_pre_min = np.logical_and(
-                time_minutes > (t_start - first_minutes_mild),
+                time_minutes > (t_start - preLID_minutes),
             #     time_minutes < t_start
             # )
             # sel_pre_min = np.logical_and(
@@ -115,14 +126,39 @@ def multiclass_y(
                 y_full_scale == 0
             )
             sel_mild += sel_pre_min
-    new_y[sel_mild] = 1
+        # convert MILD and pre-LID
+        new_y[sel_mild] = coding_dict['mild']
+    
+    elif preLID_separate and any(y_full_scale > 0):
+        if preLID_minutes == 0: print(
+            'WARNING from categorical CDRS: pre-LID minutes is ZERO'
+        )
+        new_y[sel_mild] = coding_dict['mild']
+
+        i_start = np.where(y_full_scale)[0][0]        
+        t_start = time_minutes[i_start]
+        sel_pre = np.logical_and(
+            time_minutes > (t_start - preLID_minutes),
+            time_minutes < t_start
+        )
+        new_y[sel_pre] = coding_dict['pre']
+    
+    if convert_inBetween_zeros and any(y_full_scale > 0):
+        i_first_LID = np.where(y_full_scale)[0][0]
+        i_last_LID = np.where(y_full_scale)[0][-1]
+        sel = np.logical_and(np.arange(len(y_full_scale)) > i_first_LID,
+                             np.arange(len(y_full_scale)) < i_last_LID)
+        sel = np.logical_and(y_full_scale == 0, sel)
+
+        new_y[sel] = coding_dict[convert_inBetween_zeros]
+
 
     sel_moderate = np.logical_and(y_full_scale > cutoff_mildModerate,
                               y_full_scale < cutoff_moderateSevere)
-    new_y[sel_moderate] = 2
+    new_y[sel_moderate] = coding_dict['moderate']
 
     sel_severe = y_full_scale >= cutoff_moderateSevere
-    new_y[sel_severe] = 3
+    new_y[sel_severe] = coding_dict['severe']
 
     return new_y
 
