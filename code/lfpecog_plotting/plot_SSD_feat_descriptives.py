@@ -119,6 +119,7 @@ def plot_feats_on_categLID(
     sign_test='glmm', ALPHA = .05,
     SHOW_FT_BOXPLOT=True, SAVE_FT_BOXPLOT=False,
     SHOW_CORR_BARPLOT=True, SAVE_CORR_BARPLOT=False,
+    SAVE_COEF_FIGS=False, SHOW_COEF_FIGS=False, 
     fig_path=None, fig_name_ftBox=None,
     fig_name_corrBar=None,
 ):
@@ -136,7 +137,11 @@ def plot_feats_on_categLID(
     # Create violinplot LID vs no-LID
     box_lists, box_ps = get_violin_ft_data(
         X_all, y_all, ft_names, sub_ids=sub_ids,
-        sign_test=sign_test, binary_LID=False,)
+        sign_test=sign_test, binary_LID=False,
+        SAVE_COEF_FIGS=SAVE_COEF_FIGS,
+        fig_path=fig_path,
+        SHOW_COEF_FIGS=SHOW_COEF_FIGS,
+    )
     box_ps = np.array(box_ps)
     # correct alpha for mult. comparisons
     ALPHA /= len(ft_names)
@@ -207,7 +212,9 @@ def plot_feats_on_categLID(
 def get_violin_ft_data(
     X_all, y_all, ft_names,
     binary_LID = True,
-    sign_test: str = 'GLMM', sub_ids=None,   
+    sign_test: str = 'GLMM', sub_ids=None,
+    SAVE_COEF_FIGS=False, SHOW_COEF_FIGS=False,
+    fig_path=None,
 ):
     """
     create lists for violinplots, include
@@ -333,21 +340,40 @@ def get_violin_ft_data(
 
                 print(f'start plotting {ft_name}')
                 
-                fig, ax = plt.subplots(1,1)
+                fig, ax = plt.subplots(1,1, figsize=(6, 4))
+                fs=12
                 for s in np.unique(sub_ids):
+                    # create jitter for n subject samples
+                    jitter = np.random.uniform(low=-.05, high=.05,
+                                               size=sum(glmm_df['sub'] == s))
 
                     ax.scatter(
-                        glmm_df['category'][glmm_df['sub'] == s],
+                        glmm_df['category'][glmm_df['sub'] == s] + jitter,
                         glmm_df['mean_feat'][glmm_df['sub'] == s],
                         label=s
                     )
-                ax.set_title(f'{ft_name}, Coeff: {round(coefs[0], 2)}, p={round(p_values, 8)}')
-                ax.set_xlabel('CDRS category')
+                ax.set_title(f'{ft_name.upper()}: Coeff: {round(coefs[0], 2)},'
+                             f' p={round(p_values, 5)}',
+                             size=fs,)
+                ax.set_xlabel('CDRS category', size=fs,)
                 ax.set_xticks(np.arange(5))
-                ax.set_xticklabels(['None', 'Pre', 'Mild', 'Moderate', 'Severe'])
-                ax.set_ylabel('Mean feature')
-                ax.legend()
-                plt.show()
+                ax.set_xticklabels(['None', 'Pre', 'Mild', 'Moderate', 'Severe'],
+                                    size=fs,)
+                ax.set_ylabel('Mean feature (z-score)', size=fs,)
+                ax.legend(fontsize=fs, bbox_to_anchor=(1, .5),
+                            loc='center left')
+                plt.tick_params(size=fs, labelsize=fs)
+                plt.tight_layout()
+                
+                if SAVE_COEF_FIGS:
+                    plt.savefig(join(fig_path, 'categorical_features_GLMM',
+                                     f'categCDRS_{ft_name}_coefScatter'),
+                                facecolor='w', dpi=300,)
+
+                if SHOW_COEF_FIGS:
+                    plt.show()
+                else:
+                    plt.close()
 
                 
                 # gp_model = gpb.GPModel(
