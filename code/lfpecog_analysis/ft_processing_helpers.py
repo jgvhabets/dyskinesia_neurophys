@@ -15,19 +15,20 @@ from lfpecog_preproc.preproc_import_scores_annotations import(
 )
 from lfpecog_analysis.load_SSD_features import ssdFeatures
 
-def get_idx_discardNonEcogLid(
+def find_select_nearest_CDRS_for_ephys(
     sub, ft_times, LATERALITY: str,
     cdrs_rater: str = 'Patricia'
 ):
     """
-    Select timestamps of ephys-features that
+    Get nearest-CDRS values for neurophys-timings
+    or select timestamps of ephys-features that
     are closest to moment where there was only
     Dyskinesia in the NONE-ECoG bodyside
 
     Input:
         - sub: three-letter sub code
         - ft_times: array with all ft_times to
-            be selected
+            be selected in MINUTES
         - LATERALITY: should be UNILAT OR BILAT,
             unilat is only ECoG side
         - cdrs_rater: should be: Patricia, Jeroen or Mean
@@ -40,6 +41,7 @@ def get_idx_discardNonEcogLid(
             corresponding to ECoG hemisphere, for
             every timestamp in ft_times
     """
+    assert max(ft_times) < 120, 'ft_times should be in MINUTES'
     if LATERALITY.upper() == 'UNILAT':
         # get timestamps and values of clinical CDRS LID assessment
         lid_t_ecog, lid_y_ecog = get_cdrs_specific(
