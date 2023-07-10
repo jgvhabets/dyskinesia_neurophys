@@ -246,6 +246,10 @@ def load_ssd_coherences(
 
     COHs_per_source = {}
     for source in ['STN_STN', 'STN_ECOG']:
+        # skip and nan-fill STN-ECoG coherence for STN-ONLY-patients
+        if source == 'STN_ECOG' and sub.startswith('1'):
+            COHs_per_source['STN_ECOG'] = np.nan
+            continue
         COHs_per_bw = {}
         for bw in bandwidths:
             if verbose: print(f'load COH: {source}: {bw}')
@@ -264,6 +268,7 @@ def load_ssd_coherences(
 
             # coh_dfs contains now all scores to incl
             # ._make needed to insert a list in the namedtuple
+            # print(f'coh_dfs keys {source} {bw}: {coh_dfs.keys()}')
             COHs_per_bw[bw] = Coherences._make([coh_dfs[s] for s
                                                 in scores_to_incl])  # ensures the correct order    
         # all bandwidths included

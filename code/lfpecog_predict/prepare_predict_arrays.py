@@ -39,6 +39,7 @@ def get_group_arrays_for_prediction(
     ft_times_total = []
 
     for i_s, sub in enumerate(list(feat_dict.keys())):
+
         ft_names = []
         # add full scaled y-labels
         sub_y_scale = label_dict[sub]
@@ -67,9 +68,10 @@ def get_group_arrays_for_prediction(
             # prevent empty no_LID_sel in case all feature are at least preLID
             if sum(no_LID_sel) == 0:
                 if sub == '012': no_LID_sel = feat_dict[sub].index.values < 0
-                else:
-                    raise ValueError(f'for subject {sub}, no NONE-LID moments'
-                                     ' found for feature z-scoring')
+                elif sub == '102': no_LID_sel = feat_dict[sub].index.values < 0
+                elif sub == '008': no_LID_sel = feat_dict[sub].index.values < 3
+                else: raise ValueError(f'for subject {sub}, no NONE-LID moments'
+                                       ' found for feature z-scoring')
                     
 
         for n_col, ft in enumerate(feat_dict[sub].keys()):
@@ -84,6 +86,7 @@ def get_group_arrays_for_prediction(
             sub_X[:, n_col] = Z_ALL_values  # store all feats for pred-exploration
             
         # add subject values to total lists
+        print(f'\tfor sub-{sub}, added X-shape: {sub_X.shape}')
         X_total.append(sub_X)
         y_total_coded.append(sub_y_coded)
         y_total_scale.append(sub_y_scale)

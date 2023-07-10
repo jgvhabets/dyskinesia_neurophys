@@ -89,6 +89,7 @@ def categorical_CDRS(
     cutoff_mildModerate=2.5,
     cutoff_moderateSevere=4.5,
     convert_inBetween_zeros=False,
+    return_coding_dict=False
 ):
     """
     Rescales CDRS scores into
@@ -162,7 +163,10 @@ def categorical_CDRS(
     sel_severe = y_full_scale >= cutoff_moderateSevere
     new_y[sel_severe] = coding_dict['severe']
 
-    return new_y
+    if return_coding_dict:
+        return new_y, coding_dict
+    else:
+        return new_y
 
 
 def load_feature_df_for_pred(
@@ -277,10 +281,16 @@ def load_feature_df_for_pred(
     
     # select specific feature sources
     if sel_source != 'all' and sel_source != 'both':
-        assert sel_source in ['lfp', 'ecog'], 'incorrect source'
+        assert sel_source in ['lfp', 'stn', 'ecog', 'all / both'], 'incorrect source'
 
         # select based on current bandwidth and add to total selector
-        sel_array = np.array([sel_source in k for k in features.keys()])
+        if sel_source.lower() == 'ecog':
+            sel_array = np.array(['ecog' in k.lower() and
+                                  'coh' not in k for k in features.keys()])
+        
+        elif sel_source.lower() in ['stn', 'lfp']:
+            sel_array = np.array(['ecog' not in k.lower() for k in features.keys()])
+       
         # keep selected columns in feature df
         features = DataFrame(data=features.values[:, sel_array],
                     columns=features.keys()[sel_array],
@@ -288,6 +298,15 @@ def load_feature_df_for_pred(
         if verbose: print(f'\tsub-{sub}, MERGED FEATS SHAPE after {sel_source} selection: {features.shape}')
         if verbose: print(f'\tIncluded feats for {sel_source}: {features.keys()}')
 
+    # check incorrect sub-103 timings in v4
+    if sub == '103' and max(features.index) > (2e6 / 60):
+        corr_times = np.array(features.index) - np.float64(27 * 24 * 60)
+        features = DataFrame(data=features.values,
+                             index=corr_times,
+                             columns=features.keys())
+        print('corrected feature timings for sub-013 due to incorrect day')
+
+        
     return features
 
 

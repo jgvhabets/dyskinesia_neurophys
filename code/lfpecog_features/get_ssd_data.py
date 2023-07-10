@@ -186,8 +186,7 @@ class SSD_bands_windowed:
                   f' for {self.datasource} of sub-{self.sub}')
             for i_f, fband in enumerate(meta['bandwidths']):
                 setattr(self, fband, data[:, i_f, :])  # [n-windows x n-samples]
-            self.times = meta['timestamps']
-            self.fs = meta['fs']
+            
             if 'ssd_flanks' in list(meta.keys()): self.flanks = meta['ssd_flanks']
         
         # create data if not found
@@ -208,6 +207,12 @@ class SSD_bands_windowed:
             setattr(self, fband, data[:, i_f, :])  # [n-windows x n-samples]
 
         self.times = meta['timestamps']
+        # correct for incorrect timestamps in v4 subject 103 (Wrong day in json)
+        if self.sub == '103' and max(self.times) > 2e6:
+            setattr(self,
+                    'times',
+                    np.array(self.times) - np.float64(27 * 24 * 60 * 60))
+            print('corrected 103 SSD timings for', self.datasource)
         self.fs = meta['fs']
 
 
