@@ -16,8 +16,9 @@ from lfpecog_preproc.preproc_import_scores_annotations import(
 from lfpecog_analysis.load_SSD_features import ssdFeatures
 
 def find_select_nearest_CDRS_for_ephys(
-    sub, ft_times, LATERALITY: str,
-    cdrs_rater: str = 'Patricia'
+    sub, ft_times, side: str,
+    cdrs_rater: str = 'Patricia',
+    EXCL_UNILAT_OTHER_SIDE_LID=False,
 ):
     """
     Get nearest-CDRS values for neurophys-timings
@@ -29,8 +30,8 @@ def find_select_nearest_CDRS_for_ephys(
         - sub: three-letter sub code
         - ft_times: array with all ft_times to
             be selected in MINUTES
-        - LATERALITY: should be UNILAT OR BILAT,
-            unilat is only ECoG side
+        - side: side of CDRS scores, if only 'left',
+            or 'right' given, then this refers to BODYSIDE
         - cdrs_rater: should be: Patricia, Jeroen or Mean
 
     Returns:
@@ -42,37 +43,73 @@ def find_select_nearest_CDRS_for_ephys(
             every timestamp in ft_times
     """
     assert max(ft_times) < 120, 'ft_times should be in MINUTES'
-    if LATERALITY.upper() == 'UNILAT':
-        # get timestamps and values of clinical CDRS LID assessment
-        lid_t_ecog, lid_y_ecog = get_cdrs_specific(
-            sub=sub, rater=cdrs_rater, side='contralat ecog',)
-        lid_t_nonecog, lid_y_nonecog = get_cdrs_specific(
-            sub=sub, rater=cdrs_rater, side='ipsilat ecog',)
-        
-        # find closest CDRS value for ft-values based on timestamps
-        cdrs_idx_fts = [np.argmin(abs(t - lid_t_ecog)) for t in ft_times]
-        cdrs_for_fts = lid_y_ecog[cdrs_idx_fts]
-        nonecog_cdrs_for_fts = lid_y_nonecog[cdrs_idx_fts]
+    side = side.lower()
+    allowed_sides = ['both', 'all', 'bilat',
+                    'right', 'left',
+                    'contralat ecog', 'ipsilat ecog',
+                    'ecog match', 'ecog nonmatch',
+                    'lfp_right', 'lfp_left']
+    assert side in allowed_sides, (f'side not in {allowed_sides}')
 
-        select_bool = ~np.logical_and(cdrs_for_fts == 0,
-                                    nonecog_cdrs_for_fts > 0)
-        
-        
-    elif LATERALITY.upper() == 'BILAT':
+    # SUM OF BILATERAL CDRS WANTED
+    if side in ['both', 'all', 'bilat',]:
         # get timestamps and values of clinical CDRS LID assessment
-        lid_t, lid_y = get_cdrs_specific(
+        cdrs_times, cdrs_scores = get_cdrs_specific(
             sub=sub, rater=cdrs_rater, side='both',)
         
         # find closest CDRS value for ft-values based on timestamps
-        cdrs_idx_fts = [np.argmin(abs(t - lid_t)) for t in ft_times]
-        cdrs_for_fts = lid_y[cdrs_idx_fts]
-
+        cdrs_idx_fts = [np.argmin(abs(t - cdrs_times)) for t in ft_times]
+        cdrs_for_fts = cdrs_scores[cdrs_idx_fts]
+        # no moments need to be excluded
         select_bool = np.array([True] * len(cdrs_for_fts))
-    
-    
+
+    # UNILATERAL CDRS WANTED
     else:
-        raise ValueError('LATERALITY should be: UNILAT or BILAT')
-    
+        # get timestamps and values of clinical CDRS LID assessment
+        if side.startswith('lfp'):
+            if side == 'lfp_right': side = 'left'
+            elif side == 'lfp_left': side = 'right'
+
+            if 'ecog' in side:
+                ecogside = get_ecog_side(sub)
+
+                if 'nonmatch' in side or 'ipsilat' in side:
+                    if ecogside == 'right': side = 'right'
+                    if ecogside == 'left': side = 'left'
+                elif side == 'ecog match' or 'contralat' in side:
+                    if ecogside == 'right': side = 'left'
+                    if ecogside == 'left': side = 'right'
+                
+        # lid_t_ecog, lid_y_ecog = get_cdrs_specific(
+        #     sub=sub, rater=cdrs_rater, side='contralat ecog',)
+        # lid_t_nonecog, lid_y_nonecog = get_cdrs_specific(
+        #     sub=sub, rater=cdrs_rater, side='ipsilat ecog',)
+        
+        cdrs_times, cdrs_scores = get_cdrs_specific(sub=sub,
+                                                    rater=cdrs_rater,
+                                                    side=side,)
+
+        # find closest CDRS value for ft-values based on timestamps
+        cdrs_idx_fts = [np.argmin(abs(t - cdrs_times)) for t in ft_times]
+        cdrs_for_fts = cdrs_scores[cdrs_idx_fts]
+        
+        # check whether moments without LID in defined side,
+        # but WITH LID ON NON-DEFINED SIDE SHOULD BE EXCLUDED
+        if EXCL_UNILAT_OTHER_SIDE_LID:
+            if side == 'left': otherside = 'right'
+            elif side == 'right': otherside = 'left'
+            
+            (contra_cdrs_times,
+             conta_cdrs_scores) = get_cdrs_specific(sub=sub,
+                                                    rater=cdrs_rater,
+                                                    side=otherside,)
+            contra_cdrs_for_fts = conta_cdrs_scores[cdrs_idx_fts]
+            select_bool = ~np.logical_and(cdrs_for_fts == 0,
+                                          contra_cdrs_for_fts > 0)
+            
+        else:
+            # no moments need to be excluded
+            select_bool = np.array([True] * len(cdrs_for_fts))
 
     if not isinstance(select_bool, np.ndarray):
         select_bool = select_bool.values
