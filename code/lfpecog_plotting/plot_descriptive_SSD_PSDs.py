@@ -13,8 +13,6 @@ import matplotlib as mpl
 
 
 
-
-
 def plot_PSD_vs_DopaTime(all_timefreqs,
                          sel_subs=None,
                          LOG_POWER=True,
