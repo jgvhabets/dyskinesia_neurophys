@@ -25,7 +25,23 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
                          plt_ax_to_return=False,
                          fsize=12,):
     """
-    tf_values have shape n-freq x n-times
+    Plot group-level PSDs (based on SSD data), plot
+    mean PSDs for temporal course after LDopa-intake.
+
+    Input:
+        - all_timefreqs: (results from ssd_TimeFreq.get_all_ssd_timeFreqs)
+            contains tf_values (shape n-freq x n-times), times, freqs.
+        - sel_subs: if given, selection of subjects to include
+        - LOG_POWER: plot powers logarithmic
+        - ZSCORE_FREQS: plot PSDs as z-Scores per freq-bin
+        - SMOOTH_PLOT_FREQS: if > 0, window (n freqs) to
+            smoothen PSDs values
+        - BASELINE_CORRECT: plot difference of time-windows
+            versus pre-Dopa-intake
+        - BREAK_X_AX: break x-axis between beta and gamma
+        - plt_ax_to_return: if plotted as subplot in another plot,
+            give the defined axis here
+        - fsize: fontsize, defaults to 12
     """
     timings = np.arange(0, 76, 15)  # create timings between 0 and 61/76 with 10/15 min steps
     psds_to_plot = {t: [] for t in timings}
@@ -158,3 +174,5 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
 
     if plt_ax_to_return: return ax
     else: plt.show()
+
+
