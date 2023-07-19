@@ -120,7 +120,8 @@ def find_select_nearest_CDRS_for_ephys(
 
 
 def categorical_CDRS(
-    y_full_scale, time_minutes,
+    y_full_scale,
+    time_minutes=None,
     preLID_minutes=10,
     preLID_separate=True,
     cutoff_mildModerate=2.5,

@@ -121,7 +121,8 @@ if __name__ == '__main__':
     
     # all_subs = ['008', '009', '010', '012', '013', '014',
     #             '016', '017']
-    all_subs = ['101', '102', '103',]
+    # all_subs = ['101', '102', '103',]
+    all_subs = 'define all subs'
     
     if SUB.lower() == 'all': sub_list = all_subs
     elif isinstance(SUB, str) and len(SUB) == 3: sub_list = [SUB,]

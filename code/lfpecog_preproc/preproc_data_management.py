@@ -52,6 +52,8 @@ def get_sub_runs(sub,):
     if 'stn_only' in sub_json.keys():
         if sub_json['stn_only']:
             bids_sub = sub_json['bids_sub']
+        else:
+            bids_sub = f'EL{sub}'
     else:
         bids_sub = f'EL{sub}'
 
@@ -60,7 +62,7 @@ def get_sub_runs(sub,):
                              f'ses-{sub_json["ses"]}',
                              f'sub-{bids_sub}_ses-{sub_json["ses"]}_scans.tsv'),
                         sep='\t',)
-    
+
     for i in range(scans_df.shape[0]):
         skip_file = False
         run_string = scans_df['filename'][i]
