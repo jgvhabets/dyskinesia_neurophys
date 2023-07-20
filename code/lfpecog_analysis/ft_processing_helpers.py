@@ -138,6 +138,19 @@ def categorical_CDRS(
         - severe [3]: more than 5.
 
     Cutoff between mild and severe defaults to 4.5.
+
+    Inputs:
+        - y_full_scale: original cdrs scores
+        - time_minutes: if needed for pre-LID definition,
+            corresponding times in minutes to cdrs values
+        - preLID_minutes: number of minutes pre-LID
+            to be included in MILD or in SEPERATE CATEGORY
+        - preLID_separate: categorize pre-LID in sep category
+        - cutoff_mildModerate: defaults to 2.5
+        - cutoff_moderateSevere: defaults to 4.5
+        - convert_inBetween_zeros: change zero-values in between
+            dyskinetic moments to e.g. MILD instead of NONE
+        - return_coding_dict: return coding dict
     """
     coding_dict = {'none': 0, 'mild': 1, 'moderate': 2, 'severe': 3}
     if preLID_separate:
@@ -167,10 +180,11 @@ def categorical_CDRS(
                 y_full_scale == 0
             )
             sel_mild += sel_pre_min
-        # convert MILD and pre-LID
-        new_y[sel_mild] = coding_dict['mild']
     
-    elif preLID_separate and any(y_full_scale > 0):
+    # convert MILD and pre-LID
+    new_y[sel_mild] = coding_dict['mild']
+    
+    if preLID_separate and any(y_full_scale > 0):
         if preLID_minutes == 0: print(
             'WARNING from categorical CDRS: pre-LID minutes is ZERO'
         )
