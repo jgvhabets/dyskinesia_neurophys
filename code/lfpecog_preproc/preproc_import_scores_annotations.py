@@ -104,6 +104,7 @@ def read_clinical_scores(
     assert rater.capitalize() in ['Mean', 'Patricia', 'Jeroen'], (
         'insert correct '
     )
+    if sub in ['019']: rater = 'Jeroen'
     scores_fname = f'Dyskinesia_Ratings_{rater}.xlsx'
     scores = read_excel(
         os.path.join(data_path, 'clinical scores', scores_fname),

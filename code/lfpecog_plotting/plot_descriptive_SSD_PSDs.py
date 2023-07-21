@@ -407,6 +407,7 @@ def plot_STN_PSD_vs_LID(
     ### PLOTTING PART
     if LAT_or_SCALE == 'LAT':
         plot_unilateral_LID(plt_ax_to_return=plt_ax_to_return,
+                            datatype='STN',
                             psds_to_plot=psds_to_plot,
                             tf_freqs=tf_freqs,
                             n_uni_subs=n_uni_subs,
@@ -421,6 +422,7 @@ def plot_STN_PSD_vs_LID(
     elif LAT_or_SCALE == 'SCALE':
         plot_scaling_LID(plt_ax_to_return=plt_ax_to_return,
                             psds_to_plot=psds_to_plot,
+                            datatype='STN',
                             tf_freqs=tf_freqs,
                             cdrs_cat_coding=coding_dict,
                             BASELINE_CORRECT=BASELINE_CORRECT,
@@ -433,7 +435,7 @@ def plot_STN_PSD_vs_LID(
 
 def plot_scaling_LID(
     psds_to_plot, tf_freqs,
-    cdrs_cat_coding,
+    cdrs_cat_coding, datatype,
     plt_ax_to_return=False,
     BASELINE_CORRECT=True, LOG_POWER=False,
     SMOOTH_PLOT_FREQS=0, STD_ERR=True,
@@ -441,6 +443,10 @@ def plot_scaling_LID(
     SAVE_PLOT=True, SHOW_PLOT=False,
     fig_name='PSD_CDRS_scaling_STN_n11',
 ):
+    assert datatype.upper() in ['STN', 'ECOG'], (
+        f'datatype ({datatype}) should be STN or ECOG'
+    )
+
     if plt_ax_to_return == False:
         fig, axes = plt.subplots(1, len(psds_to_plot),
                                  figsize=(len(psds_to_plot) * 6, 6))
@@ -450,9 +456,9 @@ def plot_scaling_LID(
     colors = [list(get_colors().values())[c] for c in [4, 3, 0, 7]]  # colors are called by cat-value, so 0 is never used if baseline corrected
 
     for i_ax, side in enumerate(psds_to_plot.keys()):
-        if side == 'bi': ax_title = 'STNs during bilateral dyskinesia'
-        elif side == 'match': ax_title = 'STNs during only contralateral dyskinesia'
-        elif side == 'nonmatch': ax_title = 'STNs during only ipsilateral dyskinesia'
+        if side == 'bi': ax_title = f'{datatype} during bilateral dyskinesia'
+        elif side == 'match': ax_title = f'{datatype} during only contralateral dyskinesia'
+        elif side == 'nonmatch': ax_title = f'{datatype} during only ipsilateral dyskinesia'
 
         for i_cat, cat in enumerate(psds_to_plot[side].keys()):
             PSD = {}
@@ -466,8 +472,13 @@ def plot_scaling_LID(
             # smoothen signal for plot (both mean and stddev)
             if SMOOTH_PLOT_FREQS > 0:
                 for k in PSD:
-                    PSD[k] = Series(PSD[k]).rolling(window=SMOOTH_PLOT_FREQS,
-                                                    center=True).mean().values
+                    # PSD[k] = Series(PSD[k]).rolling(window=SMOOTH_PLOT_FREQS,
+                    #                                 center=True).mean().values
+                    h_winlen = int(SMOOTH_PLOT_FREQS / 2)
+                    new_arr = np.array([np.nan] * len(PSD[k]))
+                    for win_mid in np.arange(h_winlen, len(PSD[k]) - h_winlen):
+                        new_arr[win_mid] = np.nanmean(PSD[k][win_mid-h_winlen: win_mid+h_winlen])
+                    PSD[k] = new_arr
             # n-subjects to add to legend-label
             n_subs_cat = psds.shape[0]
                     
@@ -544,11 +555,14 @@ def plot_scaling_LID(
 
 def plot_unilateral_LID(
     psds_to_plot, tf_freqs, n_uni_subs,
-    plt_ax_to_return=None,
+    datatype, plt_ax_to_return=None,
     BASELINE_CORRECT=True, LOG_POWER=False,
     SMOOTH_PLOT_FREQS=0, STD_ERR=True, BREAK_X_AX=True,
     fsize=14,
 ):
+    assert datatype.upper() in ['STN', 'ECOG'], (
+        f'datatype ({datatype}) should be STN or ECOG'
+    )
 
     if plt_ax_to_return == None:
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
@@ -558,8 +572,8 @@ def plot_unilateral_LID(
     colors = [list(get_colors().values())[3],
               list(get_colors().values())[7]]
     
-    leg_label = {'match': 'STN contralateral to Dyskinesia',
-                 'nonmatch': 'STN ipsilateral to Dyskinesia'}
+    leg_label = {'match': f'{datatype} contralateral to Dyskinesia',
+                 'nonmatch': f'{datatype} ipsilateral to Dyskinesia'}
     
     for i, match_label in enumerate(psds_to_plot.keys()):
         PSD = {}
@@ -633,14 +647,11 @@ def plot_unilateral_LID(
     else: plt.show()
 
 
-def break_x_axis_psds_ticks(
-    tf_freqs, PSD,
-    x_break = (30, 60), nan_pad = 5
-):
-
+def break_x_axis_psds_ticks(tf_freqs, PSD,
+                            x_break = (35, 60), nan_pad = 5):
     
     del_sel = np.logical_and(tf_freqs > x_break[0],
-                                tf_freqs < x_break[1])
+                             tf_freqs < x_break[1])
     del_sel = np.logical_or(del_sel, np.isnan(PSD['mean']))
     PSD['mean'] = np.delete(PSD['mean'], del_sel,)
     PSD['sd'] = np.delete(PSD['sd'], del_sel,)
@@ -825,6 +836,7 @@ def plot_ECOG_PSD_vs_LID(
     ### PLOTTING PART
     if LAT_or_SCALE == 'SCALE':
         plot_scaling_LID(plt_ax_to_return=plt_ax_to_return,
+                         datatype='ECoG',
                          psds_to_plot=psds_to_plot,
                          tf_freqs=tf_freqs,
                          cdrs_cat_coding=coding_dict,

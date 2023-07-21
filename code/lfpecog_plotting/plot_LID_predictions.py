@@ -23,7 +23,7 @@ def plot_sub_binary_preds(
     clrs = list(get_colors().values())
 
     fig, axes = plt.subplots(
-        len(SUBS), 1, figsize=(8, 12),
+        len(SUBS), 1, figsize=(12, len(SUBS) * 2),
         # sharex='col',
     )
 

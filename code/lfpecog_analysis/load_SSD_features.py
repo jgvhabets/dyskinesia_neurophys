@@ -98,7 +98,10 @@ class ssdFeats_perSubject:
 
     def __post_init__(self,):
         # import CDRS scores and times
-        scores = read_clinical_scores(sub=self.sub, rater='Patricia')
+        dysk_rater = 'Patricia'
+        if self.sub == '019': dysk_rater = 'Jeroen'
+        scores = read_clinical_scores(sub=self.sub, rater=dysk_rater)
+
         # add scores as namedtuple (times, left, right, total)
         self.scores = CDRS_scores(
             scores['dopa_time'].values,

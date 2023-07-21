@@ -54,6 +54,12 @@ def get_group_arrays_for_prediction(
         if CDRS_CODING == 'binary':
             no_LID_sel = np.array(label_dict[sub]) == 0
             LID_sel = np.array(label_dict[sub]) >= CDRS_THRESHOLD
+            if sum(no_LID_sel) == 0:
+                if sub == '012': no_LID_sel = feat_dict[sub].index.values < 0
+                elif sub == '102': no_LID_sel = feat_dict[sub].index.values < 0
+                elif sub == '008': no_LID_sel = feat_dict[sub].index.values < 3
+                else: raise ValueError(f'for subject {sub}, no NONE-LID moments'
+                                       ' found for feature z-scoring')
 
             # create binary y-labels
             sub_y_coded = []  # y as binary
@@ -128,6 +134,7 @@ def merge_group_arrays(X_total, y_total_binary,
             y_all_scale = list(y_total_scale[i].copy())
             sub_ids = list(sub_ids_total[i].copy())
             ft_times_all = list(ft_times_total[i].copy())
+            print(sub_ids[0], len(sub_ids_total[i]))
 
         else:
             X_all = np.concatenate([X_all, X_sub], axis=0)
@@ -143,6 +150,7 @@ def merge_group_arrays(X_total, y_total_binary,
 
     # remove all Rows containing NaN Features
     nan_row_sel = np.isnan(X_all).any(axis=1)
+    print(f'removed rows n={sum(nan_row_sel)}')
     NAN_SUBS = sub_ids[nan_row_sel]
     
     X_all = X_all[~nan_row_sel]
