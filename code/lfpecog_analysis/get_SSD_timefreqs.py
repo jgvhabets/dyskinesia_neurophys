@@ -115,14 +115,18 @@ def get_cont_ssd_arr(subSourceSSD, bw,
     windows = getattr(subSourceSSD, bw)
     wintimes = subSourceSSD.times
     new_fs = subSourceSSD.fs
-    win_t_diffs = [0] + list(np.diff(subSourceSSD.times))
+    win_t_diffs =  list(np.diff(subSourceSSD.times)) + [0]
 
     new_arr, new_times_sec = [], []
     skip_next = False
 
     for windat, wintime, t_diff in zip(windows, wintimes, win_t_diffs):
-
+        
         if not skip_next:
+            if len(new_times_sec) > 0:
+                assert wintime > new_times_sec[-1], (
+                    f'wintime {wintime} earlier than last time added {new_times_sec[-1]}'
+                )
             # add if no nans in window
             if not np.isnan(windat).any():
                 new_arr.extend(windat)
@@ -140,6 +144,10 @@ def get_cont_ssd_arr(subSourceSSD, bw,
 
     new_arr = np.array(new_arr)
     new_times_sec = np.array(new_times_sec)
+
+    assert sum(np.diff(new_times_sec) < 0) == 0, (
+        'negative time differences present'
+    )
 
     return new_arr, new_times_sec
 

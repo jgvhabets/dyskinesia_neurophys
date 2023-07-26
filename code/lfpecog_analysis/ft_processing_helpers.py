@@ -44,7 +44,7 @@ def find_select_nearest_CDRS_for_ephys(
     """
     assert max(ft_times) < 120, 'ft_times should be in MINUTES'
     side = side.lower()
-    allowed_sides = ['both', 'all', 'bilat',
+    allowed_sides = ['both', 'all', 'bilat', 'sum',
                     'right', 'left',
                     'contralat ecog', 'ipsilat ecog',
                     'ecog match', 'ecog nonmatch',
@@ -52,7 +52,7 @@ def find_select_nearest_CDRS_for_ephys(
     assert side in allowed_sides, (f'side not in {allowed_sides}')
 
     # SUM OF BILATERAL CDRS WANTED
-    if side in ['both', 'all', 'bilat',]:
+    if side in ['both', 'all', 'bilat', 'sum']:
         # get timestamps and values of clinical CDRS LID assessment
         cdrs_times, cdrs_scores = get_cdrs_specific(
             sub=sub, rater=cdrs_rater, side='both',)
