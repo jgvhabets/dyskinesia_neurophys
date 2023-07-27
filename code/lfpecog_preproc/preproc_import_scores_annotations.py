@@ -290,6 +290,10 @@ def get_cdrs_specific(
         - scores
     """
     if rater.capitalize() in ['Patricia', 'Jeroen']:
+        # FOR NOT SCORED SCORES
+        if sub in ['101', '102', '103', '019']:
+            rater = 'Jeroen'
+
         scores = read_clinical_scores(sub, rater=rater)
         times = scores['dopa_time']
 

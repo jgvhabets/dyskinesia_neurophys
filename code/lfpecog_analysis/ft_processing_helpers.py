@@ -100,10 +100,10 @@ def find_select_nearest_CDRS_for_ephys(
             elif side == 'right': otherside = 'left'
             
             (contra_cdrs_times,
-             conta_cdrs_scores) = get_cdrs_specific(sub=sub,
+             contra_cdrs_scores) = get_cdrs_specific(sub=sub,
                                                     rater=cdrs_rater,
                                                     side=otherside,)
-            contra_cdrs_for_fts = conta_cdrs_scores[cdrs_idx_fts]
+            contra_cdrs_for_fts = contra_cdrs_scores[cdrs_idx_fts]
             select_bool = ~np.logical_and(cdrs_for_fts == 0,
                                           contra_cdrs_for_fts > 0)
             
