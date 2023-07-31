@@ -179,12 +179,12 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
     else: plt.show()
 
 
-def find_unilateral_LID_sides(sub):
+def find_unilateral_LID_sides(sub, CDRS_RATER='Patricia'):
     sub_cdrs = {s: {} for s in ['left', 'right']}  # CDRS scores related to BODYSIDE
     
     for side in ['left', 'right']:
         _, sub_cdrs[side] = get_cdrs_specific(
-            sub=sub, rater='Jeroen', side=side,)
+            sub=sub, rater=CDRS_RATER, side=side,)
         
     # take only moments with unilateral LID on matching side
     left_sel = np.logical_and(sub_cdrs['left'] > 0, sub_cdrs['right'] == 0)
@@ -210,6 +210,7 @@ def find_unilateral_LID_sides(sub):
 
 def plot_STN_PSD_vs_LID(
     all_timefreqs, sel_subs=None,
+    CDRS_RATER='Patricia',
     LAT_or_SCALE='LAT_UNI',
     LOG_POWER=True, ZSCORE_FREQS=True,
     SMOOTH_PLOT_FREQS=0,
@@ -246,7 +247,10 @@ def plot_STN_PSD_vs_LID(
     if LAT_or_SCALE == 'SCALE':
         for lab in ['match', 'nonmatch', 'bi']: psds_to_plot[lab] = {}
         cdrs_categs = {}
-    
+    elif LAT_or_SCALE =='LAT_BILAT':
+        psds_to_plot, cdrs_categs = {}, {}  # start with empty dict, dont use match/nonmatch
+        for lab in ['bi_match', 'bi_nonmatch']: psds_to_plot[lab] = {}
+
     ft_cdrs = {'LID': [], 'noLID': []}
     
     if sel_subs:
@@ -258,19 +262,20 @@ def plot_STN_PSD_vs_LID(
     n_uni_subs = 0
     for sub in subs:
         # check for presence unilateral LID
-        (LID_side, noLID_side,
-         LFP_match_side, LFP_nonmatch_side) = find_unilateral_LID_sides(sub)
+        (LID_side, noLID_side, LFP_match_side,
+         LFP_nonmatch_side) = find_unilateral_LID_sides(sub, CDRS_RATER=CDRS_RATER)
         
         if LAT_or_SCALE == 'LAT_UNI':
             if not LID_side: continue  # skip subject if no UNILATERAL DYSKINESIA PRESENT
+            elif LID_side: n_uni_subs += 1  # INCLUDE SUBJECT WITH UNILATERAL LID IN PLOT
+
         else:
             # sides dont matter for LAT_BILAT or SCALE (both sides are included)
             if not LID_side:
                 (LID_side, noLID_side,
                  LFP_match_side, LFP_nonmatch_side) = ('left', 'right',
                                                        'right', 'left')
-        if LID_side: n_uni_subs += 1  # INCLUDE SUBJECT WITH UNILATERAL LID IN PLOT
-
+        
         # get STN PSD values and process them
         tf_values['match'] = all_timefreqs[sub][f'lfp_{LFP_match_side}'].values
         tf_values['nonmatch'] = all_timefreqs[sub][f'lfp_{LFP_nonmatch_side}'].values
@@ -291,16 +296,16 @@ def plot_STN_PSD_vs_LID(
         # matching LFP side to LID
         _, ft_cdrs['LID'] = find_select_nearest_CDRS_for_ephys(
             sub=sub, side=LID_side, ft_times=tf_times['match'],
-            cdrs_rater='Jeroen',
+            cdrs_rater=CDRS_RATER,
         ) 
         _, ft_cdrs['noLID'] = find_select_nearest_CDRS_for_ephys(
             sub=sub, side=noLID_side, ft_times=tf_times['match'],
-            cdrs_rater='Jeroen',
+            cdrs_rater=CDRS_RATER,
         )
-        if LAT_or_SCALE == 'SCALE':
+        if LAT_or_SCALE in ['SCALE', 'LAT_BILAT']:
             _, ft_cdrs['bi'] = find_select_nearest_CDRS_for_ephys(
                 sub=sub, side='both', ft_times=tf_times['match'],
-                cdrs_rater='Jeroen',
+                cdrs_rater=CDRS_RATER,
             ) 
         
         # extract BASELINE and BILAT selections from tf_values, before
@@ -333,16 +338,16 @@ def plot_STN_PSD_vs_LID(
         # NON-matching LFP side to LID
         _, ft_cdrs['LID'] = find_select_nearest_CDRS_for_ephys(
             sub=sub, side=LID_side, ft_times=tf_times['nonmatch'],
-            cdrs_rater='Jeroen',
+            cdrs_rater=CDRS_RATER,
         ) 
         _, ft_cdrs['noLID'] = find_select_nearest_CDRS_for_ephys(
             sub=sub, side=noLID_side, ft_times=tf_times['nonmatch'],
-            cdrs_rater='Jeroen',
+            cdrs_rater=CDRS_RATER,
         )
-        if LAT_or_SCALE == 'SCALE':
+        if LAT_or_SCALE in ['SCALE', 'LAT_BILAT']:
              _, ft_cdrs['bi'] = find_select_nearest_CDRS_for_ephys(
                 sub=sub, side='both', ft_times=tf_times['nonmatch'],
-                cdrs_rater='Jeroen',
+                cdrs_rater=CDRS_RATER,
             )
              
         # extract BASELINE and BILAT selections from tf_values, before
@@ -392,9 +397,9 @@ def plot_STN_PSD_vs_LID(
                 # hemisphere, add all bilat psds to one list
                 for label in [match_label, f'bi_{match_label}']:
                     
-                    if LAT_or_SCALE == 'LAT_BILAT' and ~label.startswith('bi'):
+                    if LAT_or_SCALE == 'LAT_BILAT' and not label.startswith('bi'):
                         # dont include unilateral values in LAT_BILAT
-                        print(f'skip {label} for LAT_BILAT due unilaterality')
+                        # print(f'skip {label} for LAT_BILAT due unilaterality')
                         continue
                     
                     assert tf_values[label].shape[1] == len(cdrs_categs[label]), (
@@ -439,33 +444,31 @@ def plot_STN_PSD_vs_LID(
     
     elif LAT_or_SCALE == 'SCALE':
         plot_scaling_LID(plt_ax_to_return=plt_ax_to_return,
-                            psds_to_plot=psds_to_plot,
-                            datatype='STN',
-                            tf_freqs=tf_freqs,
-                            cdrs_cat_coding=coding_dict,
-                            BASELINE_CORRECT=BASELINE_CORRECT,
-                            LOG_POWER=LOG_POWER,
-                            SMOOTH_PLOT_FREQS=SMOOTH_PLOT_FREQS,
-                            STD_ERR=STD_ERR,
-                            BREAK_X_AX=BREAK_X_AX,
-                            fsize=fsize,
-                            fig_name=fig_name,)
+                         psds_to_plot=psds_to_plot,
+                         datatype='STN',
+                         tf_freqs=tf_freqs,
+                         cdrs_cat_coding=coding_dict,
+                         BASELINE_CORRECT=BASELINE_CORRECT,
+                         LOG_POWER=LOG_POWER,
+                         SMOOTH_PLOT_FREQS=SMOOTH_PLOT_FREQS,
+                         STD_ERR=STD_ERR,
+                         BREAK_X_AX=BREAK_X_AX,
+                         fsize=fsize,
+                         fig_name=fig_name,)
     
     elif LAT_or_SCALE == 'LAT_BILAT':
-        # TO MAKE!!
-        # only gets psds for bi_nonmatch and bi_match
-        plot_bilat_laterality(plt_ax_to_return=plt_ax_to_return,
-                                psds_to_plot=psds_to_plot,
-                                datatype='STN',
-                                tf_freqs=tf_freqs,
-                                cdrs_cat_coding=coding_dict,
-                                BASELINE_CORRECT=BASELINE_CORRECT,
-                                LOG_POWER=LOG_POWER,
-                                SMOOTH_PLOT_FREQS=SMOOTH_PLOT_FREQS,
-                                STD_ERR=STD_ERR,
-                                BREAK_X_AX=BREAK_X_AX,
-                                fsize=fsize,
-                                fig_name=fig_name,)       
+        plot_scaling_LID(plt_ax_to_return=plt_ax_to_return,
+                         psds_to_plot=psds_to_plot,
+                         datatype='STN',
+                         tf_freqs=tf_freqs,
+                         cdrs_cat_coding=coding_dict,
+                         BASELINE_CORRECT=BASELINE_CORRECT,
+                         LOG_POWER=LOG_POWER,
+                         SMOOTH_PLOT_FREQS=SMOOTH_PLOT_FREQS,
+                         STD_ERR=STD_ERR,
+                         BREAK_X_AX=BREAK_X_AX,
+                         fsize=fsize,
+                         fig_name=fig_name,)       
     
 
 def plot_scaling_LID(
@@ -494,6 +497,8 @@ def plot_scaling_LID(
         if side == 'bi': ax_title = f'{datatype} during bilateral dyskinesia'
         elif side == 'match': ax_title = f'{datatype} during only contralateral dyskinesia'
         elif side == 'nonmatch': ax_title = f'{datatype} during only ipsilateral dyskinesia'
+        elif side == 'bi_match': ax_title = f'Contralateral {datatype} during bilateral dyskinesia'
+        elif side == 'bi_nonmatch': ax_title = f'Ipsilateral {datatype} during bilateral dyskinesia'
 
         for i_cat, cat in enumerate(psds_to_plot[side].keys()):
             PSD = {}
@@ -712,7 +717,8 @@ def break_x_axis_psds_ticks(tf_freqs, PSD,
 
 def plot_ECOG_PSD_vs_LID(
     all_timefreqs, sel_subs=None,
-    LAT_or_SCALE='LAT',
+    CDRS_RATER='Patricia',
+    LAT_or_SCALE='LAT_UNI',
     LOG_POWER=True, ZSCORE_FREQS=True,
     SMOOTH_PLOT_FREQS=0, STD_ERR=True,
     BASELINE_CORRECT=False,
@@ -727,8 +733,9 @@ def plot_ECOG_PSD_vs_LID(
         - all_timefreqs: (results from ssd_TimeFreq.get_all_ssd_timeFreqs)
             contains tf_values (shape n-freq x n-times), times, freqs.
         - sel_subs: if given, selection of subjects to include
-        - LAT_or_SCALE='LAT', should be LAT (laterality),
-            or SCALE (PSDs vs CDRS categories)
+        - LAT_or_SCALE='LAT_UNI', should be LAT_UNI (laterality of
+            unilateral LID), 'LAT_BILAT' (laterality during bilateral
+            LID), or SCALE (PSDs vs CDRS categories)
         - LOG_POWER: plot powers logarithmic
         - ZSCORE_FREQS: plot PSDs as z-Scores per freq-bin
         - SMOOTH_PLOT_FREQS: if > 0, window (n freqs) to
@@ -741,11 +748,18 @@ def plot_ECOG_PSD_vs_LID(
         - fsize: fontsize, defaults to 12
     """
     # tf_values, tf_times = {'match': [], 'nonmatch': []}, {'match': [], 'nonmatch': []}
-    if LAT_or_SCALE == 'LAT':
+    
+    if LAT_or_SCALE == 'LAT_UNI':
         psds_to_plot = {'match': [], 'nonmatch': []}
     elif LAT_or_SCALE == 'SCALE':
         cdrs_categs, psds_to_plot = {}, {}
         for lab in ['match', 'nonmatch', 'bi']: psds_to_plot[lab] = {}
+    
+    elif LAT_or_SCALE =='LAT_BILAT':
+        psds_to_plot = {}
+        for lab in ['match', 'nonmatch','bi_match', 'bi_nonmatch']:
+            psds_to_plot[lab] = {}
+
 
     ft_cdrs = {'LID': [], 'noLID': []}
 
@@ -758,23 +772,48 @@ def plot_ECOG_PSD_vs_LID(
     n_uni_subs = 0
     for sub in subs:
         if sub.startswith('1'): continue  # SKIP NON-ECOG subjects
+
+        tf_values_dict, cdrs_categs = {}, {}
+        
         # check for presence unilateral LID
-        (LID_side, noLID_side,
-         LFP_match_side, LFP_nonmatch_side) = find_unilateral_LID_sides(sub)
+        (LID_side, noLID_side, LFP_match_side,
+         LFP_nonmatch_side) = find_unilateral_LID_sides(sub, CDRS_RATER=CDRS_RATER)
         ecog_side = get_ecog_side(sub)
 
-        if LAT_or_SCALE == 'LAT':
+        if LAT_or_SCALE == 'LAT_UNI':
             if not LID_side: continue  # no UNILATERAL DYSKINESIA PRESENT
-        elif LAT_or_SCALE == 'SCALE':
-            # only bilat present, sides dont matter
-            if not LID_side:
-                (LID_side, noLID_side,
-                 LFP_match_side, LFP_nonmatch_side) = ('left', 'right', 'right', 'left')
-        if LID_side:
-            n_uni_subs += 1  # INCLUDE SUBJECT WITH UNILATERAL LID IN PLOT
+            else: n_uni_subs += 1  # INCLUDE SUBJECT WITH UNILATERAL LID IN PLOT
             # define LATERALITY OF LID VERSUS ECOG (in case of unilat lid)
             if ecog_side == LFP_match_side: match_label_uni = 'match'
             elif ecog_side == LFP_nonmatch_side: match_label_uni = 'nonmatch'
+
+        elif LAT_or_SCALE == 'SCALE':
+            # only bilat present, sides dont matter
+            if LID_side: add_uni = True
+            if not LID_side:
+                add_uni = False
+                (LID_side, noLID_side,
+                 LFP_match_side, LFP_nonmatch_side) = ('left', 'right', 'right', 'left')
+
+            # define LATERALITY OF LID VERSUS ECOG (in case of unilat lid)
+            if ecog_side == LFP_match_side: match_label_uni = 'match'
+            elif ecog_side == LFP_nonmatch_side: match_label_uni = 'nonmatch'
+        
+        elif LAT_or_SCALE == 'LAT_BILAT':
+            # only bilat present, sides dont matter
+            add_uni = False
+            if LID_side:
+                n_uni_subs += 1
+                add_uni = True
+                # define LATERALITY OF LID VERSUS ECOG (in case of unilat lid)
+                if ecog_side == LFP_match_side: match_label_uni = 'match'
+                elif ecog_side == LFP_nonmatch_side: match_label_uni = 'nonmatch'
+            # add labels for bilateral cdrs
+            LFP_match_side, noLID_side = ecog_side, ecog_side
+            if ecog_side == 'left':
+                LID_side, LFP_nonmatch_side = 'right', 'right'
+            elif ecog_side == 'right':
+                LID_side, LFP_nonmatch_side = 'left', 'left'            
 
         # get PSD values and process them
         tf_values = all_timefreqs[sub][f'ecog_{ecog_side}'].values
@@ -792,16 +831,16 @@ def plot_ECOG_PSD_vs_LID(
         # matching LFP side to LID
         _, ft_cdrs['LID'] = find_select_nearest_CDRS_for_ephys(
             sub=sub, side=LID_side, ft_times=tf_times,
-            cdrs_rater='Jeroen',
+            cdrs_rater=CDRS_RATER,
         ) 
         _, ft_cdrs['noLID'] = find_select_nearest_CDRS_for_ephys(
             sub=sub, side=noLID_side, ft_times=tf_times,
-            cdrs_rater='Jeroen',
+            cdrs_rater=CDRS_RATER,
         )
-        if LAT_or_SCALE == 'SCALE':
+        if LAT_or_SCALE in ['SCALE', 'LAT_BILAT']:
             _, ft_cdrs['bi'] = find_select_nearest_CDRS_for_ephys(
                 sub=sub, side='both', ft_times=tf_times,
-                cdrs_rater='Jeroen',
+                cdrs_rater=CDRS_RATER,
             ) 
 
         # extract BASELINE and BILAT selections from tf_values, before
@@ -810,32 +849,66 @@ def plot_ECOG_PSD_vs_LID(
             bl_sel = np.logical_and(ft_cdrs['LID'] == 0, ft_cdrs['noLID'] == 0)
             tf_values_BL = tf_values[:, bl_sel]
             bl_psd = np.mean(tf_values_BL, axis=1)
+
+        # select moments with BILATERAL present dyskinesia 
+        if LAT_or_SCALE in ['SCALE', 'LAT_BILAT']:
+            bi_lid_sel = np.logical_and(ft_cdrs['LID'] > 0, ft_cdrs['noLID'] > 0)
+            # add all bilateral cdrs
+            if LAT_or_SCALE == 'SCALE':
+                tf_values_dict['bi'] = tf_values[:, bi_lid_sel]
+                cdrs_cats = categorical_CDRS(y_full_scale=ft_cdrs['bi'],
+                                            preLID_minutes=0,
+                                            preLID_separate=False,
+                                            convert_inBetween_zeros=False)
+                cdrs_categs['bi'] = cdrs_cats[bi_lid_sel]
+            # add lateral-cdrs scores DURING BILATERAL cdrs
+            # uni-lat-ECOG-tf-values are added twice, once labeled match
+            # with contra-lat-cdrs, once labeled non-match with ipsi-lat-cdrs
+            elif LAT_or_SCALE == 'LAT_BILAT':
+                tf_values_dict['bi_match'] = tf_values[:, bi_lid_sel]
+                cdrs_cats = categorical_CDRS(y_full_scale=ft_cdrs['LID'],
+                                            preLID_minutes=0,
+                                            preLID_separate=False,
+                                            convert_inBetween_zeros=False)
+                cdrs_categs['bi_match'] = cdrs_cats[bi_lid_sel]
+                
+                tf_values_dict['bi_nonmatch'] = tf_values[:, bi_lid_sel]
+                cdrs_cats = categorical_CDRS(y_full_scale=ft_cdrs['noLID'],
+                                            preLID_minutes=0,
+                                            preLID_separate=False,
+                                            convert_inBetween_zeros=False)
+                cdrs_categs['bi_nonmatch'] = cdrs_cats[bi_lid_sel]
+
         
-        if LAT_or_SCALE == 'SCALE':
-            bi_lid_sel = np.logical_and(ft_cdrs['LID'] > 0, ft_cdrs['noLID'] > 0)       
-            tf_values_bi = tf_values[:, bi_lid_sel]
-            cdrs_cats = categorical_CDRS(y_full_scale=ft_cdrs['bi'],
-                                         preLID_minutes=0,
-                                         preLID_separate=False,
-                                         convert_inBetween_zeros=False)
-            cdrs_categs['bi'] = cdrs_cats[bi_lid_sel]
+        # select unilat LID itself
+        if match_label_uni == 'match':
+            uni_lid_sel = np.logical_and(ft_cdrs['LID'] > 0, ft_cdrs['noLID'] == 0)       
+        elif match_label_uni == 'nonmatch':
+            uni_lid_sel = np.logical_and(ft_cdrs['noLID'] > 0, ft_cdrs['LID'] == 0)       
+        if LAT_or_SCALE == 'LAT_UNI':
+            tf_values_dict[match_label_uni] = tf_values[:, uni_lid_sel]
         
-        # select unilat LID itself, changes tf_values
-        uni_lid_sel = np.logical_and(ft_cdrs['LID'] > 0, ft_cdrs['noLID'] == 0)       
-        tf_values = tf_values[:, uni_lid_sel]
-        
-        if LAT_or_SCALE == 'SCALE':
-            cdrs_cats, coding_dict = categorical_CDRS(y_full_scale=ft_cdrs['LID'],
-                                         preLID_minutes=0,
-                                         preLID_separate=False,
-                                         convert_inBetween_zeros=False,
-                                         return_coding_dict=True)
-            cdrs_categs[match_label_uni] = cdrs_cats[uni_lid_sel]
+        if LAT_or_SCALE in ['SCALE', 'LAT_BILAT']:
+            if add_uni:
+                tf_values_dict[match_label_uni] = tf_values[:, uni_lid_sel]
+                if match_label_uni == 'match':
+                    cdrs_cats, coding_dict = categorical_CDRS(y_full_scale=ft_cdrs['LID'],
+                                                preLID_minutes=0,
+                                                preLID_separate=False,
+                                                convert_inBetween_zeros=False,
+                                                return_coding_dict=True)
+                elif match_label_uni == 'nonmatch':
+                    cdrs_cats, coding_dict = categorical_CDRS(y_full_scale=ft_cdrs['noLID'],
+                                                preLID_minutes=0,
+                                                preLID_separate=False,
+                                                convert_inBetween_zeros=False,
+                                                return_coding_dict=True)
+                cdrs_categs[match_label_uni] = cdrs_cats[uni_lid_sel]
 
         # if LATERALITY, take mean psds per side and subject,
         # and add individual mean to grand plotting
-        if LAT_or_SCALE == 'LAT':
-            mean_psd = np.mean(tf_values, axis=1)
+        if LAT_or_SCALE == 'LAT_UNI':
+            mean_psd = np.mean(tf_values_dict[match_label_uni], axis=1)
             if BASELINE_CORRECT:
                 mean_psd = (mean_psd - bl_psd) / bl_psd * 100
             psds_to_plot[match_label_uni].append(list(mean_psd))
@@ -844,21 +917,41 @@ def plot_ECOG_PSD_vs_LID(
         elif LAT_or_SCALE == 'SCALE':
             # correct bilat-psds against the baseline from the corresponding
             # hemisphere, add all bilat psds to one list
-            assert tf_values.shape[1] == len(cdrs_categs[match_label_uni]), (
+            assert tf_values_dict[match_label_uni].shape[1] == len(cdrs_categs[match_label_uni]), (
                     f'NO MATCH unilat tf_values and cdrs_categs "{sub}" '
-                    f' {tf_values.shape} vs {len(cdrs_categs[match_label_uni])}'
+                    f' {tf_values_dict[match_label_uni].shape} vs {len(cdrs_categs[match_label_uni])}'
             )
-            assert tf_values_bi.shape[1] == len(cdrs_categs['bi']), (
+            assert tf_values_dict['bi'].shape[1] == len(cdrs_categs['bi']), (
                     f'NO MATCH bilat tf_values and cdrs_categs "{sub}" '
-                    f' {tf_values_bi.shape} vs {len(cdrs_categs["bi"])}'
+                    f' {tf_values_dict["bi"].shape} vs {len(cdrs_categs["bi"])}'
             )
-            for label in [match_label_uni, 'bi']:
+            for label in [match_label_uni, 'bi']:  # bi_match, bi_nonmatch
                 for cat in np.unique(cdrs_categs[label]):
                     cat_sel = cdrs_categs[label] == cat
-                    if label != 'bi':
-                        cat_values = np.array(tf_values)[:, cat_sel]
-                    elif label == 'bi':
-                        cat_values = np.array(tf_values_bi)[:, cat_sel]
+                    cat_values = np.array(tf_values_dict[label])[:, cat_sel]
+                    mean_cat_values = np.mean(cat_values, axis=1)
+                    if BASELINE_CORRECT:
+                        mean_cat_values = (mean_cat_values - bl_psd) / bl_psd * 100
+                    # add subject-mean per category (add empty list if necessary)
+                    if cat not in psds_to_plot[label].keys():
+                        psds_to_plot[label][cat] = []
+                    psds_to_plot[label][cat].append(list(mean_cat_values))
+        
+        elif LAT_or_SCALE == 'LAT_BILAT':
+            # correct bilat-psds against the baseline from the corresponding
+            # hemisphere, add all bilat psds to one list
+            # assert tf_values_uni.shape[1] == len(cdrs_categs[match_label_uni]), (
+            #         f'NO MATCH unilat tf_values and cdrs_categs "{sub}" '
+            #         f' {tf_values_uni.shape} vs {len(cdrs_categs[match_label_uni])}'
+            # )
+            # assert tf_values_bi.shape[1] == len(cdrs_categs['bi']), (
+            #         f'NO MATCH bilat tf_values and cdrs_categs "{sub}" '
+            #         f' {tf_values_bi.shape} vs {len(cdrs_categs["bi"])}'
+            # )
+            for label in tf_values_dict.keys():
+                for cat in np.unique(cdrs_categs[label]):
+                    cat_sel = cdrs_categs[label] == cat
+                    cat_values = np.array(tf_values_dict[label])[:, cat_sel]
                     mean_cat_values = np.mean(cat_values, axis=1)
                     if BASELINE_CORRECT:
                         mean_cat_values = (mean_cat_values - bl_psd) / bl_psd * 100
@@ -868,7 +961,7 @@ def plot_ECOG_PSD_vs_LID(
                     psds_to_plot[label][cat].append(list(mean_cat_values))
             
     ### PLOTTING PART
-    if LAT_or_SCALE == 'SCALE':
+    if LAT_or_SCALE in ['SCALE', 'LAT_BILAT']:
         plot_scaling_LID(plt_ax_to_return=plt_ax_to_return,
                          datatype='ECoG',
                          psds_to_plot=psds_to_plot,
@@ -884,7 +977,7 @@ def plot_ECOG_PSD_vs_LID(
         
         return 'plotted/saved in script'
 
-    elif LAT_or_SCALE == 'LAT':
+    elif LAT_or_SCALE == 'LAT_UNI':
         print('TODO: PUT LATERALITY PLOTTING ECOG IN PY function')
 
     if not plt_ax_to_return:
