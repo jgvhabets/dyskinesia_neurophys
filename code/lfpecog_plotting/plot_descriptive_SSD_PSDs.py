@@ -450,7 +450,7 @@ def plot_STN_PSD_vs_LID(
                     # assert tf_values[label].shape[1] == len(cdrs_categs[label]), (
                     #     f'tf_values and cdrs_categs "{sub, label}" DOES NOT MATCH:'
                     #     f' {tf_values[label].shape} vs {len(cdrs_categs[label])}'
-                    # )
+                    # )  # doesnot work anymore with different labels (1-2 for bilaterality)
                     dict_lab = label.split('_')[0]  # take match/nonmatch/bi
                 
                     if LAT_or_SCALE == 'SCALE':
