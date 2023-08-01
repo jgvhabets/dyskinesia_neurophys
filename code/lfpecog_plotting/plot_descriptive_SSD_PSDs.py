@@ -460,7 +460,6 @@ def plot_STN_PSD_vs_LID(
                     
                     if LAT_or_SCALE == 'LAT_BILAT' and not label.startswith('bi'):
                         # dont include unilateral values in LAT_BILAT
-                        # print(f'skip {label} for LAT_BILAT due unilaterality')
                         continue
                     
                     # assert tf_values[label].shape[1] == len(cdrs_categs[label]), (
@@ -492,9 +491,13 @@ def plot_STN_PSD_vs_LID(
                             if CALC_FREQ_CORR:
                                 if i_lab == 0:
                                     # start array with baseline values
-                                    freqCorr_arr = np.array(tf_values[f'{match_label}_BL'])
+                                    bl_values = np.array(tf_values[f'{match_label}_BL'])
+                                    bl_values = (bl_values.T - bl_psd) / bl_psd * 100
+                                    freqCorr_arr = bl_values.T
                                     freqCorr_scores = [0] * freqCorr_arr.shape[1]
-                                freqCorr_arr = np.concatenate([freqCorr_arr, tf_values[lab]], axis=1)
+                                temp_values = np.array(tf_values[lab]).T
+                                temp_values = (temp_values - bl_psd) / bl_psd * 100
+                                freqCorr_arr = np.concatenate([freqCorr_arr, temp_values.T], axis=1)
                                 freqCorr_scores.extend(list(cdrs_full[lab]))
                                 
                             for cat in np.unique(cdrs_categs[lab]):
