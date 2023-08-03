@@ -111,13 +111,20 @@ def get_SSD_timeFreq(
 
 def get_cont_ssd_arr(subSourceSSD, bw,
                      winLen_sec=10,):
+    """
+    
+    Returns:
+        - new_arr: 1d array with pasted full data
+        - new_timestamps: 1d array with timestamps parallel to data
+        - new_times_sec: only full seconds of new data
+    """
     
     windows = getattr(subSourceSSD, bw)
     wintimes = subSourceSSD.times
     new_fs = subSourceSSD.fs
     win_t_diffs =  list(np.diff(subSourceSSD.times)) + [0]
 
-    new_arr, new_times_sec = [], []
+    new_arr, new_times_sec, new_timestamps = [], [], []
     skip_next = False
 
     for windat, wintime, t_diff in zip(windows, wintimes, win_t_diffs):
@@ -131,6 +138,7 @@ def get_cont_ssd_arr(subSourceSSD, bw,
             if not np.isnan(windat).any():
                 new_arr.extend(windat)
                 new_times_sec.extend(np.arange(wintime, wintime + winLen_sec))
+                new_timestamps.extend(np.arange(wintime, wintime + winLen_sec, (1 / new_fs)))
             # if nans in window
             else:
                 skip_next = False  # no data added, try to add next window
@@ -149,7 +157,7 @@ def get_cont_ssd_arr(subSourceSSD, bw,
         'negative time differences present'
     )
 
-    return new_arr, new_times_sec
+    return new_arr, new_timestamps, new_times_sec
 
 
 def create_SSD_timeFreqArray(subSourceSSD, win_len_sec=1,):
@@ -165,7 +173,9 @@ def create_SSD_timeFreqArray(subSourceSSD, win_len_sec=1,):
     for i, bw in enumerate(bands.keys()):
 
         # convert windows with overlap into continuous array
-        cont_arr, cont_times = get_cont_ssd_arr(subSourceSSD=subSourceSSD, bw=bw)
+        cont_arr, cont_time_arr, cont_time_secs = get_cont_ssd_arr(
+            subSourceSSD=subSourceSSD, bw=bw
+        )
         # reshape into windows of seconds for spectral decomp
         reshaped_arr = cont_arr.reshape((len(cont_arr) // fs, fs))
         # calculate welch with 1 Hz bins per window
@@ -176,7 +186,7 @@ def create_SSD_timeFreqArray(subSourceSSD, win_len_sec=1,):
         if i == 0:
             sum_timefreq = DataFrame(
                 data=np.zeros((max_f + 1 - min_f, px.shape[0])),
-                columns=cont_times,
+                columns=cont_time_secs,
                 index=np.arange(min_f, max_f + 1)
             )
         # define freq-ranges for band
@@ -187,7 +197,7 @@ def create_SSD_timeFreqArray(subSourceSSD, win_len_sec=1,):
         sel = px.T[bw_range[0]:bw_range[1] + 1, :]
         sum_timefreq.loc[bw_range[0]:bw_range[1]] = sel
 
-    return sum_timefreq, cont_times, min_f, max_f
+    return sum_timefreq, cont_time_secs, min_f, max_f
 
 
 def correct_timeFreq_baseline(tf_values, tf_times,
