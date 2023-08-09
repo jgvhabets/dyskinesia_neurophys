@@ -30,7 +30,7 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
                          BASELINE_CORRECT=False,
                          BREAK_X_AX=False,
                          plt_ax_to_return=False,
-                         fsize=12,):
+                         fsize=12, ax_title='PSD over Time'):
     """
     Plot group-level PSDs (based on SSD data), plot
     mean PSDs for temporal course after LDopa-intake.
@@ -59,7 +59,8 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
     # last timing (70) is regarded as > 60
     if sel_subs: subs = [sub for sub in all_timefreqs.keys() if sub in sel_subs]
     else: subs = all_timefreqs.keys()
-    
+    subs_incl = []
+
     for sub in subs:
 
         for src in all_timefreqs[sub].keys():
@@ -68,6 +69,8 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
                 if 'ecog' in src: continue
             elif STN_or_ECOG.upper() == 'ECOG':
                 if not 'ecog' in src: continue
+
+            subs_incl.append(sub)  # add subject to count
 
             # get data for this sub and ephys-source
             tf_values = all_timefreqs[sub][src].values.copy()
@@ -104,6 +107,8 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
         
                 psds_to_plot[timing].append(list(mean_psd))
 
+    n_subs_incl = len(np.unique(subs_incl))
+
     if not plt_ax_to_return:
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
     else:
@@ -121,11 +126,13 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
         if BASELINE_CORRECT and timing == 0: continue
 
         psds = np.array(psds_to_plot[timing])
+        print(f'{STN_or_ECOG}, t={timing} ({i}) is n={psds.shape[0]}')
         if not len(psds.shape) == 2: continue
         psd_mean = np.mean(psds, axis=0)
         # blank freqs irrelevant after SSD
         blank_sel = np.logical_and(tf_freqs > 35, tf_freqs < 60)
-        psd_mean[blank_sel] = np.nan
+        # psd_mean[blank_sel] = np.nan
+        # tf_freqs[blank_sel] = np.nan
         # smoothen signal for plot
         if SMOOTH_PLOT_FREQS > 0:
             psd_mean = Series(psd_mean).rolling(
@@ -140,13 +147,13 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
         
         # BREAK X AXIS and adjust xticks and labels
         if BREAK_X_AX:
-            PSD, xticks, xlabels = break_x_axis_psds_ticks(tf_freqs, PSD)
+            psd_mean, xticks, xlabels = break_x_axis_psds_ticks(tf_freqs, psd_mean)
             x_axis = xticks
 
         if not BREAK_X_AX: x_axis = tf_freqs
 
         # PLOT LINE
-        ax.plot(x_axis, psd_mean, label=label,
+        ax.plot(x_axis, psd_mean, label=f'{label} (n={psds.shape[0]})',
                 color=gradient_colors[i],
                 lw=5, alpha=.5,)
 
@@ -170,10 +177,14 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
     if BASELINE_CORRECT: ylabel = 'Power %-change vs pre - L-DOPA' + ylabel[5:]
     ax.set_ylabel(ylabel, size=fsize,)
 
-    ax.legend(frameon=False, fontsize=fsize, ncol=2)
+    ax.legend(frameon=False, fontsize=fsize-3, ncol=2)
 
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
+
+    
+    ax.set_title(f"{ax_title} (n={n_subs_incl} pt's)",
+                        size=fsize, weight='bold',)
 
     if plt_ax_to_return: return ax
     else: plt.show()
@@ -774,31 +785,56 @@ def plot_unilateral_LID(
     else: plt.show()
 
 
-def break_x_axis_psds_ticks(tf_freqs, PSD,
+def break_x_axis_psds_ticks(tf_freqs, PSD, PSD_sd=False,
                             x_break = (35, 60), nan_pad = 5):
     
     del_sel = np.logical_and(tf_freqs > x_break[0],
                              tf_freqs < x_break[1])
-    del_sel = np.logical_or(del_sel, np.isnan(PSD['mean']))
-    PSD['mean'] = np.delete(PSD['mean'], del_sel,)
-    PSD['sd'] = np.delete(PSD['sd'], del_sel,)
-    plt_freqs = np.delete(tf_freqs.copy(), del_sel,).astype(float)
-    i_sel = np.argmin(abs(plt_freqs - x_break[0]))
-    PSD['mean'] = np.insert(PSD['mean'], i_sel + 1,
-                            values=[np.nan] * nan_pad,)
-    PSD['sd'] = np.insert(PSD['sd'], i_sel + 1,
-                            values=[np.nan] * nan_pad,)
-    plt_freqs = np.insert(plt_freqs, i_sel + 1,
-                            values=[np.nan] * nan_pad,)
 
-    xticks = np.arange(len(PSD['mean']))
+    if isinstance(PSD, dict):
+        del_sel = np.logical_or(del_sel, np.isnan(PSD['mean']))
+        PSD['mean'] = np.delete(PSD['mean'], del_sel,)
+        PSD['sd'] = np.delete(PSD['sd'], del_sel,)
+        plt_freqs = np.delete(tf_freqs.copy(), del_sel,).astype(float)
+        i_sel = np.argmin(abs(plt_freqs - x_break[0]))
+        PSD['mean'] = np.insert(PSD['mean'], i_sel + 1,
+                                values=[np.nan] * nan_pad,)
+        PSD['sd'] = np.insert(PSD['sd'], i_sel + 1,
+                                values=[np.nan] * nan_pad,)
+        plt_freqs = np.insert(plt_freqs, i_sel + 1,
+                                values=[np.nan] * nan_pad,)
+
+        xticks = np.arange(len(PSD['mean']))
+    
+    elif isinstance(PSD, np.ndarray):    
+        del_sel = np.logical_or(del_sel, np.isnan(PSD))
+        PSD = np.delete(PSD, del_sel,)
+        if isinstance(PSD_sd, np.ndarray): PSD_sd = np.delete(PSD_sd, del_sel,)
+        plt_freqs = np.delete(tf_freqs.copy(), del_sel,).astype(float)
+        
+        i_sel = np.argmin(abs(plt_freqs - x_break[0]))
+        PSD = np.insert(PSD, i_sel + 1, values=[np.nan] * nan_pad,)
+        if isinstance(PSD_sd, np.ndarray): PSD_sd = np.insert(PSD_sd, i_sel + 1,
+                                      values=[np.nan] * nan_pad,)
+        
+        plt_freqs = np.insert(plt_freqs, i_sel + 1,
+                                values=[np.nan] * nan_pad,)
+
+        xticks = np.arange(len(PSD))
+
+    
     xlabels = [''] * len(xticks)
     low_ticks = plt_freqs[plt_freqs < x_break[0]]
     xlabels[:len(low_ticks)] = low_ticks
     high_ticks = plt_freqs[plt_freqs > x_break[1]]
     xlabels[len(xlabels) - len(high_ticks):] = high_ticks
 
-    return PSD, xticks, xlabels
+
+    if isinstance(PSD, dict): return PSD, xticks, xlabels
+    elif isinstance(PSD, np.ndarray):
+        if isinstance(PSD_sd, np.ndarray): return PSD, PSD_sd, xticks, xlabels
+        else: return PSD, xticks, xlabels
+
 
 
 def plot_ECOG_PSD_vs_LID(
