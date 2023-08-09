@@ -53,7 +53,7 @@ if __name__ == '__main__':
     import lfpecog_preproc.preproc_reref as reref
     import lfpecog_preproc.preproc_get_mne_data as loadData
     import lfpecog_preproc.preproc_plotting as plotting
-
+    import lfpecog_preproc.preproc_load_raw as loadRaw
 
     # open argument (json file) defined in command (line)
     json_folder = join(get_onedrive_path('data'), 'preprocess_jsons')
@@ -65,7 +65,12 @@ if __name__ == '__main__':
     
     for sub in mainSettings['subs_include']:
 
-        sub_runs = dataMng.get_sub_runs(sub)  # get bids info from subject-specific-json and scans.tsv
+        try:  # try if bids-converted data is available
+            sub_runs = dataMng.get_sub_runs(sub)  # get bids info from subject-specific-json and scans.tsv
+            BIDS_DATA = True
+        except:
+            sub_runs = loadRaw.get_raw_runs(sub)  # gets runs-info from raw Poly5
+            BIDS_DATA = False
 
         for run in list(sub_runs.values()):
         
@@ -74,30 +79,44 @@ if __name__ == '__main__':
                 continue
 
             print(f'\nSTART PREPROCESSING SUB {sub} Run: {run}\n')
-
+            
             runInfo = dataMng.RunInfo(
                 mainSettings=mainSettings,
                 runDict=run,
                 project_path=proj_path,
-            )
-            
-            rawRun = dataMng.defineMneRunData(
-                runInfo=runInfo,
-                subSettings=run,
+                BIDS_DATA=BIDS_DATA
             )
 
-            dataDict, chNameDict = loadData.get_data_and_channels(
-                rawRun=rawRun,
-                runInfo=runInfo,
-                Fs=rawRun.bids.info['sfreq'],
-                to_plot=mainSettings['report_plots'],
-                settingsVersion=mainSettings['settingsVersion'],
-            )
+            # extract data, channels, and meta-info from file
+            if BIDS_DATA: 
+                rawRun = dataMng.defineMneRunData(
+                    runInfo=runInfo,
+                    subSettings=run,
+                )
+                dataDict, chNameDict = loadData.get_data_and_channels(
+                    rawRun=rawRun,
+                    runInfo=runInfo,
+                    Fs=rawRun.sfreq,
+                    to_plot=mainSettings['report_plots'],
+                    settingsVersion=mainSettings['settingsVersion'],
+                )
+
+            else:
+                rawRun = loadRaw.LoadRawData(
+                    runInfo=runInfo,
+                    subSettings=run
+                )
+                dataDict, chNameDict = loadRaw.get_raw_data_and_channels(
+                    rawRun=rawRun,
+                    runInfo=runInfo,
+                    to_plot=mainSettings['report_plots'],
+                    settingsVersion=mainSettings['settingsVersion'],
+                )
 
             dataDict, chNameDict = loadData.remove_flatlines_empties(
                 data=dataDict,
                 chNames=chNameDict,
-                fs=rawRun.bids.info['sfreq'],
+                fs=rawRun.sfreq,
                 reportPath=runInfo.reportTxt_path,
             )
 
@@ -110,7 +129,7 @@ if __name__ == '__main__':
                 dataDict=dataDict,
                 chNamesDict=chNameDict,
                 settings=mainSettings,
-                Fs=rawRun.bids.info['sfreq'],
+                Fs=rawRun.sfreq,
                 filtertype='bandpass',
             )
 
@@ -119,7 +138,7 @@ if __name__ == '__main__':
                 dataDict=dataDict,
                 chNamesDict=chNameDict,
                 settings=mainSettings,
-                Fs=rawRun.bids.info['sfreq'],
+                Fs=rawRun.sfreq,
                 filtertype='notch',
             )
 
@@ -128,7 +147,7 @@ if __name__ == '__main__':
                 dataDict=dataDict,
                 chNamesDict=chNameDict,
                 settings=mainSettings,
-                orig_Fs=rawRun.bids.info['sfreq']
+                orig_Fs=rawRun.sfreq
             )  # new resampled sample-freqs can vary between datatypes
         
             if mainSettings['report_plots']:

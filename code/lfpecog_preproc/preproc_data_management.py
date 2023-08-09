@@ -102,21 +102,23 @@ class RunInfo:
     mainSettings: dict
     runDict: dict  #  dict from sub_runs (dict)
     project_path: str
+    BIDS_DATA: bool = True
 
     def __post_init__(self,):  # is called after initialization
-        self.rawdata_path = get_onedrive_path('bids_rawdata')
-        
-        self.bidspath = mne_bids.BIDSPath(
-            subject=f'{self.runDict["bids_sub"]}',
-            session=self.runDict["ses"],
-            task=self.runDict["task"],
-            acquisition=self.runDict["acq"],
-            run=self.runDict["run"],
-            suffix='ieeg',
-            extension='.vhdr',
-            datatype='ieeg',
-            root=self.rawdata_path,
-        )
+        if self.BIDS_DATA:
+            self.rawdata_path = get_onedrive_path('bids_rawdata')
+            
+            self.bidspath = mne_bids.BIDSPath(
+                subject=f'{self.runDict["bids_sub"]}',
+                session=self.runDict["ses"],
+                task=self.runDict["task"],
+                acquisition=self.runDict["acq"],
+                run=self.runDict["run"],
+                suffix='ieeg',
+                extension='.vhdr',
+                datatype='ieeg',
+                root=self.rawdata_path,
+            )
 
         self.data_groups = self.runDict["data_include"]
         
@@ -191,6 +193,7 @@ class defineMneRunData:
             self.bids = mne_bids.read_raw_bids(
                 self.runInfo.bidspath, verbose="Warning",
             )
+            self.sfreq = self.bids.info["sfreq"]
             report = (
                 '\n\n------------ BIDS DATA INFO ------------\n'
                 f'The raw-bids-object contains {len(self.bids.ch_names)} channels with '
