@@ -406,12 +406,9 @@ def find_proc_data(
     for one subject, considers specific data-version
     used for preprocessing settings
     '''
-    sub_proc_path = os.path.join(
-        project_path, 
-        'data', 'preprocessed_data',
-        f'sub-{sub}',
-        version,
-    )
+    sub_proc_path = os.path.join(project_path,
+                                 'data', 'preprocessed_data',
+                                 f'sub-{sub}', version,)
     # get available files for sub + version
     files = os.listdir(sub_proc_path)
     # select npy files
@@ -450,7 +447,7 @@ def create_dopa_timed_array(
     dataFiles = [f for f in allData if dType in f]
 
     for nFile, datFile in enumerate(dataFiles):
-
+                    
         rec = datFile.split('_')[3]
         nameFile = [f for f in nameFiles if rec in f][0]
         names = list(pd.read_csv(os.path.join(
@@ -497,6 +494,14 @@ def create_dopa_timed_array(
         axis=0, by='dopa_time'
     ).reset_index(drop=True)
 
+    # correct NON-BIDS preproc for micro-units
+    if 'stim' not in datFile.lower():
+        print(f'CORRECT MICRO-UNITS for none-BIDS-load ({datFile})')
+        for i, c in enumerate(data_out.keys()):
+            if 'acc' in c.lower() or 'lfp' in c.lower() or 'ecog' in c.lower():
+                print(f'...correct {c}')
+                data_out[c] = data_out[c].values * 1e-6
+    
     return data_out, fs
 
 

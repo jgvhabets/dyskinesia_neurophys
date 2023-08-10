@@ -45,7 +45,10 @@ class subjectData:
 
     def __post_init__(self,):
 
-        self.dtypes, self.nameFiles, self.dataFiles, sub_path = read_data_funcs.find_proc_data(
+        (self.dtypes,
+         self.nameFiles,
+         self.dataFiles,
+         sub_path) = read_data_funcs.find_proc_data(
             sub=self.sub,
             version=self.data_version,
             project_path=self.project_path
@@ -86,10 +89,15 @@ if __name__ == '__main__':
     Running on WIN (from repo_folder/code):
         python -m lfpecog_features.run_mergeDataClass "012" "v3.0" (opt: "no_acc" "no_save")
         OR: python -m lfpecog_features.run_mergeDataClass "all" "v4.0"
+        NOTE: 'all' refers to the list all_subs defined below
     Output:
         - dataframe data/ index/ columnnames stored
             in path: data/merged_sub_data/DATAVERSION/
     """
+    all_subs = ['105', '107', '108', '109',
+                '019', '020', '021',]  # '106' exteme noisy
+    # all_subs = 'define all subs'
+
     OVERWRITE = False  # if False, existing files are not new created and overwritten
 
     ### get and check variables out of run-command
@@ -119,11 +127,6 @@ if __name__ == '__main__':
     else:
         raise ValueError(f'define PICKLE_PER_SOURCE info for dataversion: {DATA_VERSION}')
     
-    # all_subs = ['008', '009', '010', '012', '013', '014',
-    #             '016', '017']
-    # all_subs = ['101', '102', '103',]
-    all_subs = 'define all subs'
-    
     if SUB.lower() == 'all': sub_list = all_subs
     elif isinstance(SUB, str) and len(SUB) == 3: sub_list = [SUB,]
     
@@ -151,6 +154,7 @@ if __name__ == '__main__':
         
         ### Optionally add Accelerometer
         if INCL_ACC:
+            print(f'START MOVEMENT DETECTION for sub-{SUB}')
             accStates = run_tap_detect.runTapDetection(data)
         
             if not PICKLE_PER_SOURCE:

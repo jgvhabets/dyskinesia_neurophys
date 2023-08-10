@@ -44,6 +44,9 @@ def plot_groupChannels(
     x_ind = ch_names.index('dopa_time')
 
     groupData = groupData[:, int(5 * Fs):int(-5 * Fs)]  # do not plot first and last 5 seconds, just as in data selection
+    if groupData.shape[1] < Fs:
+        print(f'SKIP PLOTTING, TOO FEW SAMPLES')
+        return 
 
     fig, axes = plt.subplots(len(ch_names) - nTimeRows, 1,
                              figsize=(16, 24), sharex=True,)

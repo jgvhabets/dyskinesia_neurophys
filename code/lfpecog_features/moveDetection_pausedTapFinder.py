@@ -5,13 +5,14 @@ import numpy as np
 from scipy.signal import find_peaks
 from scipy.ndimage import uniform_filter1d
 from datetime import datetime
-from itertools import compress
+from itertools import compress, product
 
 # Import own functions
 import lfpecog_features.moveDetection_preprocess as movePrep
 
 def pausedTapDetector(
-    subdat, tap_move_distance=1, svm_thr=1e-7,
+    subdat, tap_move_distance=1, std_svm_thr=1e-7,
+    std_find_large_height = 5e-7, std_find_small_height = 2.5e-7,
 ):
     """
     Detect the moments of finger-raising and -lowering
@@ -58,9 +59,7 @@ def pausedTapDetector(
             f'{subdat.sub} {side} side'
         )
         # empty lists to store final outputs
-        for v in ['t', 'i']:
-            for m in ['tap', 'move']:
-                out_lists[f'{side}_{m}_{v}'] = []
+        for v, m in product(['t', 'i'], ['tap', 'move']): out_lists[f'{side}_{m}_{v}'] = []
 
         fs = int(getattr(subdat, f'acc_{side}').fs)
         accDf = getattr(subdat, f'acc_{side}').data
@@ -79,8 +78,22 @@ def pausedTapDetector(
         mainAx_ind = movePrep.find_main_axis(acc_arr)
 
         times = accDf['dopa_time'].values
+
+        if subdat.sub in ['105']:
+            svm_thr = 5e-8  # correct for incorrect ACC range
+            find_large_height = 3e-7
+            find_small_height = 1e-7
+        # elif subdat.sub in ['107', '108', '109']:
+        #     svm_thr = 1e-7  # correct for incorrect ACC range
+        #     find_large_height = 5e-7
+        #     find_small_height = 2.5e-7
+        else:
+            svm_thr = std_svm_thr
+            find_large_height = std_find_large_height
+            find_small_height = std_find_small_height
         
-        for task in ['tap', 'rest']:
+        for task in ['tap']:
+            # ONLY FOR TAP TASK-BLOCK, other mvoement is defined post-hoc
             # perform per task-block
             taskBlock_inds = movePrep.find_task_blocks(accDf, task)  # gives DF-indices
 
@@ -90,33 +103,41 @@ def pausedTapDetector(
             for bN, (iB1, iB2) in enumerate(
                 zip(taskBlock_inds[0], taskBlock_inds[1])
             ):
-
+                print(f'... in moveDetection {task} block {bN + 1} / {len(taskBlock_inds[0])}')
                 sig3ax = acc_arr[iB1:iB2, :]
                 sig = sig3ax[:, mainAx_ind]
+                if max(sig) > 5e-2:
+                    print(f'CORRECTED THRESHOLDS for sub-{subdat.sub}, {side}')
+                    if subdat.sub in ['105']:
+                        svm_thr = .05  # correct for incorrect ACC range
+                        find_large_height = .3
+                        find_small_height = .1
+                    elif subdat.sub in ['107', '108', '109']:
+                        svm_thr = .1  # correct for incorrect ACC range
+                        find_large_height = .5
+                        find_small_height = .3
                 sigInds = np.arange(iB1, iB2)
                 sigTimes = times[iB1:iB2]
                 svm = movePrep.signalvectormagn(sig3ax)
                 smoothsvm = uniform_filter1d(
                     svm, size=int(fs / 4)
                 )
-
                 # # Find peaks to help movement detection
                 largePos = find_peaks(
                     sig,
-                    height=5e-7,
+                    height=find_large_height,
                     distance=fs,  # 1 s
                 )[0]
                 smallPeaks = find_peaks(
                     svm,
-                    height=2.5e-7,
+                    height=find_small_height,
                     distance=fs,
                 )[0]
                 largeNeg = find_peaks(
                     -1 * sig,  # convert pos/neg for negative peaks
-                    height=5e-7,
+                    height=find_large_height,
                     distance=fs,
                 )[0]
-                
                 # define peak-timings of TAPS
                 if np.logical_or(
                     len(largePos) == 0, len(largeNeg) == 0
@@ -126,41 +147,50 @@ def pausedTapDetector(
                     elif len(largeNeg) > 0: otherLargePeaks = largeNeg
                     else: otherLargePeaks = []
 
-                else:  # both large Pos and Neg present
+                else:  # both large Pos and Neg present (TAPS)
 
                     otherLargePeaks = []
-
-                    for posP in largePos:
+                    print(f'check all large peaks (n={len(largePos)})')
+                    for i_posP, posP in enumerate(largePos):
                         # check distance to closest negative peak
 
                         if min(abs(posP - largeNeg)) > (fs * .5):
                             # large peak without close negative peak
                             otherLargePeaks.append(posP)  # store for other movement
+                            print('.')
+                            continue
 
-                        else:  # negative peak close enough to be a TAP
+                        # negative peak close enough to be a TAP
+                    
+                        # only include tap (pos and neg-peak) if they are within 0.5 sec
+                        negP = largeNeg[np.argmin(abs(posP - largeNeg))]
+                        # allocate two large peaks in tap-list
+                        if posP > negP: temp_tap = [np.nan, negP, posP, np.nan]
+                        if posP < negP: temp_tap = [np.nan, posP, negP, np.nan]
+
+                        # search for beginning and end of tapping movement
+                        # based on signal vector activity
+                        temp_tap[0], temp_tap[-1] = find_local_act_borders(
+                            posP, smoothsvm, svm_thr
+                        )
+                        if not temp_tap[0] and not temp_tap[-1]:
+                            print(f'not found borders for peak {i_posP}')
+                            continue
+                        print(f'TAP-duration: {(temp_tap[-1] - temp_tap[0])/fs}')
+
+                        try:
+                            tap_t_list.append([sigTimes[t] for t in temp_tap])
+                            tap_i_list.append([sigInds[t] for t in temp_tap])
                         
-                            # only include tap (pos and neg-peak) if they are within 0.5 sec
-                            negP = largeNeg[np.argmin(abs(posP - largeNeg))]
-                            # allocate two large peaks in tap-list
-                            if posP > negP: temp_tap = [np.nan, negP, posP, np.nan]
-                            if posP < negP: temp_tap = [np.nan, posP, negP, np.nan]
+                        except ValueError:
+                            print(f'valueError for adding {i_posP}')
+                            continue  # skip where nan is left bcs of no border
+                        
+                        except IndexError:
+                            print(f'indexError for adding {i_posP}')
+                            continue
 
-                            # search for beginning and end of tapping movement
-                            # based on signal vector activity
-                            temp_tap[0], temp_tap[-1] = find_local_act_borders(
-                                posP, smoothsvm, svm_thr
-                            )
-
-                            try:
-                                tap_t_list.append([sigTimes[t] for t in temp_tap])
-                                tap_i_list.append([sigInds[t] for t in temp_tap])
-                            
-                            except ValueError:
-                                continue  # skip where nan is left bcs of no border
-                            
-                            except IndexError:
-                                # print('TAP:', temp_tap)  # PM: check if exclusion is correct, end of recording?
-                                continue
+                    print(f'added TAPS for {task} block {bN + 1} / {len(taskBlock_inds[0])}')
                 
                 # exclude small Peaks close to Tapping-Peaks
                 min_gap = tap_move_distance * fs
@@ -193,6 +223,7 @@ def pausedTapDetector(
                     i_s, i_e = find_local_act_borders(
                         p, smoothsvm, svm_thr
                     )
+                    if not i_s and not i_e: continue
                     if (i_e - i_s) > ( 5 * fs): continue  # if window is too long (missing data)
 
                     temp_moves.append([i_s, i_e])
@@ -202,6 +233,9 @@ def pausedTapDetector(
                 try:
                     move_t_list.extend([sigTimes[t] for t in temp_moves])
                     move_i_list.extend([sigInds[t] for t in temp_moves])
+
+                    print(f'added {len(temp_moves)} MOVES for {task} block {bN}')
+
                 except ValueError:
                     continue  # skip where nan is left bcs of no border
                 
@@ -229,31 +263,54 @@ def remove_lists_with_NaN(
     return newlist
 
 
-def find_local_act_borders(
-    peak_i, svm_sig, svmThr
-):
-    pre_i = np.nan
-    post_i = np.nan
+def find_local_act_borders(peak_i, svm_sig, svmThr):
+    # find moments below threshold
+    bool_low = np.where(svm_sig < svmThr)[0]  # low due to tilde conversion
+    bools = bool_low - peak_i  # find distances to peak-index
+    # find closest point on the left
+    left_bools = bools[bools < 0]
+    left_idx = bool_low[bools < 0]
+    try:
+        left_border = left_idx[np.argmin(abs(left_bools))]
+    except ValueError:
+        # if peak_i < 1000:
+        #     left_border = 0
+        # else:
+        # incorrect border found
+        return False, False
+    # find closest point on the right
+    right_bools = bools[bools > 0]
+    right_idx = bool_low[bools > 0]
+    try:
+        right_border = right_idx[np.argmin(abs(right_bools))]
+    except ValueError:
+        # if (len(svm_sig) - peak_i) < 1000:
+        #     right_border = len(svm_sig) - 
+        # else:
+        # incorrect border found
+        return False, False
+    # pre_i = np.nan
+    # post_i = np.nan
 
-    i = peak_i
-    while np.isnan(pre_i):
+    # i = peak_i
+    # while np.isnan(pre_i):
         
-        i -= 1
-        try:
-            if svm_sig[i] < svmThr: pre_i = i
-        except IndexError:
-            break  # skip if border is out of data
+    #     i -= 1
+    #     try:
+    #         if svm_sig[i] < svmThr: pre_i = i
+    #     except IndexError:
+    #         break  # skip if border is out of data
     
-    i = peak_i
-    while np.isnan(post_i):
+    # i = peak_i
+    # while np.isnan(post_i):
         
-        i += 1
-        try:
-            if svm_sig[i] < svmThr: post_i = i
-        except IndexError:
-            break  # skip if border is out of data
+    #     i += 1
+    #     try:
+    #         if svm_sig[i] < svmThr: post_i = i
+    #     except IndexError:
+    #         break  # skip if border is out of data
     
-    return pre_i, post_i
+    return left_border, right_border
 
 
 def saveAllEphysRestblocks(

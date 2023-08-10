@@ -84,8 +84,13 @@ def bp_filter(
         - data_out (array): corresponding 3d or 2d array
          with filtered data
     '''
+    assert (data.shape[-2] - n_timeRows) > 0, (
+        'no data channels present in filtering, all'
+        ' out because of bad or artefacts?'
+    )
+    
     data_out = data.copy()
-
+    
     if len(data.shape) == 3:
         for w in np.arange(data.shape[0]):
             try:

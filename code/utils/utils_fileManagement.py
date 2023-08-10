@@ -17,6 +17,7 @@ import json
 
 def get_project_path(
     subfolder: str = '',
+    extern_HD=False,
 ):
     """
     Finds path of projectfolder, and
@@ -27,12 +28,15 @@ def get_project_path(
         - subfolder: data/code/figure to retrieve
             subfolder path
     """
-    
-    path = getcwd()
+    if not extern_HD:
+        path = getcwd()
 
-    while path[-20:] != 'dyskinesia_neurophys':
+        while path[-20:] != 'dyskinesia_neurophys':
 
-        path = dirname(path)
+            path = dirname(path)
+     
+    elif extern_HD:
+        path = join('D:\Research_EXT', 'dyskinesia_neurophys')
     
     if subfolder in ['data', 'code', 'figures', 'results']:
 

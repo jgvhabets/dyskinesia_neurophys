@@ -13,6 +13,9 @@ from datetime import timedelta
 from utils.utils_fileManagement import (
     get_project_path, get_onedrive_path
 )
+from lfpecog_preproc.preproc_import_scores_annotations import (
+    get_ecog_side
+)
 import lfpecog_preproc.tmsi_poly5reader as poly5_reader
 import lfpecog_preproc.preproc_plotting as plotting
 
@@ -46,7 +49,7 @@ class LoadRawData:
                   f'fs: {self.sfreq}, chs: {self.ch_names}, shape: {self.raw_data.shape}\n'
                   '\nNo channel dropping because data was NOT BIDS converted.\n')
 
-        self.ch_names = rename_raw_ch_names(self.ch_names)
+        self.ch_names = rename_raw_ch_names(self.ch_names, sub=self.runInfo.sub)
 
         ch_sel = [any([n in ch.lower() for n in ['acc', 'lfp', 'ecog']]) for ch in self.ch_names]
         self.ch_names = list(compress(self.ch_names, ch_sel))
@@ -81,6 +84,11 @@ def get_raw_runs(sub: str):
 
     data_path = os.path.join(get_project_path('data'),
                              'raw_poly5', f'sub-{sub}')
+    if not os.path.exists(data_path):
+        print(f'sub-{sub}, TRY RAW POLY5 FOLDER ON HARD DISK')
+        data_path = os.path.join(get_project_path('data', extern_HD=True),
+                                 'raw_poly5', f'sub-{sub}')
+    
     assert os.path.exists(data_path), (
         f'No folder ({data_path}) with raw data for subject-{sub}'
     )
@@ -106,11 +114,15 @@ def get_raw_runs(sub: str):
 
         for t in ['rest', 'tap', 'free']:
             if t in filename.lower(): task = t
-        if task in sub_json["tasks_exclude"]: continue  # find task and skip if defined
+        if task in sub_json["tasks_exclude"]:
+            print(f'\t...{filename} EXCLUDED FROM PREPROC (TASK: {task})')
+            continue  # find task and skip if defined
 
         if 'dopapre' in filename.lower(): acq = 'DopaPre'
         else: acq = 'Dopa' + filename.lower().split('dopa')[-1][:2]
-        if acq in sub_json["acq_exclude"]: continue  # find acq (dopaXX) and skip if defined
+        if acq in sub_json["acq_exclude"]:
+            print(f'\t...{filename} EXCLUDED FROM PREPROC (ACQ: {acq})')
+            continue  # find acq (dopaXX) and skip if defined
 
         sub_runs[i] = {
             'sub': sub,
@@ -131,7 +143,7 @@ def get_raw_runs(sub: str):
     return sub_runs
 
 
-def rename_raw_ch_names(ch_names):
+def rename_raw_ch_names(ch_names, sub=None):
 
     acc_side = 'R'
     acc_count = 0
@@ -143,11 +155,12 @@ def rename_raw_ch_names(ch_names):
             ch_names[i] = f'ACC_{acc_side}_{ch}'
             acc_count += 1
 
-        if 'LFP' in ch.upper():
+        if 'LFP' in ch.upper() or 'STN' in ch.upper():
             ch_names[i] = f'LFP_{ch[3]}_{ch[4:6]}'
             
-        if 'ECOG' in ch.upper():
-            ch_names[i] = f'ECOG_{ch[4]}_{ch[5:7]}'
+        if 'ECOG' in ch.upper() or 'ECX' in ch.upper():
+            ecog_side = get_ecog_side(sub=sub).upper()[0]
+            ch_names[i] = f'ECOG_{ecog_side}_{ch[4:6]}'
     
     return ch_names
 
@@ -167,7 +180,7 @@ def get_raw_data_and_channels(
 
     Input:
         - rawRun (class from LoadRawData()):
-            containing all mne-specific info of
+            containing all info of
             recording-session
         - runInfo (class from runInfo()): containing
             info from inserted JSON-files about
@@ -175,10 +188,10 @@ def get_raw_data_and_channels(
         - Fs (int): sample frequency of inserted array
     
     Returns:
-        - data_arrays (dict): 2d-array per data group
-            (lfp, ecog, acc, etc) with all times
-            and timeseries of defined session.
-            'time' as seconds since start-recording,
+        - data_arrays (dict): 2d-array (n-channels, n-samples)
+            per data group (lfp, ecog, acc, etc) with
+            all times and timeseries of defined session.
+            'run_time' as seconds since start-recording,
             'dopa_time' as seconds since/before intake
             of L-Dopa (Madopar LT)
         - ch_names (dict): list per data group with
@@ -186,7 +199,7 @@ def get_raw_data_and_channels(
     
     """
     Fs = rawRun.sfreq
-    
+
     data_arrays, ch_names = {}, {}
 
     for g in runInfo.data_groups:
@@ -199,6 +212,9 @@ def get_raw_data_and_channels(
              ).total_seconds() for i in range(len(times))
         ]
         times = np.array([times, dopa_t])
+        # prevent one date too short or long
+        if times.shape[-1] == dat.shape[-1] + 1:
+            times = times[:, :-1]
         data_arrays[g] = np.vstack((times, dat))
     
         ch_names[g] = ['run_time', 'dopa_time'] + ch_names[g]

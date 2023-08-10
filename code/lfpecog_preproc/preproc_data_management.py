@@ -105,6 +105,8 @@ class RunInfo:
     BIDS_DATA: bool = True
 
     def __post_init__(self,):  # is called after initialization
+        self.sub = self.runDict["sub"]
+        
         if self.BIDS_DATA:
             self.rawdata_path = get_onedrive_path('bids_rawdata')
             
