@@ -74,7 +74,7 @@ def get_SSD_timeFreq(
         create_PSDs = False
 
     if create_PSDs: 
-        
+        print(f'START CREATING SSD PSDs for sub-{sub} in get_SSD_timeFreq()')
         ssd_subClass = get_subject_SSDs(
             sub=sub,
             incl_stn=True,
@@ -84,13 +84,13 @@ def get_SSD_timeFreq(
         
         for source in ssd_subClass.ephys_sources:
             ssd_source_dat = getattr(ssd_subClass, source)
-            timefreqArr, tf_times, _, _ = create_SSD_timeFreqArray(ssd_source_dat)
+            timefreqArr, tf_times, min_f, max_f = create_SSD_timeFreqArray(ssd_source_dat)
             tf_values = timefreqArr.values
             tf_freqs = np.array(timefreqArr.index)
 
             source_dict = {'values': tf_values,
-                                'times': tf_times,
-                                'freqs': tf_freqs}
+                           'times': tf_times,
+                           'freqs': tf_freqs}
             source_dict = make_object_jsonable(source_dict)
             dict_out[source] = source_dict
         # save dict as json
@@ -100,6 +100,7 @@ def get_SSD_timeFreq(
         return dict_out    
     
     elif not create_PSDs:
+        print(f'load existing powers for sub-{sub} ({filename})')
 
         # load dict from json
         with open(join(path, filename), 'r') as f:

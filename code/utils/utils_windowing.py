@@ -243,6 +243,8 @@ def get_windows(
         arr_list.append(wintemp)  # list with 2d arrays
     
     # print(f'\n...# {len(arr_list)} windows found')
+    arr_bool = [r.shape[0] == winLen_samples for r in arr_list]
+    arr_list = list(compress(arr_list, arr_bool))
     win_array = np.array(arr_list)  # create 3d array
 
     if return_as_class:

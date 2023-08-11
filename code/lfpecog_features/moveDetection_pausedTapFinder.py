@@ -92,7 +92,7 @@ def pausedTapDetector(
             find_large_height = std_find_large_height
             find_small_height = std_find_small_height
         
-        for task in ['tap']:
+        for task in ['tap', 'rest', 'free']:
             # ONLY FOR TAP TASK-BLOCK, other mvoement is defined post-hoc
             # perform per task-block
             taskBlock_inds = movePrep.find_task_blocks(accDf, task)  # gives DF-indices
@@ -106,13 +106,14 @@ def pausedTapDetector(
                 print(f'... in moveDetection {task} block {bN + 1} / {len(taskBlock_inds[0])}')
                 sig3ax = acc_arr[iB1:iB2, :]
                 sig = sig3ax[:, mainAx_ind]
-                if max(sig) > 5e-2:
+                if max(sig) > 1:
                     print(f'CORRECTED THRESHOLDS for sub-{subdat.sub}, {side}')
                     if subdat.sub in ['105']:
                         svm_thr = .05  # correct for incorrect ACC range
                         find_large_height = .3
                         find_small_height = .1
-                    elif subdat.sub in ['107', '108', '109']:
+                    # elif subdat.sub in ['107', '108', '109']:
+                    else:
                         svm_thr = .1  # correct for incorrect ACC range
                         find_large_height = .5
                         find_small_height = .3
@@ -150,14 +151,13 @@ def pausedTapDetector(
                 else:  # both large Pos and Neg present (TAPS)
 
                     otherLargePeaks = []
-                    print(f'check all large peaks (n={len(largePos)})')
+                    tap_durs = []
                     for i_posP, posP in enumerate(largePos):
                         # check distance to closest negative peak
 
                         if min(abs(posP - largeNeg)) > (fs * .5):
                             # large peak without close negative peak
                             otherLargePeaks.append(posP)  # store for other movement
-                            print('.')
                             continue
 
                         # negative peak close enough to be a TAP
@@ -176,7 +176,8 @@ def pausedTapDetector(
                         if not temp_tap[0] and not temp_tap[-1]:
                             print(f'not found borders for peak {i_posP}')
                             continue
-                        print(f'TAP-duration: {(temp_tap[-1] - temp_tap[0])/fs}')
+                        # print(f'TAP-duration: {(temp_tap[-1] - temp_tap[0])/fs}')
+                        tap_durs.append((temp_tap[-1] - temp_tap[0])/fs)
 
                         try:
                             tap_t_list.append([sigTimes[t] for t in temp_tap])
@@ -189,8 +190,9 @@ def pausedTapDetector(
                         except IndexError:
                             print(f'indexError for adding {i_posP}')
                             continue
-
-                    print(f'added TAPS for {task} block {bN + 1} / {len(taskBlock_inds[0])}')
+                    print(f'added {len(tap_durs)} TAPS (mean {np.nanmean(tap_durs)} seconds) '
+                          f'for {task} block {bN + 1}'
+                          f' / {len(taskBlock_inds[0])}')
                 
                 # exclude small Peaks close to Tapping-Peaks
                 min_gap = tap_move_distance * fs

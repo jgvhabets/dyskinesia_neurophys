@@ -40,35 +40,28 @@ def plot_indiv_ssd_timefreq_allSources(
     if PERC_CHANGE: fig_name += 'PerCh'
     if ZSCORE: fig_name += '_Z'
 
-    ssd_subClass = ssd.get_subject_SSDs(
-        sub=sub,
-        incl_stn=True,
-        incl_ecog=True,
-        ft_setting_fname=f'ftExtr_spectral_{FT_VERSION}.json',)
-
-    n_sources = len(ssd_subClass.ephys_sources)
-    fsize=16
-
+    PSD_ssd_dict = ssd_TimeFreq.get_SSD_timeFreq(sub=sub, DATA_VERSION=DATA_VERSION,
+                                      FT_VERSION=FT_VERSION,)
+    sources = PSD_ssd_dict.keys()
+    
     # CREATE FIGURE
-    h_ratios = [1, .1, 1, .4] * n_sources
+    h_ratios = [1, .1, 1, .4] * len(sources)
     h_ratios = h_ratios[:-1]
     w_ratios = [.01, 1, 0.01, .05]
     gridspec = dict(hspace=0.0, height_ratios=h_ratios, width_ratios=w_ratios,)
+    fsize=16
 
-    fig, axes = plt.subplots(nrows=n_sources*4 - 1,
+    fig, axes = plt.subplots(nrows=len(sources)*4 - 1,
                             ncols=len(w_ratios),
                             gridspec_kw=gridspec,
-                            figsize=(18, 3*n_sources),
+                            figsize=(18, 3*len(sources)),
                             sharex='col',
                             # constrained_layout=True,
                             )
     tf_col=1
 
+    for i_s, source in enumerate(sources):
 
-
-    for i_s, source in enumerate(ssd_subClass.ephys_sources):
-
-        subSourceSSD = getattr(ssd_subClass, source)
 
         # define COLOBAR settings based on data settings
         # if LOG_POWER:
@@ -89,10 +82,14 @@ def plot_indiv_ssd_timefreq_allSources(
 
 
         # get COMBINED SSDd SPECTRAL timeseries
-        (timefreqArr, tf_times,
-        min_f, max_f) = ssd_TimeFreq.create_SSD_timeFreqArray(subSourceSSD)
-        tf_values = timefreqArr.values
-
+        psd_source_dict = PSD_ssd_dict[source]
+        tf_values = psd_source_dict['values']
+        tf_times = psd_source_dict['times']
+        tf_freqs = psd_source_dict['freqs']
+        if isinstance(tf_times, list): tf_times = np.array(tf_times)
+        if isinstance(tf_values, list): tf_values = np.array(tf_values)
+        if isinstance(tf_freqs, list): tf_freqs = np.array(tf_freqs)
+        
         if ZSCORE:
             for row_i, row_data in enumerate(tf_values):
                 tf_values[row_i] = (tf_values[row_i] - np.nanmean(tf_values[row_i])
@@ -107,23 +104,26 @@ def plot_indiv_ssd_timefreq_allSources(
         # get nearest CDRS values for ephys-timings
         cdrs_values = {}
         for bodyside in ['bilat', 'left', 'right']:
-            _, cdrs_values[bodyside] = ftProc.find_select_nearest_CDRS_for_ephys(
-                sub=subSourceSSD.sub,
-                ft_times=tf_times / 60,
-                side=bodyside,
-                cdrs_rater='Patricia',
-            )
-
-            # convert CDRS labels into categories
-            if CAT_CDRS:
-                cdrs_values[bodyside] = ftProc.categorical_CDRS(
-                    y_full_scale=cdrs_values[bodyside],
-                    time_minutes=tf_times / 60,
-                    preLID_minutes=0,
-                    preLID_separate=False,
-                    convert_inBetween_zeros='mild',
+            try:
+                _, cdrs_values[bodyside] = ftProc.find_select_nearest_CDRS_for_ephys(
+                    sub=sub,
+                    ft_times=tf_times / 60,
+                    side=bodyside,
+                    cdrs_rater='Patricia',
                 )
 
+                # convert CDRS labels into categories
+                if CAT_CDRS:
+                    cdrs_values[bodyside] = ftProc.categorical_CDRS(
+                        y_full_scale=cdrs_values[bodyside],
+                        time_minutes=tf_times / 60,
+                        preLID_minutes=0,
+                        preLID_separate=False,
+                        convert_inBetween_zeros='mild',
+                    )
+            except ValueError:
+                print(f'Error during importing CDRS scores sub {sub}')
+        
         # PLOT TIMEFREQ AND DYSKIENSIA SCORES
         (axes[2 + (i_s*4), tf_col],
          axes[0 + (i_s*4), tf_col],
@@ -131,7 +131,7 @@ def plot_indiv_ssd_timefreq_allSources(
             ax_down=axes[2 + (i_s*4), tf_col], ax_up=axes[0 + (i_s*4), tf_col],
             tf_values=tf_values,
             tf_times=tf_times,
-            tf_freqs=timefreqArr.index,
+            tf_freqs=tf_freqs,
             cmap=cmap, vmin=vmin, vmax=vmax,
             cdrs_values=cdrs_values,
         )
@@ -179,8 +179,8 @@ def plot_indiv_ssd_timefreq_allSources(
                 rotation=90, weight='bold',)
 
     # remove axis and labels from white space axes
-    other_axes_rows = [1+(i*4) for i in np.arange(n_sources)] +[
-        3+(i*4) for i in np.arange(n_sources)][:-1]
+    other_axes_rows = [1+(i*4) for i in np.arange(len(sources))] +[
+        3+(i*4) for i in np.arange(len(sources))][:-1]
     for ax_r in other_axes_rows:
         axes[ax_r, tf_col].set_xticks([],)
         axes[ax_r, tf_col].set_yticks([],)
@@ -276,16 +276,18 @@ def plot_splitted_timefreq_ax(
         ax_cdrs.tick_params(size=fsize, labelsize=fsize, axis='y')
         for r in ['top', 'bottom', 'right']: ax_cdrs.spines[r].set_visible(False)
         
-        if isinstance(cdrs_values, dict):
-            for i_side, side in enumerate(cdrs_values.keys()):
-                cdrs_values[side][cdrs_values[side] > 5] = 5
-                ax_cdrs.plot(x, cdrs_values[side],
-                             color=cdrs_col[i_side], lw=5, alpha=.5,
-                             label=f'Dyskinesia {side}')
-        else:
-            cdrs_values[cdrs_values > 5] = 5
-            ax_cdrs.plot(x, cdrs_values, color=cdrs_col[0], lw=5, alpha=.5)
-
+        try:
+            if isinstance(cdrs_values, dict):
+                for i_side, side in enumerate(cdrs_values.keys()):
+                    cdrs_values[side][cdrs_values[side] > 5] = 5
+                    ax_cdrs.plot(x, cdrs_values[side],
+                                color=cdrs_col[i_side], lw=5, alpha=.5,
+                                label=f'Dyskinesia {side}')
+            else:
+                cdrs_values[cdrs_values > 5] = 5
+                ax_cdrs.plot(x, cdrs_values, color=cdrs_col[0], lw=5, alpha=.5)
+        except:
+            print(f'CDRS not plotted')
         ax_cdrs.set_xticks([])
 
         if i_ax == 0:

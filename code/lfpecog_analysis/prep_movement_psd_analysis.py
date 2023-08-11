@@ -67,7 +67,7 @@ def plot_overview_tap_detection(
 def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
                              states_to_save=['tap', 'rest_no_move',
                                              'free_no_move', 'free_move'],):
-
+    # TODO: ADD CHECK FOR EXISTING DATA
     # define main directory with stored merged data
     main_data_path = os.path.join(get_project_path('data'),
                                   'merged_sub_data', data_version)
@@ -75,16 +75,28 @@ def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
                                   'SSD_feats_broad', data_version,
                                   'windows_10s_0.5overlap_tapRest')
     if not os.path.exists(results_path): os.makedirs(results_path)
-    data_dict = {}  # store all states in to save
+    
+    if sub.startswith('1'): n_sources = 2
+    elif sub.startswith('0'): n_sources = 3
+    files = os.listdir(results_path)
+    if sum([f'{sub}' in f for f in files]) == (4 * n_sources):
+        print(f'...\nSKIP sub-{sub}, all files present')
+        return
     
     # load all SSD timeseries for subject
     ssd_sub = ssd.get_subject_SSDs(sub=sub,
                                    incl_stn=True, incl_ecog=False,
                                    ft_setting_fname=f'ftExtr_spectral_{ft_version}.json',)
+    data_dict = {}  # store all states in to save
 
     # define lateralities
     for lfp_side, acc_side in zip(['left', 'right',],
                                   ['right', 'left']):
+        files = os.listdir(results_path)
+        if sum([f'{sub}_lfp_{lfp_side}' in f for f in files]) == 4:
+            print(f'...\nSKIP LFP-{lfp_side}, ACC-{acc_side} (sub-{sub}) (present)')
+            continue
+        
         print(f'...\nstart LFP-{lfp_side}, ACC-{acc_side} (sub-{sub})')
         # # exclude combinations without tapping performed
         # if (sub, acc_side) in [('017', 'right'),

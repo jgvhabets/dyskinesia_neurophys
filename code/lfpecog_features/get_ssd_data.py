@@ -417,8 +417,24 @@ class create_SSDs():
             # filter out none-ephys signals
             sel_chs = [c.startswith('LFP') or c.startswith('ECOG')
                        for c in windows.keys]
+            sel_chs_dbl_ecog = [not 'SMC_AT' in c for c in windows.keys]
+            sel_chs = np.logical_and(sel_chs, sel_chs_dbl_ecog)
+            # change incorrect arry of arrays to 3d-array
+            winLen_samps = SETTINGS["WIN_LEN_sec"] * windows.fs
+            if any(np.where([w.shape[0] != winLen_samps
+                             for w in windows.data])[0]):
+                excl_idx = np.where([w.shape[0] != winLen_samps
+                                     for w in windows.data])[0][::-1]  # reverse deletion to not mix up indices
+                corr_wintimes = windows.win_starttimes.copy()
+                for del_i in excl_idx:
+                    windows.data = np.delete(windows.data, del_i)
+                    del(corr_wintimes[del_i])
+                setattr(windows, 'win_starttimes', corr_wintimes)
+            setattr(windows, 'data', np.array([w for w in windows.data], dtype='object'))
+            # select correct data and chnames
             setattr(windows, 'data', windows.data[:, :, sel_chs])
             setattr(windows, 'keys', list(compress(windows.keys, sel_chs)))
+
             
             ### empty list to store all SSD-bands per window
             ssd_arr_3d = []
