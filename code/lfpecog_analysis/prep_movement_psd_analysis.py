@@ -20,48 +20,6 @@ from utils.utils_fileManagement import (get_project_path,
                                         correct_acc_class)
 
 
-def plot_overview_tap_detection(
-    acc, fsize=14, SAVE_FIG=False,
-):
-
-    
-    fig, ax = plt.subplots(1, 1, figsize=(8, 4))
-    # plot both tap data columns
-    ax.plot(acc.times/60, acc.data[:, 5], label=acc.colnames[5])
-    ax.plot(acc.times/60, acc.data[:, 6], label=acc.colnames[6])
-
-    ax.plot(acc.times/60, acc.data[:, 4], lw=5, alpha=.6,
-            label='task')
-
-    ax.set_ylim(0, 2.5)
-
-    ax.legend(loc='upper right', ncol=3,
-            fontsize=fsize,)
-
-    ax.set_title(f'Sub-{acc.sub}: Acc-Tap-Detection',
-            loc='left', weight='bold',
-            size=fsize,)
-    ax.set_xlabel('Time after L-Dopa intake (minutes)',
-                  size=fsize,)
-
-    for sp in ['right', 'top']: ax.spines[sp].set_visible(False)
-
-    plt.tick_params(axis='both', size=fsize,
-                    labelsize=fsize)
-    plt.tight_layout()
-    
-    if SAVE_FIG:
-        fig_name = f'acc_tap_detect_sub{acc.sub}'
-        save_path = os.path.join(get_project_path('figures'),
-                                'ft_exploration',
-                                acc.data_version,
-                                'movement', 'tap_detect',
-                                fig_name)
-        plt.savefig(save_path, facecolor='w', dpi=150,)
-        plt.close()
-
-    else:
-        plt.show()
 
 
 def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',

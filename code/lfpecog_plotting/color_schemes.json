@@ -1,5 +1,5 @@
 {
-    "access_colors_PaulTol": {
+    "PaulTol": {
         "nightblue": "#332288",
         "darkgreen": "#117733",
         "turquoise": "#44AA99",
@@ -9,5 +9,13 @@
         "lila": "#AA4499",
         "purplered": "#882255"
     },
-    "contrast_duo": ["#E1BE6A", "#40B0A6"]
+    "contrast_duo": ["#E1BE6A", "#40B0A6"],
+    "Jacoba_107": [
+        "gray",
+        "darkgreen",
+        "orange",
+        "darkorchid",
+        "mediumblue",
+        "brikred"
+    ]
 }

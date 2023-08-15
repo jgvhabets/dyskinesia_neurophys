@@ -32,14 +32,15 @@ def load_movement_psds(data_version='v4.0', ft_version='v4',):
     # get available SUBS
     files = os.listdir(results_path)
     SUBS = np.unique([f.split('_')[0] for f in files])
-
-    print(f'available subjects: {SUBS}')
+    n_subs = len(SUBS)
+    print(f'available subjects (n={n_subs}): {SUBS}')
 
     freq_arr = np.arange(4, 91)
 
     total_psds = {state: [] for state in states_to_plot}
 
     for sub in SUBS:
+        print(f'load sub-{sub}')
         # define lateralities
         for lfp_side, acc_side in zip(['left', 'right',],
                                       ['right', 'left']):
@@ -124,7 +125,7 @@ def load_movement_psds(data_version='v4.0', ft_version='v4',):
 
 
 
-def plotPSD_rest_vs_tap(PSDs, freqs,
+def plotPSD_rest_vs_tap(PSDs, freqs, n_subs_incl,
                         fsize = 16, data_version='v4.0',
                         fig_name='tap vs rest PSDs'):
     
@@ -174,7 +175,7 @@ def plotPSD_rest_vs_tap(PSDs, freqs,
     ax.tick_params(axis='both', size=fsize, labelsize=fsize)
 
     ax.set_title('Tap vs. Rest vs Free'
-                 '\n subthalamic changes (n=11)',
+                 f'\n subthalamic changes (n={n_subs_incl})',
                 fontsize=fsize+2, weight='bold',)
 
     ax.set_ylim(-100, 150)
@@ -182,5 +183,50 @@ def plotPSD_rest_vs_tap(PSDs, freqs,
     plt.tight_layout()
 
     plt.savefig(os.path.join(get_project_path('figures'), 'ft_exploration',
-                             data_version, 'descr_PSDs', fig_name))
+                             data_version, 'descr_PSDs',
+                             f'{fig_name}_n{n_subs_incl}'))
     plt.close()
+
+
+def plot_overview_tap_detection(
+    acc, fsize=14, SAVE_FIG=False,
+):
+
+    
+    fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+    # plot both tap data columns
+    ax.plot(acc.times/60, acc.data[:, 5], label=acc.colnames[5])
+    ax.plot(acc.times/60, acc.data[:, 6], label=acc.colnames[6])
+
+    ax.plot(acc.times/60, acc.data[:, 4], lw=5, alpha=.6,
+            label='task')
+
+    ax.set_ylim(0, 2.5)
+
+    ax.legend(loc='upper right', ncol=3,
+            fontsize=fsize,)
+
+    ax.set_title(f'Sub-{acc.sub}: Acc-Tap-Detection',
+            loc='left', weight='bold',
+            size=fsize,)
+    ax.set_xlabel('Time after L-Dopa intake (minutes)',
+                  size=fsize,)
+
+    for sp in ['right', 'top']: ax.spines[sp].set_visible(False)
+
+    plt.tick_params(axis='both', size=fsize,
+                    labelsize=fsize)
+    plt.tight_layout()
+    
+    if SAVE_FIG:
+        fig_name = f'acc_tap_detect_sub{acc.sub}'
+        save_path = os.path.join(get_project_path('figures'),
+                                'ft_exploration',
+                                acc.data_version,
+                                'movement', 'tap_detect',
+                                fig_name)
+        plt.savefig(save_path, facecolor='w', dpi=150,)
+        plt.close()
+
+    else:
+        plt.show()

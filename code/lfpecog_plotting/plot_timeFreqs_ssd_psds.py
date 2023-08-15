@@ -22,7 +22,7 @@ from utils.utils_fileManagement import get_project_path
 
 def plot_indiv_ssd_timefreq_allSources(
     sub,
-    fig_name = 'ssdTimeFreq_ALL_vsLID',
+    fig_name_base = 'ssdTimeFreq_ALL_vsLID',
     LOG_POWER = False,
     BASELINE_CORRECT = False,
     PERC_CHANGE = False,
@@ -33,8 +33,8 @@ def plot_indiv_ssd_timefreq_allSources(
     SAVE_PLOT = False,
     SHOW_PLOT = False,
 ):
-    # adjust 
-    fig_name += f'_sub{sub}'
+    # adjust
+    fig_name = f'{fig_name_base}_sub{sub}'
     if LOG_POWER: fig_name += '_logPow'
     if BASELINE_CORRECT: fig_name += '_blCorr'
     if PERC_CHANGE: fig_name += 'PerCh'
@@ -78,8 +78,8 @@ def plot_indiv_ssd_timefreq_allSources(
         #         vmin, vmax, cmap = -.2, .2, 'PuOr_r'
         #         if PERC_CHANGE: vmin, vmax = -10, 10
         #     else: vmin, vmax, cmap = 0, .2, 'viridis'
-        vmin, vmax, cmap = -4, 4, 'PuOr_r'
-
+        vmin, vmax, cmap = -4, 4, 'viridis'  #'plasma'    #'PuOr_r'
+        fig_name = f'{cmap}_{fig_name}'
 
         # get COMBINED SSDd SPECTRAL timeseries
         psd_source_dict = PSD_ssd_dict[source]
@@ -224,7 +224,7 @@ def plot_indiv_ssd_timefreq_allSources(
         plt.show()
     else:
         plt.close()
-
+    del(fi_name)
 
 def plot_splitted_timefreq_ax(
     ax_down, ax_up, tf_values, tf_times, tf_freqs,

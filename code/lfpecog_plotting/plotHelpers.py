@@ -35,7 +35,7 @@ def remove_duplicate_legend(
     return handles, labels
 
 
-def get_colors(scheme='access_colors_PaulTol'):
+def get_colors(scheme='PaulTol'):
     """
     if scheme is 'access_colors_PaulTol' Paul Tol's
         colorscheme for accessible colors is returned,
