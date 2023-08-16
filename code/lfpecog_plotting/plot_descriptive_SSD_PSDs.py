@@ -594,32 +594,23 @@ def plot_STN_PSD_vs_LID(
                                             axis=1)
                 temp_cdrs = np.concatenate([temp_cdrs,
                                             stats_lid_cdrs[side][n]])
-                print(sub, side, temp_pows.shape, temp_cdrs.shape)
             mean_stats['LID'].append((f'{sub}_{side}', temp_pows))
             mean_stats['CDRS'].append((f'{sub}_{side}', temp_cdrs))
         mean_stats['freqs'] = tf_freqs
 
     # merge all contra and ipsilateral psds together for LAT_ALL_SCALE
     if PLOT_ONLY_MATCH:
-        print(psds_to_plot.keys())
         combi_psds = {'all_match': {}}
         all_cats = list(np.unique(list(psds_to_plot['match'].keys())))
         all_cats.extend(np.unique(list(psds_to_plot['nonmatch'].keys())))
         all_cats.extend(np.unique(list(psds_to_plot['bi'].keys())))
         all_cats = list(np.unique(all_cats))
-
-        for side in ['match', 'nonmatch', 'bi']:
-            print(f'{side} categories: {all_cats}')
-            print(combi_psds)
-            for cat in all_cats:
-                combi_psds['all_match'][cat] = []
+        # create list for every category
+        for cat in all_cats: combi_psds['all_match'][cat] = []
+        for side in psds_to_plot.keys():        
+            # fill cat-list with all different sides
             for cat in psds_to_plot[side].keys():
                 combi_psds['all_match'][cat].extend(psds_to_plot[side][cat])
-            # try:
-            #     for cat in psds_to_plot[f'bi_{side}'].keys():
-            #         combi_psds['all_match'][cat].extend(psds_to_plot[f'bi_{side}'][cat])
-            # except:
-            #     print(f'NO bi_{side} psds to combine')
         psds_to_plot = combi_psds
 
     if CALC_FREQ_CORR:
@@ -634,16 +625,15 @@ def plot_STN_PSD_vs_LID(
             for cat in subs_incl[side].keys():
                 n_subs_incl[side][cat] = len(np.unique(subs_incl[side][cat]))
     if n_reps == 2 or PLOT_ONLY_MATCH:
-        for side in psds_to_plot.keys():
-            n_subs_incl['all_match'] = {}
-            for cat in psds_to_plot[side].keys():
-                try:
-                    temp_subs = subs_incl[side][cat] + subs_incl[f'bi_{side}'][cat]
-                    n_subs_incl['all_match'][cat] = len(np.unique(temp_subs))
-                except:
-                    try: n_subs_incl['all_match'][cat] = len(np.unique(subs_incl[side][cat]))
-                    except: n_subs_incl['all_match'][cat] = len(np.unique(subs_incl[f'bi_{side}'][cat]))
-
+        n_subs_incl['all_match'] = {c: [] for c in all_cats}
+        for side in subs_incl.keys():
+            for cat in subs_incl[side].keys():
+                n_subs_incl['all_match'][cat].extend(subs_incl[side][cat])
+        for cat in n_subs_incl['all_match']:
+            n_subs_incl['all_match'][cat] = len(
+                np.unique(n_subs_incl['all_match'][cat])
+            )
+            
 
     ### PLOTTING PART
     if LAT_or_SCALE == 'LAT_UNI':
