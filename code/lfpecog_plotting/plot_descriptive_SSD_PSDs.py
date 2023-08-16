@@ -21,7 +21,7 @@ from lfpecog_preproc.preproc_import_scores_annotations import (
 )
 from utils.utils_fileManagement import get_project_path
 from lfpecog_plotting.plotHelpers import remove_duplicate_legend
-
+from lfpecog_analysis.psd_lid_stats import process_mean_stats
 
 def plot_PSD_vs_DopaTime(all_timefreqs,
                          sel_subs=None,
@@ -234,7 +234,10 @@ def plot_STN_PSD_vs_LID(
     fig_name='PLOT_STN_PSD_vs_DYSK',
     CALC_FREQ_CORR=False,
     SINGLE_SUB_LINES=False,
+    PLOT_ONLY_MATCH=False,
     SHOW_ONLY_GAMMA=False,
+    SHOW_SIGN=False,
+    PROCESS_STATS=False,
 ):
     """
     Plot group-level PSDs (based on SSD data), plot
@@ -276,7 +279,9 @@ def plot_STN_PSD_vs_LID(
         for lab in ['match', 'nonmatch', 'bi',
                     'bi_match', 'bi_nonmatch']: psds_to_plot[lab] = {}
 
-    if LAT_or_SCALE == 'LAT_ALL_SCALE': n_reps = 2
+    if LAT_or_SCALE == 'LAT_ALL_SCALE':
+        n_reps = 2
+        PLOT_ONLY_MATCH=True
     else: n_reps = 1
 
     ft_cdrs = {'LID': [], 'noLID': []}
@@ -290,10 +295,17 @@ def plot_STN_PSD_vs_LID(
 
     n_uni_subs = 0
     subs_incl = {k: {} for k in psds_to_plot.keys()}  # keep track of indiv subs per cat
-
+    
+    # gets per hemisphere the subject ID and the mean-psd-array (no LID and LID)
+    # CDRS contains the scores corresponding to LID
+    mean_stats = {'LID': [], 'noLID': [], 'CDRS': []}
+    
     for sub in subs:
+
+        stats_lid_pow = {'match': [], 'nonmatch': []}
+        stats_lid_cdrs = {'match': [], 'nonmatch': []}
         # enable combining of unilateral and bilateral dyskinesia for 'LAT_ALL_SCALE'
-        for i_rep in np.arange(n_reps):
+        for i_rep in np.arange(n_reps)[:1]:
             
             # if 'LAT_ALL_SCALE' is defined, first run uni, than bilat
             if n_reps == 2 and i_rep == 0: LAT_or_SCALE = 'SCALE'
@@ -352,6 +364,9 @@ def plot_STN_PSD_vs_LID(
                 bl_sel = np.logical_and(ft_cdrs['LID'] == 0, ft_cdrs['noLID'] == 0)
                 tf_values['match_BL'] = tf_values['match'][:, bl_sel]
 
+                if i_rep == 0:  # add tuple 
+                    mean_stats['noLID'].append((f'{sub}_match', tf_values['match_BL']))
+
             if LAT_or_SCALE == 'SCALE':
                 # select lateral spectral values for both sides (now match)
                 bi_lid_sel = np.logical_and(ft_cdrs['LID'] > 0, ft_cdrs['noLID'] > 0)       
@@ -362,6 +377,9 @@ def plot_STN_PSD_vs_LID(
                                             preLID_separate=False,
                                             convert_inBetween_zeros=False)
                 cdrs_categs['bi_match'] = cdrs_cats[bi_lid_sel]
+                # add match STN during bilateral LID for STATS
+                stats_lid_pow['match'].append(tf_values[f'bi_match']) 
+                stats_lid_cdrs['match'].append(ft_cdrs['LID'][bi_lid_sel])  # add cdrs values for body side corr to powers
 
 
             elif LAT_or_SCALE == 'LAT_BILAT':
@@ -391,14 +409,18 @@ def plot_STN_PSD_vs_LID(
             if LAT_or_SCALE in ['LAT_UNI', 'SCALE']:
                 uni_lid_sel = np.logical_and(ft_cdrs['LID'] > 0, ft_cdrs['noLID'] == 0)       
                 tf_values['match'] = tf_values['match'][:, uni_lid_sel]
+                # get matching cdrs scores
                 if LAT_or_SCALE == 'SCALE':
                     cdrs_cats = categorical_CDRS(y_full_scale=ft_cdrs['LID'],
                                                 preLID_minutes=0,
                                                 preLID_separate=False,
                                                 convert_inBetween_zeros=False)
                     cdrs_categs['match'] = cdrs_cats[uni_lid_sel]
-                    print(f'Subject-{sub} unilateral-LID: n={sum(uni_lid_sel)}')    
-
+                    # print(f'Subject-{sub} unilateral-LID: n={sum(uni_lid_sel)}')    
+                # add matching STN during unilateral LID for STATS
+                stats_lid_pow['match'].append(tf_values['match'])
+                stats_lid_cdrs['match'].append(ft_cdrs['LID'][uni_lid_sel])  # add cdrs values for body side corr to powers
+                
 
             
             # NON-matching LFP side to LID
@@ -421,6 +443,11 @@ def plot_STN_PSD_vs_LID(
             if BASELINE_CORRECT:
                 bl_sel = np.logical_and(ft_cdrs['LID'] == 0, ft_cdrs['noLID'] == 0)
                 tf_values['nonmatch_BL'] = tf_values['nonmatch'][:, bl_sel]
+
+                if i_rep == 0:  # add tuple 
+                    mean_stats['noLID'].append((f'{sub}_nonmatch',
+                                                tf_values['nonmatch_BL']))
+
             
             if LAT_or_SCALE == 'SCALE':
                 # select lateral spectral values for both sides (now nonmatch)
@@ -434,12 +461,16 @@ def plot_STN_PSD_vs_LID(
                                             convert_inBetween_zeros=False,
                                             return_coding_dict=True)
                 cdrs_categs['bi_nonmatch'] = cdrs_cats[bi_lid_sel]
+                # add nonmatch STN during bilateral LID for STATS
+                stats_lid_pow['nonmatch'].append(tf_values[f'bi_nonmatch'])                        
+                stats_lid_cdrs['nonmatch'].append(ft_cdrs['noLID'][bi_lid_sel])  # add cdrs values for body side corr to powers
+
                 
             elif LAT_or_SCALE == 'LAT_BILAT':
                 # select lateral spectral values for both sides (now nonmatch)
                 bi_lid_sel = np.logical_and(ft_cdrs['LID'] > 0,
                                             ft_cdrs['noLID'] > 0)
-                print(f'Subject-{sub} bilateral-LID: n={sum(bi_lid_sel)}')    
+                # print(f'Subject-{sub} bilateral-LID: n={sum(bi_lid_sel)}')    
                 # take for nonmatch-epys-hemisphere, the non-matching LID_cdrs side 
                 tf_values['bi_nonmatch2'] = tf_values['nonmatch'][:, bi_lid_sel]
                 cdrs_cats, coding_dict = categorical_CDRS(y_full_scale=ft_cdrs['LID'],  # was bi
@@ -496,7 +527,7 @@ def plot_STN_PSD_vs_LID(
                         if LAT_or_SCALE == 'LAT_BILAT' and not label.startswith('bi'):
                             # dont include unilateral values in LAT_BILAT
                             continue
-                        
+
                         dict_lab = label.split('_')[0]  # take match/nonmatch/bi
                     
                         if LAT_or_SCALE == 'SCALE':
@@ -517,7 +548,6 @@ def plot_STN_PSD_vs_LID(
                                 except KeyError: subs_incl[dict_lab][cat] = [sub,]
                             
                         elif LAT_or_SCALE == 'LAT_BILAT':
-                            
                             # save only bilateral psds, but with laterality
                             # put bi_match1 and bi_match2 in bi_match
                             for i_lab, lab in enumerate([f'{label}1', f'{label}2']):
@@ -554,19 +584,42 @@ def plot_STN_PSD_vs_LID(
                             if CALC_FREQ_CORR:
                                 FREQ_CORRs[sub][label] = (freqCorr_arr, freqCorr_scores, tf_freqs)
 
-    # merge all contra and ipsilateral psds together for LAT_ALL_SCALE
-    if n_reps == 2:
-        combi_psds = {'all_match': {}, 'all_nonmatch': {}}
+        # process sub stats at end of subject iteration
         for side in ['match', 'nonmatch']:
-            all_cats = list(np.unique(list(psds_to_plot[side].keys()) +
-                                 list(psds_to_plot[f'bi_{side}'].keys())))
-            # print(all_cats)
+            temp_pows = stats_lid_pow[side][0]
+            temp_cdrs = stats_lid_cdrs[side][0]
+            for n in np.arange(1, len(stats_lid_pow[side])):
+                temp_pows = np.concatenate([temp_pows,
+                                            stats_lid_pow[side][n]],
+                                            axis=1)
+                temp_cdrs = np.concatenate([temp_cdrs,
+                                            stats_lid_cdrs[side][n]])
+                print(sub, side, temp_pows.shape, temp_cdrs.shape)
+            mean_stats['LID'].append((f'{sub}_{side}', temp_pows))
+            mean_stats['CDRS'].append((f'{sub}_{side}', temp_cdrs))
+        mean_stats['freqs'] = tf_freqs
+
+    # merge all contra and ipsilateral psds together for LAT_ALL_SCALE
+    if PLOT_ONLY_MATCH:
+        print(psds_to_plot.keys())
+        combi_psds = {'all_match': {}}
+        all_cats = list(np.unique(list(psds_to_plot['match'].keys())))
+        all_cats.extend(np.unique(list(psds_to_plot['nonmatch'].keys())))
+        all_cats.extend(np.unique(list(psds_to_plot['bi'].keys())))
+        all_cats = list(np.unique(all_cats))
+
+        for side in ['match', 'nonmatch', 'bi']:
+            print(f'{side} categories: {all_cats}')
+            print(combi_psds)
             for cat in all_cats:
-                combi_psds[f'all_{side}'][cat] = []
+                combi_psds['all_match'][cat] = []
             for cat in psds_to_plot[side].keys():
-                combi_psds[f'all_{side}'][cat].extend(psds_to_plot[side][cat])
-            for cat in psds_to_plot[f'bi_{side}'].keys():
-                combi_psds[f'all_{side}'][cat].extend(psds_to_plot[f'bi_{side}'][cat])
+                combi_psds['all_match'][cat].extend(psds_to_plot[side][cat])
+            # try:
+            #     for cat in psds_to_plot[f'bi_{side}'].keys():
+            #         combi_psds['all_match'][cat].extend(psds_to_plot[f'bi_{side}'][cat])
+            # except:
+            #     print(f'NO bi_{side} psds to combine')
         psds_to_plot = combi_psds
 
     if CALC_FREQ_CORR:
@@ -580,20 +633,21 @@ def plot_STN_PSD_vs_LID(
             n_subs_incl[side] = {}
             for cat in subs_incl[side].keys():
                 n_subs_incl[side][cat] = len(np.unique(subs_incl[side][cat]))
-    elif n_reps == 2:
-        for side in ['match', 'nonmatch']:
-            n_subs_incl[f'all_{side}'] = {}
-            for cat in psds_to_plot[f'all_{side}'].keys():
+    if n_reps == 2 or PLOT_ONLY_MATCH:
+        for side in psds_to_plot.keys():
+            n_subs_incl['all_match'] = {}
+            for cat in psds_to_plot[side].keys():
                 try:
                     temp_subs = subs_incl[side][cat] + subs_incl[f'bi_{side}'][cat]
-                    n_subs_incl[f'all_{side}'][cat] = len(np.unique(temp_subs))
+                    n_subs_incl['all_match'][cat] = len(np.unique(temp_subs))
                 except:
-                    try: n_subs_incl[f'all_{side}'][cat] = len(np.unique(subs_incl[side][cat]))
-                    except: n_subs_incl[f'all_{side}'][cat] = len(np.unique(subs_incl[f'bi_{side}'][cat]))
+                    try: n_subs_incl['all_match'][cat] = len(np.unique(subs_incl[side][cat]))
+                    except: n_subs_incl['all_match'][cat] = len(np.unique(subs_incl[f'bi_{side}'][cat]))
 
 
     ### PLOTTING PART
     if LAT_or_SCALE == 'LAT_UNI':
+        print('PLOT UNILAT')
         plot_unilateral_LID(plt_ax_to_return=plt_ax_to_return,
                             datatype='STN',
                             psds_to_plot=psds_to_plot,
@@ -623,7 +677,9 @@ def plot_STN_PSD_vs_LID(
                          fsize=fsize,
                          fig_name=fig_name,
                          single_sub_lines=SINGLE_SUB_LINES,
-                         show_only_gamma=SHOW_ONLY_GAMMA,)
+                         show_only_gamma=SHOW_ONLY_GAMMA,
+                         SHOW_SIGN=SHOW_SIGN,
+                         PLOT_ONLY_MATCH=PLOT_ONLY_MATCH,)
     
     elif LAT_or_SCALE == 'LAT_BILAT':
         plot_scaling_LID(plt_ax_to_return=plt_ax_to_return,
@@ -642,6 +698,11 @@ def plot_STN_PSD_vs_LID(
                          single_sub_lines=SINGLE_SUB_LINES,
                          show_only_gamma=SHOW_ONLY_GAMMA,)       
     
+    if PROCESS_STATS: process_mean_stats(mean_stats, save_stats=True,)
+
+    return mean_stats
+
+import json
 
 def plot_scaling_LID(
     psds_to_plot, tf_freqs,
@@ -655,10 +716,21 @@ def plot_scaling_LID(
     single_sub_lines=False,
     show_only_gamma=False,
     n_subs_incl=False,
+    SHOW_SIGN=False,
+    PLOT_ONLY_MATCH=False,
 ):
     assert datatype.upper() in ['STN', 'ECOG'], (
         f'datatype ({datatype}) should be STN or ECOG'
     )
+
+    if SHOW_SIGN:
+        print('load significancies')
+        store_path = join(get_project_path('results'),
+                          'stats', 'LMM_noLID_vs_LID')
+
+        with open(join(store_path, f'LMM_results_pvalues_1608.json'),
+                  'r') as json_file:
+            p_dict = json.load(json_file)
 
     if plt_ax_to_return == False:
         fig, axes = plt.subplots(1, len(psds_to_plot),
@@ -668,8 +740,12 @@ def plot_scaling_LID(
     
     # colors = [list(get_colors('PaulTol).values())[c] for c in [4, 3, 0, 7]]  # colors are called by cat-value, so 0 is never used if baseline corrected
     colors = get_colors('Jacoba_107')  # colors are called by cat-value, so 0 is never used if baseline corrected
-    
+
     for i_ax, side in enumerate(psds_to_plot.keys()):
+        # prevent error with none subscriptable ax vs axes
+        if len(psds_to_plot) == 1: loop_ax = axes
+        else: loop_ax = axes[i_ax]
+
         if side == 'bi': ax_title = f'{datatype} during bilateral dyskinesia'
         elif side == 'match': ax_title = f'{datatype} during only contralateral dyskinesia'
         elif side == 'nonmatch': ax_title = f'{datatype} during only ipsilateral dyskinesia'
@@ -678,6 +754,8 @@ def plot_scaling_LID(
         elif side == 'all_match': ax_title = f'{datatype} versus all contralateral dyskinesia'
         elif side == 'all_nonmatch': ax_title = f'{datatype} versus all ipsilateral dyskinesia'
         
+        # if PLOT_ONLY_MATCH: ax_title = f'{datatype} versus all contralateral dyskinesia'
+
         for i_cat, cat in enumerate(psds_to_plot[side].keys()):
             n_subs = n_subs_incl[side][cat]
             PSD = {}
@@ -689,6 +767,11 @@ def plot_scaling_LID(
             # blank freqs irrelevant after SSD
             blank_sel = np.logical_and(tf_freqs > 35, tf_freqs < 60)
             for k in PSD: PSD[k][blank_sel] = np.nan
+
+            # ge significancies
+            if SHOW_SIGN:
+                p_freqs = np.array(p_dict['freqs'].copy())
+                ps = np.array(p_dict['p_values'].copy())
             
             # smoothen signal for plot (both mean and stddev)
             if SMOOTH_PLOT_FREQS > 0:
@@ -704,11 +787,13 @@ def plot_scaling_LID(
             # BREAK X AXIS and adjust xticks and labels
             if BREAK_X_AX:
                 PSD, xticks, xlabels = break_x_axis_psds_ticks(tf_freqs, PSD)
+                if SHOW_SIGN: ps, _, _ = break_x_axis_psds_ticks(p_freqs, ps)
                 x_axis = xticks
                 if single_sub_lines:
                     cut_psds = np.zeros((psds.shape[0], len(x_axis)))
                     for row in np.arange(psds.shape[0]):
-                        cut_psds[row, :], _, _ = break_x_axis_psds_ticks(tf_freqs, psds[row])
+                        cut_psds[row, :], _, _ = break_x_axis_psds_ticks(
+                            tf_freqs.copy(), psds[row])
                     psds = cut_psds
                 
                 if show_only_gamma:
@@ -728,51 +813,71 @@ def plot_scaling_LID(
                 xticks = np.array(xticks)[f_sel]
                 for k in PSD.keys(): PSD[k] = PSD[k][f_sel]
                 if single_sub_lines: psds = psds[:, f_sel]
+                if SHOW_SIGN: ps = ps[f_sel]
 
             # PLOT MEAN PSD LINE, AND STDDEV SHADING
             if single_sub_lines and n_subs_cat <= 5:
-                axes[i_ax].plot(x_axis, psds.T, lw=3, alpha=.5,
+                loop_ax.plot(x_axis, psds.T, lw=3, alpha=.5,
                                 label=f'{list(cdrs_cat_coding.keys())[int(cat)]} dyskinesia'
                                 f' (n={n_subs})',  # n_subs instead of n_subs_cat
                                 color=colors[int(cat)], )
             
             elif not single_sub_lines:
-                axes[i_ax].plot(x_axis, PSD['mean'], lw=5, alpha=.5,
+                # plot full line
+                loop_ax.plot(x_axis, PSD['mean'], lw=5, alpha=.5,
                                 label=f'{list(cdrs_cat_coding.keys())[int(cat)]} dyskinesia'
                                 f' (n={n_subs})',
                                 color=colors[int(cat)], )
-
-            # PLOT VARIANCE SHADING
-            axes[i_ax].fill_between(x=x_axis, y1=PSD['mean'] - PSD['sd'],
-                                    y2=PSD['mean'] + PSD['sd'],
-                                    alpha=.25, color=colors[int(cat)],)
+                # PLOT VARIANCE SHADING
+                if SHOW_SIGN:
+                    sig_mask = np.array(ps) < (.05 / 68)  # 68 freqs compared
+                    loop_ax.fill_between(x=x_axis, y1=PSD['mean'] - PSD['sd'],
+                                            y2=PSD['mean'] + PSD['sd'],
+                                            alpha=.3, where=sig_mask,
+                                            # label=f'{list(cdrs_cat_coding.keys())[int(cat)]}'
+                                            # f' dyskinesia (n={n_subs})',
+                                            color=colors[int(cat)], )
+                    # none-significant part of line
+                    loop_ax.fill_between(x=x_axis, y1=PSD['mean'] - PSD['sd'],
+                                            y2=PSD['mean'] + PSD['sd'],
+                                            alpha=.3, where=~sig_mask,
+                                            # label=f'{list(cdrs_cat_coding.keys())[int(cat)]} dyskinesia'
+                                            # f' (n={n_subs})',
+                                            edgecolor=colors[int(cat)],
+                                            facecolor='None', hatch='//',)
+                else:
+                    loop_ax.fill_between(x=x_axis, y1=PSD['mean'] - PSD['sd'],
+                                            y2=PSD['mean'] + PSD['sd'],
+                                            alpha=.3, edgecolor=colors[int(cat)],
+                                            facecolor='None', hatch='//')
+        
         # SET AXTICKS
         if BREAK_X_AX:
-            axes[i_ax].set_xticks(xticks[::8], size=fsize)
-            axes[i_ax].set_xticklabels(xlabels[::8], fontsize=fsize)
+            loop_ax.set_xticks(xticks[::8], size=fsize)
+            loop_ax.set_xticklabels(xlabels[::8], fontsize=fsize)
             
         else:
-            axes[i_ax].set_xticks(np.linspace(x_axis[0], x_axis[-1], 5))
-            axes[i_ax].set_xticklabels(np.linspace(x_axis[0], x_axis[-1], 5))
+            loop_ax.set_xticks(np.linspace(x_axis[0], x_axis[-1], 5))
+            loop_ax.set_xticklabels(np.linspace(x_axis[0], x_axis[-1], 5))
 
-        if not LOG_POWER: axes[i_ax].hlines(y=0, xmin=x_axis[0], xmax=x_axis[-1],
+        if not LOG_POWER: loop_ax.hlines(y=0, xmin=x_axis[0], xmax=x_axis[-1],
                                     color='gray', lw=1, alpha=.5,)
         # set LABELS, LEGEND, AXES
-        axes[i_ax].set_title(ax_title, size=fsize, weight='bold',)
-        axes[i_ax].set_xlabel('Frequency (Hz)', size=fsize,)
+        loop_ax.set_title(ax_title, size=fsize, weight='bold',)
+        loop_ax.set_xlabel('Frequency (Hz)', size=fsize,)
         ylabel = 'Power (a.u.)'
         if LOG_POWER: ylabel = f'Log. {ylabel}'
         if BASELINE_CORRECT: ylabel = f'{ylabel[:-6]} %-change vs bilat-no-LID (a.u.)'
-        axes[i_ax].set_ylabel(ylabel, size=fsize,)
+        loop_ax.set_ylabel(ylabel, size=fsize,)
         # plot legend without duplicates
-        leg_info = axes[i_ax].get_legend_handles_labels()
+        leg_info = loop_ax.get_legend_handles_labels()
         hands, labs = remove_duplicate_legend(leg_info)
-        axes[i_ax].legend(hands, labs, frameon=False,
+        loop_ax.legend(hands, labs, frameon=False,
                 fontsize=fsize, loc='upper left')
         
-        axes[i_ax].spines['top'].set_visible(False)
-        axes[i_ax].spines['right'].set_visible(False)
-        axes[i_ax].tick_params(axis='both', size=fsize, labelsize=fsize)
+        loop_ax.spines['top'].set_visible(False)
+        loop_ax.spines['right'].set_visible(False)
+        loop_ax.tick_params(axis='both', size=fsize, labelsize=fsize)
 
     
     if plt_ax_to_return != False:
@@ -781,11 +886,14 @@ def plot_scaling_LID(
     else:
         # plot or save axes from here
         # equalize axes
-        ymin = min([min(ax.get_ylim()) for ax in axes])
-        ymax = max([max(ax.get_ylim()) for ax in axes])
-        for ax in axes: ax.set_ylim(ymin, ymax)
+        if len(psds_to_plot) > 1:
+            ymin = min([min(ax.get_ylim()) for ax in axes])
+            ymax = max([max(ax.get_ylim()) for ax in axes])
+            for ax in axes: ax.set_ylim(ymin, ymax)
 
-        for ax in axes: ax.tick_params(axis='both', size=fsize, labelsize=fsize)
+            for ax in axes: ax.tick_params(axis='both', size=fsize, labelsize=fsize)
+        else:
+            axes.tick_params(axis='both', size=fsize, labelsize=fsize)
         plt.tight_layout()
 
         if SAVE_PLOT:
@@ -920,6 +1028,8 @@ def break_x_axis_psds_ticks(tf_freqs, PSD, PSD_sd=False,
     
     del_sel = np.logical_and(tf_freqs > x_break[0],
                              tf_freqs < x_break[1])
+
+    if isinstance(PSD, list): PSD = np.array(PSD)
 
     if isinstance(PSD, dict):
         del_sel = np.logical_or(del_sel, np.isnan(PSD['mean']))

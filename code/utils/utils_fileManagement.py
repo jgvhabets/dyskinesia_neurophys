@@ -7,7 +7,7 @@ from os import getcwd, listdir, makedirs
 from os.path import join, exists, dirname
 from numpy import (
     logical_and, save, ndarray, where,
-    ravel, arange, array, float64, int64
+    ravel, arange, array, float64, int64, int32
 )
 from csv import writer
 import pickle
@@ -324,7 +324,7 @@ def make_object_jsonable(obj):
 
         return obj
     
-    elif isinstance(obj, int64):
+    elif isinstance(obj, int64) or isinstance(obj, int32):
 
         obj = int(obj)
 
