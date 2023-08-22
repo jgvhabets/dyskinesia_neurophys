@@ -17,11 +17,11 @@ from utils.utils_fileManagement import (get_project_path,
 
 
 def process_mean_stats(
-    mean_stats, save_stats=True,
+    mean_stats, datatype, save_stats=True,
 ):
     if save_stats:
         store_path = os.path.join(get_project_path('results'),
-                                  'stats', 'LMM_noLID_vs_LID')
+                                  'stats', f'{datatype}_LMM_noLID_vs_LID')
         assert os.path.exists(store_path), 'incorrect path'
     
     for i_f, f_hz in enumerate(mean_stats['freqs']):
@@ -54,15 +54,15 @@ def process_mean_stats(
         # if save dataframe
         if save_stats:
             lm_data.to_csv(os.path.join(store_path,
-                                        f'LMM_LID_PSD_{f_hz}Hz_df.xlsx'))
+                                        f'{datatype}_LMM_LID_PSD_{f_hz}Hz_df.xlsx'))
             print(f'df for {f_hz} Hz saved')
 
 
-def get_binary_p_perHz(save_ps=True, return_ps=False,
+def get_binary_p_perHz(datatype, save_date='0000',
+                       save_ps=True, return_ps=False,):
     
-):
     store_path = os.path.join(get_project_path('results'),
-                              'stats', 'LMM_noLID_vs_LID')
+                              'stats', f'{datatype}_LMM_noLID_vs_LID')
     assert os.path.exists(store_path), 'incorrect path'
 
     freqs = np.arange(4, 91)
@@ -75,7 +75,8 @@ def get_binary_p_perHz(save_ps=True, return_ps=False,
             p_list.append(np.nan)
             continue
 
-        lm_data = pd.read_csv(os.path.join(store_path, f'LMM_LID_PSD_{f_hz}Hz_df.xlsx'),
+        lm_data = pd.read_csv(os.path.join(store_path,
+                                           f'{datatype}_LMM_LID_PSD_{f_hz}Hz_df.xlsx'),
                             index_col=0, header=0, )
         
         model = mixedlm("mean_power ~ LID", lm_data,
@@ -93,7 +94,7 @@ def get_binary_p_perHz(save_ps=True, return_ps=False,
         store_json = make_object_jsonable(store_json)
 
         with open(os.path.join(store_path,
-                               f'LMM_results_pvalues_1608.json'),
+                               f'{datatype}_LMM_results_pvalues_{save_date}.json'),
                   'w') as json_file:
             json.dump(store_json, json_file)
     

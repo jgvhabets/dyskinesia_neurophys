@@ -21,7 +21,9 @@ from lfpecog_preproc.preproc_import_scores_annotations import (
 )
 from utils.utils_fileManagement import get_project_path
 from lfpecog_plotting.plotHelpers import remove_duplicate_legend
-from lfpecog_analysis.psd_lid_stats import process_mean_stats
+from lfpecog_analysis.psd_lid_stats import (
+    process_mean_stats, get_binary_p_perHz
+)
 
 def plot_PSD_vs_DopaTime(all_timefreqs,
                          sel_subs=None,
@@ -237,6 +239,7 @@ def plot_STN_PSD_vs_LID(
     PLOT_ONLY_MATCH=False,
     SHOW_ONLY_GAMMA=False,
     SHOW_SIGN=False,
+    p_SAVED_DATE='0000',
     PROCESS_STATS=False,
 ):
     """
@@ -634,6 +637,11 @@ def plot_STN_PSD_vs_LID(
                 np.unique(n_subs_incl['all_match'][cat])
             )
             
+    if PROCESS_STATS:
+        process_mean_stats(datatype='STN', mean_stats=mean_stats,
+                           save_stats=True,)
+        get_binary_p_perHz(datatype='STN', save_date='2208',)
+        
 
     ### PLOTTING PART
     if LAT_or_SCALE == 'LAT_UNI':
@@ -669,6 +677,7 @@ def plot_STN_PSD_vs_LID(
                          single_sub_lines=SINGLE_SUB_LINES,
                          show_only_gamma=SHOW_ONLY_GAMMA,
                          SHOW_SIGN=SHOW_SIGN,
+                         p_SAVED_DATE=p_SAVED_DATE,
                          PLOT_ONLY_MATCH=PLOT_ONLY_MATCH,)
     
     elif LAT_or_SCALE == 'LAT_BILAT':
@@ -688,9 +697,7 @@ def plot_STN_PSD_vs_LID(
                          single_sub_lines=SINGLE_SUB_LINES,
                          show_only_gamma=SHOW_ONLY_GAMMA,)       
     
-    if PROCESS_STATS: process_mean_stats(mean_stats, save_stats=True,)
-
-    return mean_stats
+    # if PROCESS_STATS: return mean_stats
 
 import json
 
@@ -708,6 +715,7 @@ def plot_scaling_LID(
     n_subs_incl=False,
     SHOW_SIGN=False,
     PLOT_ONLY_MATCH=False,
+    p_SAVED_DATE='0000',
 ):
     assert datatype.upper() in ['STN', 'ECOG'], (
         f'datatype ({datatype}) should be STN or ECOG'
@@ -716,9 +724,10 @@ def plot_scaling_LID(
     if SHOW_SIGN:
         print('load significancies')
         store_path = join(get_project_path('results'),
-                          'stats', 'LMM_noLID_vs_LID')
+                          'stats', f'{datatype.upper()}_LMM_noLID_vs_LID')
 
-        with open(join(store_path, f'LMM_results_pvalues_1608.json'),
+        with open(join(store_path, f'{datatype.upper()}_LMM_results_'
+                                   f'pvalues_{p_SAVED_DATE}.json'),
                   'r') as json_file:
             p_dict = json.load(json_file)
 
@@ -745,6 +754,7 @@ def plot_scaling_LID(
         elif side == 'all_nonmatch': ax_title = f'{datatype} versus all ipsilateral dyskinesia'
         
         # if PLOT_ONLY_MATCH: ax_title = f'{datatype} versus all contralateral dyskinesia'
+        print(side)
 
         for i_cat, cat in enumerate(psds_to_plot[side].keys()):
             n_subs = n_subs_incl[side][cat]
@@ -1073,13 +1083,18 @@ def plot_ECOG_PSD_vs_LID(
     all_timefreqs, sel_subs=None,
     CDRS_RATER='Patricia',
     LAT_or_SCALE='LAT_UNI',
-    LOG_POWER=True, ZSCORE_FREQS=True,
+    LOG_POWER=True, ZSCORE_FREQS=False,
     SMOOTH_PLOT_FREQS=0, STD_ERR=True,
     BASELINE_CORRECT=False,
     BREAK_X_AX=False, plt_ax_to_return=False,
-    fsize=12, fig_name=None,
+    fsize=12,
+    fig_name='PLOT_ECoG_PSD_vs_DYSK',
     single_sub_lines=False,
+    PLOT_ONLY_MATCH=False,
     SHOW_ONLY_GAMMA=False,
+    SHOW_SIGN=False,
+    PROCESS_STATS=False,
+    p_SAVED_DATE='0000',
 ):
     """
     Plot group-level PSDs (based on SSD data), plot
@@ -1133,8 +1148,15 @@ def plot_ECOG_PSD_vs_LID(
     n_uni_subs = 0
     subs_incl = {k: {} for k in psds_to_plot.keys()}  # keep track of indiv subs per cat
 
+    # gets per hemisphere the subject ID and the mean-psd-array (no LID and LID)
+    # CDRS contains the scores corresponding to LID
+    mean_stats = {'LID': [], 'noLID': [], 'CDRS': []}
+
     for sub in subs:
         if sub.startswith('1'): continue  # SKIP NON-ECOG subjects
+        # store temporary powers and LID scores for stats
+        stats_lid_pow = {'match': [], 'nonmatch': []}
+        stats_lid_cdrs = {'match': [], 'nonmatch': []}
 
         for i_rep in np.arange(n_reps):
 
@@ -1178,10 +1200,10 @@ def plot_ECOG_PSD_vs_LID(
             tf_values = all_timefreqs[sub][f'ecog_{ecog_side}'].values
             if LOG_POWER: tf_values = np.log(tf_values)
             if ZSCORE_FREQS:
-                    for f in np.arange(tf_values.shape[0]):
-                        tf_values[f] = (
-                            tf_values[f] - np.mean(tf_values[f])
-                        ) / np.std(tf_values[f])
+                for f in np.arange(tf_values.shape[0]):
+                    tf_values[f] = (
+                        tf_values[f] - np.mean(tf_values[f])
+                    ) / np.std(tf_values[f])
             tf_times = all_timefreqs[sub][f'ecog_{ecog_side}'].times / 60
             tf_freqs = all_timefreqs[sub][f'ecog_{ecog_side}'].freqs
 
@@ -1208,6 +1230,9 @@ def plot_ECOG_PSD_vs_LID(
                 tf_values_BL = tf_values[:, bl_sel]
                 bl_psd = np.mean(tf_values_BL, axis=1)
 
+                if i_rep == 0:  # add tuple 
+                    mean_stats['noLID'].append((f'{sub}_match', tf_values[:, bl_sel]))
+
             # select moments with BILATERAL present dyskinesia 
             if LAT_or_SCALE in ['SCALE', 'LAT_BILAT']:
                 bi_lid_sel = np.logical_and(ft_cdrs['LID'] > 0, ft_cdrs['noLID'] > 0)
@@ -1219,6 +1244,10 @@ def plot_ECOG_PSD_vs_LID(
                                                 preLID_separate=False,
                                                 convert_inBetween_zeros=False)
                     cdrs_categs['bi'] = cdrs_cats[bi_lid_sel]
+                    # add match STN during bilateral LID for STATS
+                    stats_lid_pow['match'].append(tf_values[:, bi_lid_sel]) 
+                    stats_lid_cdrs['match'].append(ft_cdrs['LID'][bi_lid_sel])  # add cdrs values for body side corr to powers
+
                 # add lateral-cdrs scores DURING BILATERAL cdrs
                 # uni-lat-ECOG-tf-values are added twice, once labeled match
                 # with contra-lat-cdrs, once labeled non-match with ipsi-lat-cdrs
@@ -1251,6 +1280,11 @@ def plot_ECOG_PSD_vs_LID(
                             
                 if add_uni:
                     tf_values_dict[match_label_uni] = tf_values[:, uni_lid_sel]
+                    # add unilateral LID for stats
+                    stats_lid_pow['match'].append(tf_values[:, uni_lid_sel])
+                    stats_lid_cdrs['match'].append(ft_cdrs['LID'][uni_lid_sel])  # add cdrs values for body side corr to powers
+               
+
                     if match_label_uni == 'match':
                         cdrs_cats, coding_dict = categorical_CDRS(y_full_scale=ft_cdrs['LID'],
                                                     preLID_minutes=0,
@@ -1298,38 +1332,67 @@ def plot_ECOG_PSD_vs_LID(
                         # keep track of individual subs included
                         try: subs_incl[label][cat].append(sub)
                         except KeyError: subs_incl[label][cat] = [sub,]
-    
+        
+        # add STATS at end of subject-iteration (only MATCH)
+        temp_pows = stats_lid_pow['match'][0]
+        temp_cdrs = stats_lid_cdrs['match'][0]
+        for n in np.arange(1, len(stats_lid_pow['match'])):
+            temp_pows = np.concatenate([temp_pows,
+                                        stats_lid_pow['match'][n]],
+                                        axis=1)
+            temp_cdrs = np.concatenate([temp_cdrs,
+                                        stats_lid_cdrs['match'][n]])
+        mean_stats['LID'].append((f'{sub}_match', temp_pows))
+        mean_stats['CDRS'].append((f'{sub}_match', temp_cdrs))
+
 
     # merge all contra and ipsilateral psds together for LAT_ALL_SCALE
     if n_reps == 2:
         combi_psds = {'all_match': {}, 'all_nonmatch': {}}
         for side in ['match', 'nonmatch']:
-            # print(f'side keys: {psds_to_plot[side].keys()}')
-            # print(f'bi_side keys: {psds_to_plot[f"bi_{side}"].keys()}')
             all_cats = list(np.unique(list(psds_to_plot[side].keys()) +
-                                 list(psds_to_plot[f'bi_{side}'].keys())))
-            # print(all_cats)
+                                list(psds_to_plot[f'bi_{side}'].keys())))
             for cat in all_cats:
                 combi_psds[f'all_{side}'][cat] = []
             for cat in psds_to_plot[side].keys():
                 combi_psds[f'all_{side}'][cat].extend(psds_to_plot[side][cat])
             for cat in psds_to_plot[f'bi_{side}'].keys():
                 combi_psds[f'all_{side}'][cat].extend(psds_to_plot[f'bi_{side}'][cat])
+
         psds_to_plot = combi_psds
 
+    elif PLOT_ONLY_MATCH:
+        combi_psds = {'all_match': {}}
+        all_cats = list(np.unique(list(psds_to_plot['match'].keys())))
+        all_cats.extend(np.unique(list(psds_to_plot['bi'].keys())))
+        all_cats = list(np.unique(all_cats))
+        # create list for every category
+        for cat in all_cats: combi_psds['all_match'][cat] = []
+        for side in psds_to_plot.keys():        
+            # fill cat-list with all different sides
+            if 'nonmatch' in side:
+                print(f'...SKIP {side} from PLOTONLYMATCH POWERS')
+                
+                continue
+            print(f'...ADD {side} to PLOTONLYMATCH POWERS')
+            for cat in psds_to_plot[side].keys():
+                combi_psds['all_match'][cat].extend(psds_to_plot[side][cat])
+        psds_to_plot = combi_psds
+        
     # if CALC_FREQ_CORR:
     #     print('not plotting, only returning freq corr values')
     #     return FREQ_CORRs
 
     # extract number of incl indiv subs per cat
     n_subs_incl = {}
-    if n_reps == 1:
+    if n_reps == 1 and not PLOT_ONLY_MATCH:
         for side in subs_incl.keys():
             n_subs_incl[side] = {}
             for cat in subs_incl[side].keys():
                 n_subs_incl[side][cat] = len(np.unique(subs_incl[side][cat]))
     elif n_reps == 2:
         for side in ['match', 'nonmatch']:
+            if PLOT_ONLY_MATCH and side == 'nonmatch': continue
             n_subs_incl[f'all_{side}'] = {}
             for cat in psds_to_plot[f'all_{side}'].keys():
                 try:
@@ -1338,11 +1401,29 @@ def plot_ECOG_PSD_vs_LID(
                 except:
                     try: n_subs_incl[f'all_{side}'][cat] = len(np.unique(subs_incl[side][cat]))
                     except: n_subs_incl[f'all_{side}'][cat] = len(np.unique(subs_incl[f'bi_{side}'][cat]))
+    elif PLOT_ONLY_MATCH:
+        n_subs_incl['all_match'] = {}
+        for cat in psds_to_plot['all_match'].keys():
+            try:
+                temp_subs = subs_incl['match'][cat] + subs_incl['bi'][cat]
+                n_subs_incl['all_match'][cat] = len(np.unique(temp_subs))
+            except:
+                try: n_subs_incl['all_match'][cat] = len(np.unique(subs_incl['match'][cat]))
+                except: n_subs_incl['all_match'][cat] = len(np.unique(subs_incl['bi'][cat]))
 
+
+
+    if PROCESS_STATS:
+        mean_stats['freqs'] = tf_freqs
+        process_mean_stats(datatype='ECOG', mean_stats=mean_stats,
+                           save_stats=True,)
+        get_binary_p_perHz(datatype='ECOG', save_date=p_SAVED_DATE,)
 
 
     ### PLOTTING PART
     if LAT_or_SCALE in ['SCALE', 'LAT_BILAT']:
+        print(psds_to_plot.keys())
+        print(n_subs_incl.keys())
         plot_scaling_LID(plt_ax_to_return=plt_ax_to_return,
                          datatype='ECoG',
                          psds_to_plot=psds_to_plot,
@@ -1356,8 +1437,11 @@ def plot_ECOG_PSD_vs_LID(
                          fsize=fsize,
                          fig_name=fig_name,
                          single_sub_lines=single_sub_lines,
+                         PLOT_ONLY_MATCH=PLOT_ONLY_MATCH,
                          show_only_gamma=SHOW_ONLY_GAMMA,
                          n_subs_incl=n_subs_incl,
+                         SHOW_SIGN=SHOW_SIGN,
+                         p_SAVED_DATE=p_SAVED_DATE,
 )
         
 
