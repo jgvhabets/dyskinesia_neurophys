@@ -96,10 +96,9 @@ def calculate_Rs_FreqCorr(
     return FreqCorrs_results, freqs
 
 
-def plot_FreqCorr(
-        FreqCorrs_results, freqs,
-        fig_name=None, save_dir=None,
-):
+def plot_FreqCorr(FreqCorrs_results, freqs,
+                  fig_name=None, save_dir=None,
+                  use_exact_values=False,):
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 6),
                             #  sharey='row',
@@ -107,57 +106,75 @@ def plot_FreqCorr(
     fsize=18
     colors = list(get_colors().values())
     bar_clrs = [colors[1], colors[-4]]
-    fill_params = {'bi_match': {'hatch': '//',
-                                'facecolor': 'w',
-                                'edgecolor': bar_clrs[0],
-                                'alpha': .5},
-                'bi_nonmatch': {'facecolor': bar_clrs[1],
-                                'alpha': .5,}}
+    fill_params = [{'hatch': '//',
+                    'facecolor': 'w',
+                    'edgecolor': bar_clrs[0],
+                    'alpha': .5},
+                   {'facecolor': bar_clrs[1],
+                    'alpha': .5,}]
     leg_labs = {'bi_match': 'Contralateral STN',
-                'bi_nonmatch': 'Ipsilateral STN'}
+                'bi_nonmatch': 'Ipsilateral STN',
+                'STN_match': 'Contralateral STN',
+                'ECOG_match': 'Contralateral ECoG',}
     bar_ws = [-.5, .5]  # minus aligns to the left
 
     for i_ax, ax in enumerate(axes):
         for i, state in enumerate(FreqCorrs_results.keys()):
+            # use exact numbers
+            if use_exact_values:
+                # plot bars with mean correlations
+                sign = FreqCorrs_results[state]['p'].values < (.05 / len(freqs))
+                axes[i_ax].bar(np.array(freqs)[sign], FreqCorrs_results[state]['R'][sign],
+                                width=bar_ws[i], align='edge',
+                                label=leg_labs[state],
+                                color=bar_clrs[i], alpha=.8,)
+                axes[i_ax].bar(np.array(freqs)[~sign], FreqCorrs_results[state]['R'][~sign],
+                                width=bar_ws[i], align='edge',
+                                # label=f'{leg_labs[state]} non-sign',
+                                color=bar_clrs[i], alpha=.4,)
+                axes[i_ax].set_ylim(-.01, .01)
+                axes[0].set_yticks(np.arange(-.01, .011, .005))
             # calculate mean correlations per freq-bin
-            R_arr = np.array(FreqCorrs_results[state]['R'])
-            p_arr = np.array(FreqCorrs_results[state]['p'])
-            mean_Rs = R_arr.mean(axis=0)
-            mean_ps = p_arr.mean(axis=0)
-            # calculate variance lines (std-err-mean)
-            up_var = mean_Rs + (np.std(R_arr, axis=0) / np.sqrt(R_arr.shape[0]))
-            low_var = mean_Rs - (np.std(R_arr, axis=0) / np.sqrt(R_arr.shape[0]))
-            # plot bars with mean correlations
-            axes[i_ax].bar(freqs, mean_Rs,
-                           width=bar_ws[i], align='edge',
-                           label=leg_labs[state],
-                           color=bar_clrs[i], alpha=.8,)
-            # plot percentile lines
-            axes[i_ax].fill_between(freqs, y1=low_var, y2=up_var,
-                                    **fill_params[state])
+            else:
+                R_arr = np.array(FreqCorrs_results[state]['R'])
+                p_arr = np.array(FreqCorrs_results[state]['p'])
+                mean_Rs = R_arr.mean(axis=0)
+                mean_ps = p_arr.mean(axis=0)
+                # calculate variance lines (std-err-mean)
+                up_var = mean_Rs + (np.std(R_arr, axis=0) / np.sqrt(R_arr.shape[0]))
+                low_var = mean_Rs - (np.std(R_arr, axis=0) / np.sqrt(R_arr.shape[0]))
+                # plot bars with mean correlations
+                axes[i_ax].bar(freqs, mean_Rs,
+                            width=bar_ws[i], align='edge',
+                            label=leg_labs[state],
+                            color=bar_clrs[i], alpha=.8,)
+                # plot percentile lines
+                axes[i_ax].fill_between(freqs, y1=low_var, y2=up_var,
+                                        **fill_params[i])
+                axes[i_ax].set_ylim(-1, 1)
+                axes[0].set_yticks(np.arange(-1, 1.01, .5))
 
         axes[i_ax].spines['top'].set_visible(False)
         axes[i_ax].spines['right'].set_visible(False)
         axes[i_ax].tick_params(size=fsize, labelsize=fsize, axis='both',)
         axes[i_ax].axhline(y=0, color='darkgray',)
         for y in [-.5, .5]:
-             axes[i_ax].axhline(y=y, alpha=.5, lw=.1,
+             if use_exact_values: y /= 100
+             axes[i_ax].axhline(y=y, alpha=.5, lw=1,
                                 color='darkgray',)
         for y in [-.25, -.75, .25, .75]:
+             if use_exact_values: y /= 100
              axes[i_ax].axhline(y=y, alpha=.5, ls='--',
                                 lw=1, color='darkgray',)
-        axes[i_ax].set_ylim(-1, 1)
 
-        if i_ax == 0:
-            axes[i_ax].set_xlim(4, 35)
-            axes[i_ax].set_yticks(np.arange(-1, 1.01, .5))
-        elif i_ax == 1:
-            axes[i_ax].set_xlim(60, 90)
-            axes[i_ax].spines['left'].set_visible(False)
-            axes[i_ax].set_yticks([])
+    axes[0].set_xlim(4, 35)
+    
+    axes[1].set_xlim(60, 90)
+    axes[1].spines['left'].set_visible(False)
+    axes[1].set_yticks([])
 
     axes[0].set_xlabel('Frequency (Hz)', size=fsize,)
-    axes[0].set_ylabel('Correlation Coeff.\n(Pearson R)', size=fsize,)
+    axes[0].set_ylabel('Correlation Coeff. (a.u.)\n(from LMEM)', size=fsize,)
     # split legend over axes
     hnd, lab = axes[1].get_legend_handles_labels()
     axes[0].legend([hnd[0]], [lab[0]], fontsize=fsize-2, ncol=1, frameon=False,
@@ -165,8 +182,7 @@ def plot_FreqCorr(
     axes[1].legend([hnd[1]], [lab[1]], fontsize=fsize-2, ncol=1, frameon=False,
             loc='center left', bbox_to_anchor=(.1, 1.01))
 
-    plt.suptitle('STN-powers vs Clinical Dyskinesia Rating Scores'
-                '\nduring bilateral dyskinesia',
+    plt.suptitle('Effect of spectral-band-changes on Clinical Dyskinesia Rating Scores',
                 fontsize=fsize, x=.5, y=.95, ha='center',
                 weight='bold',)
     plt.tight_layout(h_pad=0)

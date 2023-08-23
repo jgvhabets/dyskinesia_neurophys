@@ -58,8 +58,9 @@ def process_mean_stats(
             print(f'df for {f_hz} Hz saved')
 
 
-def get_binary_p_perHz(datatype, save_date='0000',
-                       save_ps=True, return_ps=False,):
+def get_binary_p_perHz(datatype, save_date='0000', load_data=False,
+                       save_ps=True, return_ps=False,
+                       return_full_dict=False,):
     
     store_path = os.path.join(get_project_path('results'),
                               'stats', f'{datatype}_LMM_noLID_vs_LID')
@@ -67,6 +68,24 @@ def get_binary_p_perHz(datatype, save_date='0000',
 
     freqs = np.arange(4, 91)
 
+    if load_data and (return_ps or return_full_dict):
+        try:
+            with open(os.path.join(
+                store_path, f'{datatype}_LMM_results_'
+                f'pvalues_{save_date}.json'
+            ), 'r') as json_file:
+                store_json = json.load(json_file)
+            
+            if return_full_dict:
+                return store_json
+            elif return_ps:
+                p_list = store_json['p_values']
+                return p_list
+
+    
+        except:
+            print('calculate p-values based on saved data')
+    
     p_list = []
 
     for i_f, f_hz in enumerate(freqs):
@@ -80,10 +99,8 @@ def get_binary_p_perHz(datatype, save_date='0000',
                             index_col=0, header=0, )
         
         model = mixedlm("mean_power ~ LID", lm_data,
-                            groups=lm_data["sub"])
+                        groups=lm_data["sub"])
         result = model.fit(method='lbfgs')
-
-        # print(result.summary())
 
         # Extract the p-value for the Condition variable
         p_list.append(result.pvalues['LID'])
@@ -99,3 +116,4 @@ def get_binary_p_perHz(datatype, save_date='0000',
             json.dump(store_json, json_file)
     
     if return_ps: return p_list
+    elif return_full_dict: return store_json

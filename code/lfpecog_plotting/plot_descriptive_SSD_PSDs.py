@@ -1370,15 +1370,11 @@ def plot_ECOG_PSD_vs_LID(
         for cat in all_cats: combi_psds['all_match'][cat] = []
         for side in psds_to_plot.keys():        
             # fill cat-list with all different sides
-            if 'nonmatch' in side:
-                print(f'...SKIP {side} from PLOTONLYMATCH POWERS')
-                
-                continue
-            print(f'...ADD {side} to PLOTONLYMATCH POWERS')
+            if 'nonmatch' in side: continue
             for cat in psds_to_plot[side].keys():
                 combi_psds['all_match'][cat].extend(psds_to_plot[side][cat])
         psds_to_plot = combi_psds
-        
+
     # if CALC_FREQ_CORR:
     #     print('not plotting, only returning freq corr values')
     #     return FREQ_CORRs
@@ -1422,8 +1418,7 @@ def plot_ECOG_PSD_vs_LID(
 
     ### PLOTTING PART
     if LAT_or_SCALE in ['SCALE', 'LAT_BILAT']:
-        print(psds_to_plot.keys())
-        print(n_subs_incl.keys())
+        
         plot_scaling_LID(plt_ax_to_return=plt_ax_to_return,
                          datatype='ECoG',
                          psds_to_plot=psds_to_plot,
