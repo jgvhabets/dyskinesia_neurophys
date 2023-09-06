@@ -124,6 +124,7 @@ def plot_FreqCorr(frqCor_values, freqs,
             # use exact numbers
             if use_exact_values:
                 # plot bars with mean correlations
+                print(f'color: {bar_clrs[i]}')
                 sign = frqCor_values[state]['p'].values < (.05 / len(freqs))
                 axes[i_ax].bar(np.array(freqs)[sign],
                                frqCor_values[state]['R'][sign],
@@ -186,16 +187,15 @@ def plot_FreqCorr(frqCor_values, freqs,
 
     axes[0].set_xlabel('Frequency (Hz)', size=fsize,)
     axes[0].set_ylabel('Correlation Coeff. (a.u.)\n(from LMEM)', size=fsize,)
-    # split legend over axes
-    # hnd, lab = axes[1].get_legend_handles_labels()
-    # axes[0].legend([hnd[0]], [lab[0]], fontsize=fsize-2, ncol=1, frameon=False,
-    #         loc='center left', bbox_to_anchor=(.1, 1.01))
-    # axes[1].legend([hnd[1]], [lab[1]], fontsize=fsize-2, ncol=1, frameon=False,
-    #         loc='center left', bbox_to_anchor=(.1, 1.01))
-    axes[0].legend(fontsize=fsize-2, ncol=1,
-                   frameon=False,
-                   loc='center left',
-                   bbox_to_anchor=(.1, 1.01))
+
+    # # split legend over axes
+    hnd, lab = axes[1].get_legend_handles_labels()
+    print(hnd)
+    print(lab)
+    axes[0].legend([hnd[0]], [lab[0]], fontsize=fsize-2, ncol=1, frameon=False,
+            loc='center left', bbox_to_anchor=(.1, 1.01))
+    axes[1].legend([hnd[1]], [lab[1]], fontsize=fsize-2, ncol=1, frameon=False,
+            loc='center left', bbox_to_anchor=(.1, 1.01))
 
     plt.suptitle('Effect of spectral-band-changes on Clinical Dyskinesia Rating Scores',
                 fontsize=fsize, x=.5, y=.95, ha='center',

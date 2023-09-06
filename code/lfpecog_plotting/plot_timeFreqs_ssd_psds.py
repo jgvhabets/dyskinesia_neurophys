@@ -32,6 +32,7 @@ def plot_indiv_ssd_timefreq_allSources(
     FT_VERSION='v4',
     SAVE_PLOT = False,
     SHOW_PLOT = False,
+    CDRS_RATER='Jeroen',
 ):
     # adjust
     fig_name = f'{fig_name_base}_sub{sub}'
@@ -62,24 +63,8 @@ def plot_indiv_ssd_timefreq_allSources(
 
     for i_s, source in enumerate(sources):
 
-
-        # define COLOBAR settings based on data settings
-        # if LOG_POWER:
-        #     if BASELINE_CORRECT:
-        #         if 'lfp' in source: vmin, vmax = -5, 5
-        #         elif 'ecog' in source: vmin, vmax = -2.5, 2.5
-        #         if PERC_CHANGE: vmin, vmax, cmap = -10, 10, 'PuOr_r'
-        #     else: vmin, vmax, cmap = -10, 0, 'plasma'
-
-        # elif ZSCORE: vmin, vmax, cmap = -2, 2, 'PuOr_r'
-
-        # else:
-        #     if BASELINE_CORRECT:
-        #         vmin, vmax, cmap = -.2, .2, 'PuOr_r'
-        #         if PERC_CHANGE: vmin, vmax = -10, 10
-        #     else: vmin, vmax, cmap = 0, .2, 'viridis'
-        vmin, vmax, cmap = -4, 4, 'viridis'  #'plasma'    #'PuOr_r'
-        fig_name = f'{cmap}_{fig_name}'
+        if ZSCORE: vmin, vmax, cmap = -4, 4, 'bwr'  #'afmhot'  'hot'  'bwr'
+        if LOG_POWER: vmin, vmax, cmap = -3, 0, 'viridis'
 
         # get COMBINED SSDd SPECTRAL timeseries
         psd_source_dict = PSD_ssd_dict[source]
@@ -89,6 +74,20 @@ def plot_indiv_ssd_timefreq_allSources(
         if isinstance(tf_times, list): tf_times = np.array(tf_times)
         if isinstance(tf_values, list): tf_values = np.array(tf_values)
         if isinstance(tf_freqs, list): tf_freqs = np.array(tf_freqs)
+
+        # CHECK TIMESTAMPS TO EXCLUDE DOUBLE DATA
+        if sum(np.diff(tf_times) < 0) > 0:
+            # find negative time jumps and get n-doubled samples (double data)
+            neg_ch = np.where(np.diff(tf_times) < 0)[0]
+            idx_sizes = [(i, abs(np.diff(tf_times)[i]) + 1) for i in neg_ch]
+            # create bool selector that is 0 for double values
+            sel = np.ones_like(tf_times)
+            for i,n in idx_sizes: sel[int(i):int(i+n+1)] = 0
+            # use bool-selector to drop double samples
+            tf_times = tf_times[sel.astype(bool)]
+            tf_values = tf_values[:, sel.astype(bool)]
+        # double check
+        assert sum(np.diff(tf_times) < 0) == 0, 'tf_times contain double data'
         
         if ZSCORE:
             for row_i, row_data in enumerate(tf_values):
@@ -109,7 +108,7 @@ def plot_indiv_ssd_timefreq_allSources(
                     sub=sub,
                     ft_times=tf_times / 60,
                     side=bodyside,
-                    cdrs_rater='Patricia',
+                    cdrs_rater=CDRS_RATER,
                 )
 
                 # convert CDRS labels into categories
@@ -156,6 +155,7 @@ def plot_indiv_ssd_timefreq_allSources(
         ax.remove()
     cbar_ax = fig.add_subplot(gs[:, -1])
     cbar_label = 'Power (a.u.)'
+    if LOG_POWER: cbar_label = f'Log {cbar_label}'
     if BASELINE_CORRECT and PERC_CHANGE: cbar_label = 'Power %-change vs pre L-DOPA' + cbar_label[5:]
     elif BASELINE_CORRECT and PERC_CHANGE and ZSCORE: cbar_label = 'Z-scored Power %-change vs pre L-DOPA (%)'
     elif ZSCORE and BASELINE_CORRECT: cbar_label = 'Z-scored Power vs pre L-DOPA (a.u.)'
@@ -224,23 +224,26 @@ def plot_indiv_ssd_timefreq_allSources(
         plt.show()
     else:
         plt.close()
-    del(fi_name)
+    del(fig_name)
+
+
 
 def plot_splitted_timefreq_ax(
     ax_down, ax_up, tf_values, tf_times, tf_freqs,
     cmap, vmin, vmax, win_spacing=1, fsize=16,
     f_lims={'down': (4, 35), 'up': (60, 90)},
-    cdrs_values=False,
+    cdrs_values=False, SKIP_BILAT_CDRS=True,
 ):
     """
         - win_spacing: in seconds
     """
     # prepare timefreq array data for colormesh
     C = tf_values.copy()
-    win_spacing = 1  # 5 seconds in between windows
+
     tdiffs_idx = [(t, i) for i, t in enumerate(np.diff(tf_times)) if t>win_spacing]
+
     for t, i in tdiffs_idx[::-1]:  # in reverse order to not change the relevant indices on the go
-        pad = np.array([[np.nan] * C.shape[0]] * int((t - 1) / win_spacing))
+        pad = np.array([[np.nan] * C.shape[0]] * int((t - win_spacing) / win_spacing))
         C = np.insert(C, obj=i, values=pad, axis=1)
         # add nans as well to cdrs-array
         if isinstance(cdrs_values, np.ndarray):
@@ -248,6 +251,7 @@ def plot_splitted_timefreq_ax(
         elif isinstance(cdrs_values, dict):
             for side in cdrs_values.keys():
                 cdrs_values[side] = np.insert(cdrs_values[side], obj=i, values=pad[:, 0], )
+        
     # create x and y
     x = np.arange(tf_times[0], tf_times[-1] + win_spacing, win_spacing)
     y = tf_freqs
@@ -261,6 +265,7 @@ def plot_splitted_timefreq_ax(
     im_up = ax_up.pcolormesh(x, y, C, cmap=cmap, vmin=vmin, vmax=vmax)
     ax_up.set_ylim(f_lims['up'])
 
+    linestyles = ['solid', 'dashed', 'dotted']
     for i_ax, ax in enumerate([ax_down, ax_up]):
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
@@ -271,17 +276,18 @@ def plot_splitted_timefreq_ax(
             not isinstance(cdrs_values, dict)): continue
 
         ax_cdrs = ax.twinx()
-        if cmap in ['viridis', 'plasma']: cdrs_col = ['lightgray',]
-        elif cmap in ['PuOr', 'PuOr_r']: cdrs_col = ['green', 'blue', 'turquoise']
+        if cmap in ['viridis', 'plasma']: cdrs_col = ['lightgray', 'firebrick', 'darkorange']
+        elif cmap in ['bwr', 'PuOr', 'PuOr_r']: cdrs_col = ['gray', 'orange', 'darkolivegreen']
         ax_cdrs.tick_params(size=fsize, labelsize=fsize, axis='y')
         for r in ['top', 'bottom', 'right']: ax_cdrs.spines[r].set_visible(False)
         
         try:
             if isinstance(cdrs_values, dict):
                 for i_side, side in enumerate(cdrs_values.keys()):
+                    if side == 'bilat' and SKIP_BILAT_CDRS: continue
                     cdrs_values[side][cdrs_values[side] > 5] = 5
-                    ax_cdrs.plot(x, cdrs_values[side],
-                                color=cdrs_col[i_side], lw=5, alpha=.5,
+                    ax_cdrs.plot(x, cdrs_values[side], ls=linestyles[i_side],
+                                color=cdrs_col[i_side], lw=5, alpha=.8,
                                 label=f'Dyskinesia {side}')
             else:
                 cdrs_values[cdrs_values > 5] = 5

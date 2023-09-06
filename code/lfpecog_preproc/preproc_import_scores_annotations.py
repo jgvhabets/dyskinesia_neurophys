@@ -274,6 +274,8 @@ def get_ecog_side(sub):
 def get_cdrs_specific(
     sub, side='both', rater='Patricia',
     regularize=False,
+    subs_PK_todo=['101', '102', '103', '105', '107', '108', '109',
+                  '019', '020', '021'],
 ):
     """
     Gives uni- or bilateral CDRS scores
@@ -291,7 +293,7 @@ def get_cdrs_specific(
     """
     if rater.capitalize() in ['Patricia', 'Jeroen']:
         # FOR NOT SCORED SCORES
-        if sub in ['101', '102', '103', '019']:
+        if sub in subs_PK_todo:
             rater = 'Jeroen'
 
         scores = read_clinical_scores(sub, rater=rater)

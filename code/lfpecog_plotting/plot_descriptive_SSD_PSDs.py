@@ -588,18 +588,19 @@ def plot_STN_PSD_vs_LID(
                                 FREQ_CORRs[sub][label] = (freqCorr_arr, freqCorr_scores, tf_freqs)
 
         # process sub stats at end of subject iteration
-        for side in ['match', 'nonmatch']:
-            temp_pows = stats_lid_pow[side][0]
-            temp_cdrs = stats_lid_cdrs[side][0]
-            for n in np.arange(1, len(stats_lid_pow[side])):
-                temp_pows = np.concatenate([temp_pows,
-                                            stats_lid_pow[side][n]],
-                                            axis=1)
-                temp_cdrs = np.concatenate([temp_cdrs,
-                                            stats_lid_cdrs[side][n]])
-            mean_stats['LID'].append((f'{sub}_{side}', temp_pows))
-            mean_stats['CDRS'].append((f'{sub}_{side}', temp_cdrs))
-        mean_stats['freqs'] = tf_freqs
+        if PROCESS_STATS:
+            for side in ['match', 'nonmatch']:
+                temp_pows = stats_lid_pow[side][0]
+                temp_cdrs = stats_lid_cdrs[side][0]
+                for n in np.arange(1, len(stats_lid_pow[side])):
+                    temp_pows = np.concatenate([temp_pows,
+                                                stats_lid_pow[side][n]],
+                                                axis=1)
+                    temp_cdrs = np.concatenate([temp_cdrs,
+                                                stats_lid_cdrs[side][n]])
+                mean_stats['LID'].append((f'{sub}_{side}', temp_pows))
+                mean_stats['CDRS'].append((f'{sub}_{side}', temp_cdrs))
+            mean_stats['freqs'] = tf_freqs
 
     # merge all contra and ipsilateral psds together for LAT_ALL_SCALE
     if PLOT_ONLY_MATCH:
@@ -640,7 +641,7 @@ def plot_STN_PSD_vs_LID(
     if PROCESS_STATS:
         process_mean_stats(datatype='STN', mean_stats=mean_stats,
                            save_stats=True,)
-        get_binary_p_perHz(datatype='STN', save_date='2208',)
+        get_binary_p_perHz(datatype='STN', save_date=p_SAVED_DATE,)
         
 
     ### PLOTTING PART
@@ -1334,16 +1335,17 @@ def plot_ECOG_PSD_vs_LID(
                         except KeyError: subs_incl[label][cat] = [sub,]
         
         # add STATS at end of subject-iteration (only MATCH)
-        temp_pows = stats_lid_pow['match'][0]
-        temp_cdrs = stats_lid_cdrs['match'][0]
-        for n in np.arange(1, len(stats_lid_pow['match'])):
-            temp_pows = np.concatenate([temp_pows,
-                                        stats_lid_pow['match'][n]],
-                                        axis=1)
-            temp_cdrs = np.concatenate([temp_cdrs,
-                                        stats_lid_cdrs['match'][n]])
-        mean_stats['LID'].append((f'{sub}_match', temp_pows))
-        mean_stats['CDRS'].append((f'{sub}_match', temp_cdrs))
+        if PROCESS_STATS:
+            temp_pows = stats_lid_pow['match'][0]
+            temp_cdrs = stats_lid_cdrs['match'][0]
+            for n in np.arange(1, len(stats_lid_pow['match'])):
+                temp_pows = np.concatenate([temp_pows,
+                                            stats_lid_pow['match'][n]],
+                                            axis=1)
+                temp_cdrs = np.concatenate([temp_cdrs,
+                                            stats_lid_cdrs['match'][n]])
+            mean_stats['LID'].append((f'{sub}_match', temp_pows))
+            mean_stats['CDRS'].append((f'{sub}_match', temp_cdrs))
 
 
     # merge all contra and ipsilateral psds together for LAT_ALL_SCALE
