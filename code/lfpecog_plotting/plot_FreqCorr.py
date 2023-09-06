@@ -26,10 +26,10 @@ def calculate_Rs_FreqCorr(
             plot_PSDs.plot_STN_PSD_vs_LID(), run with
             'CALC_FREQ_CORR' set True
     """
-    FreqCorrs_results = {}
+    frqCor_values = {}
     first_sub = list(FreqCorr_dict.keys())[0]
     for state in FreqCorr_dict[first_sub].keys():
-        FreqCorrs_results[state] = {'R': [], 'p': []}
+        frqCor_values[state] = {'R': [], 'p': []}
         freqs = FreqCorr_dict[first_sub][state][2]
     
     vir_n_colors = pl.cm.viridis(np.linspace(0,1,len(freqs)))
@@ -38,7 +38,7 @@ def calculate_Rs_FreqCorr(
 
         if PLOT_SUB_CORR: figsub, axessub = plt.subplots(1,2, figsize=(8, 4))
         
-        for i_st, state in enumerate(FreqCorrs_results.keys()):
+        for i_st, state in enumerate(frqCor_values.keys()):
 
             arr = FreqCorr_dict[sub][state][0].copy()
             scores = np.array(FreqCorr_dict[sub][state][1]).copy()
@@ -84,8 +84,8 @@ def calculate_Rs_FreqCorr(
                         axessub[i_st].plot(temp_scores, temp_values,
                             c=vir_n_colors[i_f], alpha=.5)
 
-            FreqCorrs_results[state]['R'].append(curr_Rs)
-            FreqCorrs_results[state]['p'].append(curr_ps)
+            frqCor_values[state]['R'].append(curr_Rs)
+            frqCor_values[state]['p'].append(curr_ps)
 
             if PLOT_SUB_CORR: 
                 axessub[i_st].set_title(f'{sub}: {state}')
@@ -93,10 +93,10 @@ def calculate_Rs_FreqCorr(
         if PLOT_SUB_CORR: plt.show()
         else: plt.close()
             
-    return FreqCorrs_results, freqs
+    return frqCor_values, freqs
 
 
-def plot_FreqCorr(FreqCorrs_results, freqs,
+def plot_FreqCorr(frqCor_values, freqs,
                   fig_name=None, save_dir=None,
                   use_exact_values=False,):
 
@@ -104,7 +104,8 @@ def plot_FreqCorr(FreqCorrs_results, freqs,
                             #  sharey='row',
                             )
     fsize=18
-    colors = list(get_colors().values())
+    # colors = list(get_colors().values())
+    colors = get_colors('Jacoba_107')
     bar_clrs = [colors[1], colors[-4]]
     fill_params = [{'hatch': '//',
                     'facecolor': 'w',
@@ -119,51 +120,61 @@ def plot_FreqCorr(FreqCorrs_results, freqs,
     bar_ws = [-.5, .5]  # minus aligns to the left
 
     for i_ax, ax in enumerate(axes):
-        for i, state in enumerate(FreqCorrs_results.keys()):
+        for i, state in enumerate(frqCor_values.keys()):
             # use exact numbers
             if use_exact_values:
                 # plot bars with mean correlations
-                sign = FreqCorrs_results[state]['p'].values < (.05 / len(freqs))
-                axes[i_ax].bar(np.array(freqs)[sign], FreqCorrs_results[state]['R'][sign],
+                sign = frqCor_values[state]['p'].values < (.05 / len(freqs))
+                axes[i_ax].bar(np.array(freqs)[sign],
+                               frqCor_values[state]['R'][sign],
                                 width=bar_ws[i], align='edge',
                                 label=leg_labs[state],
                                 color=bar_clrs[i], alpha=.8,)
-                axes[i_ax].bar(np.array(freqs)[~sign], FreqCorrs_results[state]['R'][~sign],
+                axes[i_ax].bar(np.array(freqs)[~sign],
+                               frqCor_values[state]['R'][~sign],
                                 width=bar_ws[i], align='edge',
                                 # label=f'{leg_labs[state]} non-sign',
                                 color=bar_clrs[i], alpha=.4,)
-                axes[i_ax].set_ylim(-.01, .01)
+
+                if 'R_stderr' in frqCor_values[state].keys():
+                    axes[i_ax].fill_between(freqs,
+                                            y1=frqCor_values[state]['R'] - frqCor_values[state]['R_stderr'],
+                                            y2=frqCor_values[state]['R'] + frqCor_values[state]['R_stderr'],
+                                        **fill_params[i])
+                
+                # axes[i_ax].set_ylim(-.01, .01)
                 axes[0].set_yticks(np.arange(-.01, .011, .005))
+
             # calculate mean correlations per freq-bin
             else:
-                R_arr = np.array(FreqCorrs_results[state]['R'])
-                p_arr = np.array(FreqCorrs_results[state]['p'])
+                R_arr = np.array(frqCor_values[state]['R'])
+                p_arr = np.array(frqCor_values[state]['p'])
                 mean_Rs = R_arr.mean(axis=0)
                 mean_ps = p_arr.mean(axis=0)
-                # calculate variance lines (std-err-mean)
-                up_var = mean_Rs + (np.std(R_arr, axis=0) / np.sqrt(R_arr.shape[0]))
-                low_var = mean_Rs - (np.std(R_arr, axis=0) / np.sqrt(R_arr.shape[0]))
                 # plot bars with mean correlations
                 axes[i_ax].bar(freqs, mean_Rs,
                             width=bar_ws[i], align='edge',
                             label=leg_labs[state],
                             color=bar_clrs[i], alpha=.8,)
-                # plot percentile lines
+                # calculate variance lines (std-err-mean)
+                up_var = mean_Rs + (np.std(R_arr, axis=0) / np.sqrt(R_arr.shape[0]))
+                low_var = mean_Rs - (np.std(R_arr, axis=0) / np.sqrt(R_arr.shape[0]))
                 axes[i_ax].fill_between(freqs, y1=low_var, y2=up_var,
                                         **fill_params[i])
-                axes[i_ax].set_ylim(-1, 1)
-                axes[0].set_yticks(np.arange(-1, 1.01, .5))
+        if np.nanmax(frqCor_values[state]['R']) > .1:
+            axes[i_ax].set_ylim(-1, 1)
+            axes[0].set_yticks(np.arange(-1, 1.01, .5))
 
         axes[i_ax].spines['top'].set_visible(False)
         axes[i_ax].spines['right'].set_visible(False)
         axes[i_ax].tick_params(size=fsize, labelsize=fsize, axis='both',)
         axes[i_ax].axhline(y=0, color='darkgray',)
         for y in [-.5, .5]:
-             if use_exact_values: y /= 100
+             if np.nanmax(frqCor_values[state]['R']) < .1: y /= 100
              axes[i_ax].axhline(y=y, alpha=.5, lw=1,
                                 color='darkgray',)
         for y in [-.25, -.75, .25, .75]:
-             if use_exact_values: y /= 100
+             if np.nanmax(frqCor_values[state]['R']) < .1: y /= 100
              axes[i_ax].axhline(y=y, alpha=.5, ls='--',
                                 lw=1, color='darkgray',)
 
@@ -176,11 +187,15 @@ def plot_FreqCorr(FreqCorrs_results, freqs,
     axes[0].set_xlabel('Frequency (Hz)', size=fsize,)
     axes[0].set_ylabel('Correlation Coeff. (a.u.)\n(from LMEM)', size=fsize,)
     # split legend over axes
-    hnd, lab = axes[1].get_legend_handles_labels()
-    axes[0].legend([hnd[0]], [lab[0]], fontsize=fsize-2, ncol=1, frameon=False,
-            loc='center left', bbox_to_anchor=(.1, 1.01))
-    axes[1].legend([hnd[1]], [lab[1]], fontsize=fsize-2, ncol=1, frameon=False,
-            loc='center left', bbox_to_anchor=(.1, 1.01))
+    # hnd, lab = axes[1].get_legend_handles_labels()
+    # axes[0].legend([hnd[0]], [lab[0]], fontsize=fsize-2, ncol=1, frameon=False,
+    #         loc='center left', bbox_to_anchor=(.1, 1.01))
+    # axes[1].legend([hnd[1]], [lab[1]], fontsize=fsize-2, ncol=1, frameon=False,
+    #         loc='center left', bbox_to_anchor=(.1, 1.01))
+    axes[0].legend(fontsize=fsize-2, ncol=1,
+                   frameon=False,
+                   loc='center left',
+                   bbox_to_anchor=(.1, 1.01))
 
     plt.suptitle('Effect of spectral-band-changes on Clinical Dyskinesia Rating Scores',
                 fontsize=fsize, x=.5, y=.95, ha='center',
