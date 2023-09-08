@@ -117,6 +117,17 @@ def get_windows(
         del_sel = np.array([f'_{contra_side}_' in c and 'LFP' in c for c in arr_keys])
         data = data[:, ~del_sel]
         arr_keys = np.array(arr_keys)[~del_sel]
+    
+    # filter out double ecog channels if present
+    if sum('ECOG' in c.upper() for c in arr_keys) == 12:
+        if sum('SMC_AT' in c.upper() for c in arr_keys) == 6:
+            # this is true if 6 ECOG channels were doubled (none-bids convert)
+            sel_dbl_ecog = np.array(['SMC_AT' in c.upper() for c in arr_keys])
+            if isinstance(arr_keys, list): arr_keys = np.array(arr_keys)
+            print(f'...during get_windows(), sorted out doubles: {arr_keys[sel_dbl_ecog]}')
+            arr_keys = arr_keys[~sel_dbl_ecog]
+            data = data[:, ~sel_dbl_ecog]
+
 
 
     # remove channels with too many NaNs to prevent deletion of all data
@@ -242,10 +253,15 @@ def get_windows(
 
         arr_list.append(wintemp)  # list with 2d arrays
     
-    # print(f'\n...# {len(arr_list)} windows found')
+    # last check of window length of included windows
     arr_bool = [r.shape[0] == winLen_samples for r in arr_list]
     arr_list = list(compress(arr_list, arr_bool))
     win_array = np.array(arr_list)  # create 3d array
+    # remove starttimes for same windows
+    arr_times_sec = list(compress(arr_times_sec, arr_bool))
+    print(f'...removed # {sum(~np.array(arr_bool))} windows bcs of length of end of windowing')
+    print(f'STARTTIMES length ({len(arr_times_sec)}) vs'
+          f'ARRAYS length ({len(win_array)})')
 
     if return_as_class:
         

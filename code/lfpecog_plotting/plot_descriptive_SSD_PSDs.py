@@ -241,6 +241,8 @@ def plot_STN_PSD_vs_LID(
     SHOW_SIGN=False,
     p_SAVED_DATE='0000',
     PROCESS_STATS=False,
+    DATA_VERSION='v4.0',
+    FT_VERSION='v4',
 ):
     """
     Plot group-level PSDs (based on SSD data), plot
@@ -679,7 +681,9 @@ def plot_STN_PSD_vs_LID(
                          show_only_gamma=SHOW_ONLY_GAMMA,
                          SHOW_SIGN=SHOW_SIGN,
                          p_SAVED_DATE=p_SAVED_DATE,
-                         PLOT_ONLY_MATCH=PLOT_ONLY_MATCH,)
+                         PLOT_ONLY_MATCH=PLOT_ONLY_MATCH,
+                         DATA_VERSION=DATA_VERSION,
+                         FT_VERSION=FT_VERSION,)
     
     elif LAT_or_SCALE == 'LAT_BILAT':
         plot_scaling_LID(plt_ax_to_return=plt_ax_to_return,
@@ -696,7 +700,9 @@ def plot_STN_PSD_vs_LID(
                          fsize=fsize,
                          fig_name=fig_name,
                          single_sub_lines=SINGLE_SUB_LINES,
-                         show_only_gamma=SHOW_ONLY_GAMMA,)       
+                         show_only_gamma=SHOW_ONLY_GAMMA,
+                         DATA_VERSION=DATA_VERSION,
+                         FT_VERSION=FT_VERSION,)       
     
     # if PROCESS_STATS: return mean_stats
 
@@ -717,6 +723,7 @@ def plot_scaling_LID(
     SHOW_SIGN=False,
     PLOT_ONLY_MATCH=False,
     p_SAVED_DATE='0000',
+    DATA_VERSION = 'v4.0', FT_VERSION='v4',
 ):
     assert datatype.upper() in ['STN', 'ECOG'], (
         f'datatype ({datatype}) should be STN or ECOG'
@@ -898,9 +905,9 @@ def plot_scaling_LID(
         plt.tight_layout()
 
         if SAVE_PLOT:
-            DATA_VERSION = 'v4.0'
             plt.savefig(join(get_project_path('figures'), 'ft_exploration',
-                                DATA_VERSION, 'descr_PSDs', fig_name),
+                             f'data_{DATA_VERSION}_ft_{FT_VERSION}',
+                             'descr_PSDs', fig_name),
                         facecolor='w', dpi=300,)
 
         if SHOW_PLOT: plt.show()
@@ -1096,6 +1103,8 @@ def plot_ECOG_PSD_vs_LID(
     SHOW_SIGN=False,
     PROCESS_STATS=False,
     p_SAVED_DATE='0000',
+    DATA_VERSION='v4.0',
+    FT_VERSION='v4',
 ):
     """
     Plot group-level PSDs (based on SSD data), plot
@@ -1439,6 +1448,8 @@ def plot_ECOG_PSD_vs_LID(
                          n_subs_incl=n_subs_incl,
                          SHOW_SIGN=SHOW_SIGN,
                          p_SAVED_DATE=p_SAVED_DATE,
+                         DATA_VERSION=DATA_VERSION,
+                         FT_VERSION=FT_VERSION,
 )
         
 

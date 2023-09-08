@@ -23,7 +23,8 @@ def load_movement_psds(data_version='v4.0', ft_version='v4',):
     winoverlap = SETTINGS['WIN_OVERLAP_part']
     # define main directory with stored merged data
     results_path = os.path.join(get_project_path('results'), 'features',
-                                  'SSD_feats_broad', data_version,
+                                  f'SSD_feats_broad_{ft_version}',
+                                  data_version,
                                   f'windows_{winlen}s_{winoverlap}overlap_tapRest')
     Fs = 2048
     # states select to plot

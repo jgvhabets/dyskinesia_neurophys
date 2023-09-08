@@ -311,6 +311,13 @@ class extract_SSD_connectivity:
             seed_data = getattr(self.sub_SSD, stn_ecog_side)
             target_data = getattr(self.sub_SSD, ecog_source)
 
+        # define time-samples not present in seed and target
+        if len(seed_data.times) != len(target_data.times):
+            time_sel_seed = [t in target_data.times for t in seed_data.times]
+            time_sel_target = [t in seed_data.times for t in target_data.times]
+        else:
+            time_sel_seed, time_sel_target = False, False
+        
         for bw in bands_to_extract:
             
             if self.connectivity_metric == 'PSI':
@@ -318,6 +325,8 @@ class extract_SSD_connectivity:
 
             values = calculate_connectivity_per_band(
                 seed_data=seed_data, target_data=target_data,
+                time_sel_seed=time_sel_seed,
+                time_sel_target=time_sel_target,
                 connectivity_metric=self.connectivity_metric,
                 band_name=bw, band_range=bands_to_extract[bw],
                 incl_sq_coh=SETTINGS['FEATS_INCL']['sq_coh'],
@@ -352,6 +361,8 @@ def calculate_connectivity_per_band(
     seed_data, target_data,
     connectivity_metric: str,
     band_name: str, band_range: list,
+    time_sel_seed = False,
+    time_sel_target = False,
     incl_sq_coh: bool = True,
     incl_imag_coh: bool = True,
     coh_segment_sec: float = 0.250,
@@ -385,7 +396,10 @@ def calculate_connectivity_per_band(
     seed_windows = getattr(seed_data, band_name).astype(np.float64)
     seed_times = seed_data.times
     target_windows = getattr(target_data, band_name).astype(np.float64)
-    target_times = target_data.times   
+    target_times = target_data.times
+
+    if time_sel_target: target_windows = target_windows[time_sel_target, :]
+    if time_sel_seed: seed_windows = seed_windows[time_sel_seed, :]
 
     if DOWN_SAMPLE:
         new_fs = 800
@@ -394,9 +408,17 @@ def calculate_connectivity_per_band(
         target_windows = resample(target_windows, up=1, down=fs/new_fs, axis=1)
         fs = new_fs
 
-    assert target_times == seed_times, (
-        'times arrays should be equal between seed and target'
-    )
+    # print('DEBUG: SEED TIMES', len(seed_times), type(seed_times), seed_times)
+    # print('DEBUG: target TIMES', len(target_times), type(target_times), target_times)
+        
+    try:
+        assert target_times == seed_times, (
+            'times arrays should be equal between seed and target'
+        )
+    except ValueError:  # not allowing comparison equal length arrays (not understood)
+        if (not all([t in target_times for t in seed_times]) or
+            not all([t in seed_times for t in target_times])):
+            raise ValueError('target_times and seed_times not equal')
     
     # create dict to store values
     values = {'times': []}

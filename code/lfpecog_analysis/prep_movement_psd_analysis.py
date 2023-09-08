@@ -30,7 +30,8 @@ def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
     main_data_path = os.path.join(get_project_path('data'),
                                   'merged_sub_data', data_version)
     results_path = os.path.join(get_project_path('results'), 'features',
-                                  'SSD_feats_broad', data_version,
+                                  f'SSD_feats_broad_{ft_version}',
+                                  data_version,
                                   'windows_10s_0.5overlap_tapRest')
     if not os.path.exists(results_path): os.makedirs(results_path)
     

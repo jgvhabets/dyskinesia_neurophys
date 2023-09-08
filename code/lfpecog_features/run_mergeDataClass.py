@@ -7,7 +7,7 @@ import sys
 from os.path import join, exists
 from os import listdir, makedirs
 from dataclasses import dataclass, field
-from numpy import ndarray
+from numpy import ndarray, logical_and
 
 # import own functions
 from lfpecog_features import feats_read_proc_data as read_data_funcs
@@ -166,6 +166,10 @@ if __name__ == '__main__':
         if PICKLE_PER_SOURCE:
 
             for dType in data.dtypes:
+                if not logical_and(SUB == '019', dType == 'lfp_right'):
+                    print(f'skip sub-{SUB}, {dType}')
+                    continue
+                print(f'PROCESS sub-{SUB}, {dType}')
                 # skip other dtypes
                 if True not in [dType.lower().startswith(s)
                                 for s in ['acc', 'lfp', 'ecog']]:

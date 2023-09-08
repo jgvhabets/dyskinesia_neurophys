@@ -28,12 +28,14 @@ def get_avail_ssd_subs(
     DATA_VERSION, IGNORE_PTS=[],
     INCL_STN_ONLY_PTS=True,
     WIN_LEN=10, WIN_OVERLAP=.5,
-    SSD_BROAD=True, 
+    SSD_BROAD=True, FT_VERSION='v4',
 ):
 # get all available subs with features
 
     ssd_folder = 'SSD_feats'
     if SSD_BROAD: ssd_folder += '_broad'
+    ssd_folder += f'_{FT_VERSION}'
+
     ssd_path = os.path.join(get_project_path('results'), 'features',
                             ssd_folder, DATA_VERSION,
                             f'windows_{WIN_LEN}s_'
@@ -90,6 +92,7 @@ class ssdFeatures:
 
         if ssd_flanks == 'broadband': ssd_folder = 'SSD_feats_broad'
         else: ssd_folder = 'SSD_feats'
+        ssd_folder += f'_{self.ftExtract_settings["FT_VERSION"]}'
 
         # define feature path and check existence
         self.feat_path = join(get_project_path('results'),

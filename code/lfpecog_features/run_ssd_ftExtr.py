@@ -35,6 +35,7 @@ if __name__ == '__main__':
 
     if ssd_flanks == 'broadband': ssd_folder = 'SSD_feats_broad'
     else: ssd_folder = 'SSD_feats'
+    ssd_folder += f'_{SETTINGS["FT_VERSION"]}'  # adds v4 (filtered SSD), or v5 (unfilt. SSD)
 
     ### Define paths
     feat_path = join(get_project_path('results'),
@@ -60,19 +61,22 @@ if __name__ == '__main__':
         if SETTINGS['FEATS_INCL']['TO_EXTRACT_POWERS']:
 
             print(f'\n\tSTART local powers sub-{sub}...')
-            ssd_feats.extract_local_SSD_powers(sub_SSD=sub_SSD, feat_path=feat_path,)
+            ssd_feats.extract_local_SSD_powers(sub_SSD=sub_SSD,
+                                               feat_path=feat_path,)
         
         # Extract local spectral power features
         if SETTINGS['FEATS_INCL']['TO_EXTRACT_BURSTS']:
 
             print(f'\n\tSTART local powers sub-{sub}...')
-            ssd_feats.get_ssd_bursts(sub_SSD=sub_SSD, feat_path=feat_path,)
+            ssd_feats.get_ssd_bursts(sub_SSD=sub_SSD,
+                                     feat_path=feat_path,)
         
         # create local PAC features
         if SETTINGS['FEATS_INCL']['TO_EXTRACT_LOCAL_PAC']:
             
             print(f'\n\tSTART local-PAC sub-{sub}...')
-            ssd_feats.extract_local_SSD_PACs(sub_SSD=sub_SSD, feat_path=feat_path,)
+            ssd_feats.extract_local_SSD_PACs(sub_SSD=sub_SSD,
+                                             feat_path=feat_path,)
         
         # create Coherence features
         if SETTINGS['FEATS_INCL']['TO_EXTRACT_COH_STN_STN']:

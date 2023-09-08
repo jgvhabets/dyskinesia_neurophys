@@ -143,6 +143,7 @@ class SSD_bands_per_window:
     s_rate: int
     freq_bands_incl: dict
     ssd_flanks = 5
+    use_freqBand_filtered=True
 
     def __post_init__(self,):
         for f_band in self.freq_bands_incl.keys():
@@ -151,6 +152,7 @@ class SSD_bands_per_window:
                 fband_interest=self.freq_bands_incl[f_band],
                 s_rate=self.s_rate,
                 flank_distance=self.ssd_flanks,
+                use_freqBand_filtered=self.use_freqBand_filtered,
             )
             setattr(self, f_band, ssd_ts)
 
@@ -239,6 +241,11 @@ def load_windowed_ssds(sub, dType, settings: dict):
                     settings['DATA_VERSION'],
                     f'sub-{sub}')
     ssd_win_fname = f'SSD_windowedBands_{sub}_{dType}'
+
+    # add v5 for ft-version 5 with non-filtered SSD signals
+    if 'FT_VERSION' in settings.keys():
+        if settings['FT_VERSION'] == 'v5':
+            ssd_win_fname += '_v5'
 
     try:
         if settings['SSD_flanks'] == 'broadband':
@@ -355,7 +362,13 @@ class create_SSDs():
             print(f'\n\tstart create SSDs: {dType}')
             ssd_windows_name = f'SSD_windowedBands_{self.sub}_{dType}'
             # add broadband flanks to SSD-naming
-            if SSD_FLANKS == 'broadband': ssd_windows_name = f'broad{ssd_windows_name}'
+            if SSD_FLANKS == 'broadband':
+                ssd_windows_name = f'broad{ssd_windows_name}'
+            # add v5 for ft-version 5 with non-filtered SSD signals
+            if 'FT_VERSION' in SETTINGS.keys():
+                if SETTINGS['FT_VERSION'] == 'v5':
+                    ssd_windows_name += '_v5'
+
             # check existence of ssd windowed data
             if (SETTINGS['OVERWRITE_DATA'] == False and
                 exists(join(windows_path, ssd_windows_name+'.json')) and
@@ -380,23 +393,24 @@ class create_SSDs():
             # check if windows are already available
             if np.logical_and(self.use_stored_windows,
                               exists(dType_win_path)):
-                print(f'\tload data from {windows_path}....')
+                print(f'\t...loading data from {windows_path}...')
                 windows = load_class_pickle(dType_win_path)
                 print(f'\tWINDOWS LOADED from {dType_fname} in {windows_path}')
 
             else:
-                print('create data ....')
+                print('\t...create data ....')
                 dat_fname = (f'{self.sub}_mergedData_{SETTINGS["DATA_VERSION"]}'
                             f'_{dType}.P')
 
                 # check existence of file in folder
                 if dat_fname not in listdir(mergedData_path):
-                    print(f'{dat_fname} NOT AVAILABLE')
+                    print(f'!!! {dat_fname} NOT AVAILABLE')
                     continue
 
                 # load data (as mergedData class)
+                print(f'\t...{dat_fname} loading...')
                 data = load_class_pickle(join(mergedData_path, dat_fname))
-                print(f'{dat_fname} loaded')
+                print(f'\t...{dat_fname} loaded')
                 
                 # divides full dataframe in present windows
                 windows = get_windows(
@@ -417,8 +431,14 @@ class create_SSDs():
             # filter out none-ephys signals
             sel_chs = [c.startswith('LFP') or c.startswith('ECOG')
                        for c in windows.keys]
-            sel_chs_dbl_ecog = [not 'SMC_AT' in c for c in windows.keys]
-            sel_chs = np.logical_and(sel_chs, sel_chs_dbl_ecog)
+            # filter out double ecog channels if present
+            max_ecog_chs = 6
+            if self.sub == '013': max_ecog_chs = 12
+            if (any('SMC_AT' in c for c in windows.keys) and
+                dType == 'ECOG' and sum(sel_chs) > max_ecog_chs):
+                sel_chs_dbl_ecog = [not 'SMC_AT' in c for c in windows.keys]
+                sel_chs = np.logical_and(sel_chs, sel_chs_dbl_ecog)
+
             # change incorrect arry of arrays to 3d-array
             winLen_samps = SETTINGS["WIN_LEN_sec"] * windows.fs
             if any(np.where([w.shape[0] != winLen_samps
@@ -445,7 +465,7 @@ class create_SSDs():
             for i_w, win_dat in enumerate(windows.data):
                 
                 win_dat = win_dat.astype(np.float64)
-                # print(f'start win # {i_w}, win_dat shape: {win_dat.shape}')
+                print(f'start win # {i_w}, win_dat shape: {win_dat.shape}')
 
                 if NaN_accept_part == 0:
                     # select only rows without missings in current window
@@ -519,7 +539,7 @@ class create_SSDs():
                             fband_interest=f_range,
                             s_rate=windows.fs,
                             flank_distance=SSD_FLANKS,
-                            use_freqBand_filtered=True,
+                            use_freqBand_filtered=SETTINGS['use_filtered_SSD'],
                             return_comp_n=0,
                         )
                         if len(ssd_filt_data) < n_samples_win:
