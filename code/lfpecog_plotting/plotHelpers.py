@@ -52,6 +52,9 @@ def get_colors(scheme='PaulTol'):
         'lila': '#AA4499',
         'purplered': '#882255'}
     """
+    assert scheme in ['PaulTol', 'Jacoba_107'], (
+        'scheme entry should be "PaulTol", or "Jacoba_107"'
+    )
     cmap_json = join('lfpecog_plotting',
                      'color_schemes.json')
 

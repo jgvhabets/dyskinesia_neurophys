@@ -4,7 +4,8 @@ PSDs from SSD timeseries
 """
 
 # import public functions
-from os.path import join
+from os.path import join, exists
+from os import makedirs
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -214,9 +215,12 @@ def plot_indiv_ssd_timefreq_allSources(
 
     plt.tight_layout()
     if SAVE_PLOT:
-        plt.savefig(join(get_project_path('figures'),
-                        'ft_exploration', DATA_VERSION,
-                        'ssd_timeFreqs', fig_name),
+        path = join(get_project_path('figures'),
+                        'ft_exploration',
+                        f'data_{DATA_VERSION}_ft_{FT_VERSION}',
+                        'ssd_timeFreqs')
+        if not exists(path): makedirs(path)
+        plt.savefig(join(path, fig_name),
                     facecolor='w', dpi=300,)
         print(f'sub-{sub}, figure saved: {fig_name}')
 

@@ -161,6 +161,10 @@ def rename_raw_ch_names(ch_names, sub=None):
         if 'ECOG' in ch.upper() or 'ECX' in ch.upper():
             ecog_side = get_ecog_side(sub=sub).upper()[0]
             ch_names[i] = f'ECOG_{ecog_side}_{ch[4:6]}'
+        
+        if ch_names[i].endswith('SMC_AT'):
+            print(f'remove SMC_AT from {ch}')
+            ch_names[i] = ch_names[i][:-7]
     
     return ch_names
 

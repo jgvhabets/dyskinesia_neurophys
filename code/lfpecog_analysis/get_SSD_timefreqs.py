@@ -57,7 +57,7 @@ def get_SSD_timeFreq(
 
     ssd_folder = 'SSD_feats'
     if SSD_BROAD: ssd_folder += '_broad'
-    ssd_folder += f'-{FT_VERSION}'
+    ssd_folder += f'_{FT_VERSION}'
     path = join(get_project_path('results'),
                             'features', ssd_folder,
                             DATA_VERSION,

@@ -17,12 +17,17 @@ from utils.utils_fileManagement import (get_project_path,
 
 
 def process_mean_stats(
-    mean_stats, datatype, save_stats=True,
+    mean_stats, datatype,
+    DATA_VERSION='v4.0', FT_VERSION='v4',
+    save_stats=True,
 ):
     if save_stats:
-        store_path = os.path.join(get_project_path('results'),
-                                  'stats', f'{datatype}_LMM_noLID_vs_LID')
-        assert os.path.exists(store_path), 'incorrect path'
+        store_path = os.path.join(get_project_path('results'), 'stats',
+                                  f'data_{DATA_VERSION}_ft_{FT_VERSION}',
+                                  f'{datatype}_LMM_noLID_vs_LID')
+        if not os.path.exists(store_path):
+            os.makedirs(store_path)
+            print(f'created STATS PATH: {store_path}')
     
     for i_f, f_hz in enumerate(mean_stats['freqs']):
 
@@ -58,12 +63,15 @@ def process_mean_stats(
             print(f'df for {f_hz} Hz saved')
 
 
-def get_binary_p_perHz(datatype, save_date='0000', load_data=False,
+def get_binary_p_perHz(datatype, save_date='0000',
+                       DATA_VERSION='v4.0', FT_VERSION='v4',
+                       load_data=False,
                        save_ps=True, return_ps=False,
                        return_full_dict=False,):
     
-    store_path = os.path.join(get_project_path('results'),
-                              'stats', f'{datatype}_LMM_noLID_vs_LID')
+    store_path = os.path.join(get_project_path('results'), 'stats',
+                              f'data_{DATA_VERSION}_ft_{FT_VERSION}',
+                              f'{datatype}_LMM_noLID_vs_LID')
     assert os.path.exists(store_path), 'incorrect path'
 
     freqs = np.arange(4, 91)

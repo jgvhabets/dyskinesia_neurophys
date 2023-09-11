@@ -166,9 +166,9 @@ if __name__ == '__main__':
         if PICKLE_PER_SOURCE:
 
             for dType in data.dtypes:
-                if not logical_and(SUB == '019', dType == 'lfp_right'):
-                    print(f'skip sub-{SUB}, {dType}')
-                    continue
+                # if not logical_and(SUB == '019', dType == 'lfp_right'):
+                #     print(f'skip sub-{SUB}, {dType}')
+                #     continue
                 print(f'PROCESS sub-{SUB}, {dType}')
                 # skip other dtypes
                 if True not in [dType.lower().startswith(s)

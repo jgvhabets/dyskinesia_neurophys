@@ -93,9 +93,11 @@ def get_SSD_component(
                                     fs=np.r_[0.8,1.2]*freqOfInt_range, s_rate=s_rate)
 
     wide_filt= meet.iir.butterworth(data_2d, fp=flank_range,
-                                    fs=np.r_[0.8,1.2]*flank_range, s_rate=s_rate)
+                                    fs=np.r_[0.8,1.2]*flank_range,
+                                    s_rate=s_rate)
     flank_filt = meet.iir.butterworth(wide_filt, fs=freqOfInt_range,
-                                    fp=np.r_[0.8,1.2]*freqOfInt_range, s_rate=s_rate)
+                                    fp=np.r_[0.8,1.2]*freqOfInt_range,
+                                    s_rate=s_rate)
 
     # Perform SSD
     SSD_filter, SSD_eigvals = meet.spatfilt.CSP(interestBand_filt, flank_filt)
@@ -143,7 +145,7 @@ class SSD_bands_per_window:
     s_rate: int
     freq_bands_incl: dict
     ssd_flanks = 5
-    use_freqBand_filtered=True
+    use_freqBand_filtered=False
 
     def __post_init__(self,):
         for f_band in self.freq_bands_incl.keys():
@@ -189,7 +191,8 @@ class SSD_bands_windowed:
             for i_f, fband in enumerate(meta['bandwidths']):
                 setattr(self, fband, data[:, i_f, :])  # [n-windows x n-samples]
             
-            if 'ssd_flanks' in list(meta.keys()): self.flanks = meta['ssd_flanks']
+            if 'ssd_flanks' in list(meta.keys()):
+                self.flanks = meta['ssd_flanks']
         
         # create data if not found
         except FileNotFoundError:
@@ -244,8 +247,8 @@ def load_windowed_ssds(sub, dType, settings: dict):
 
     # add v5 for ft-version 5 with non-filtered SSD signals
     if 'FT_VERSION' in settings.keys():
-        if settings['FT_VERSION'] == 'v5':
-            ssd_win_fname += '_v5'
+        if settings['FT_VERSION'] != 'v4':
+            ssd_win_fname += f'_{settings["FT_VERSION"]}'
 
     try:
         if settings['SSD_flanks'] == 'broadband':
@@ -366,8 +369,8 @@ class create_SSDs():
                 ssd_windows_name = f'broad{ssd_windows_name}'
             # add v5 for ft-version 5 with non-filtered SSD signals
             if 'FT_VERSION' in SETTINGS.keys():
-                if SETTINGS['FT_VERSION'] == 'v5':
-                    ssd_windows_name += '_v5'
+                if SETTINGS['FT_VERSION'] != 'v4':
+                    ssd_windows_name += f'_{SETTINGS["FT_VERSION"]}'
 
             # check existence of ssd windowed data
             if (SETTINGS['OVERWRITE_DATA'] == False and

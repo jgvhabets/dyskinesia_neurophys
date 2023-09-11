@@ -3,7 +3,8 @@ Plot overview PSDs for Paper
 """
 
 # import public functions
-from os.path import join
+from os.path import join, exists
+from os import makedirs
 import numpy as np
 from pandas import Series
 import matplotlib.pyplot as plt
@@ -642,8 +643,12 @@ def plot_STN_PSD_vs_LID(
             
     if PROCESS_STATS:
         process_mean_stats(datatype='STN', mean_stats=mean_stats,
+                           DATA_VERSION=DATA_VERSION,
+                           FT_VERSION=FT_VERSION,
                            save_stats=True,)
-        get_binary_p_perHz(datatype='STN', save_date=p_SAVED_DATE,)
+        get_binary_p_perHz(datatype='STN', save_date=p_SAVED_DATE,
+                           DATA_VERSION=DATA_VERSION,
+                           FT_VERSION=FT_VERSION,)
         
 
     ### PLOTTING PART
@@ -731,8 +736,9 @@ def plot_scaling_LID(
 
     if SHOW_SIGN:
         print('load significancies')
-        store_path = join(get_project_path('results'),
-                          'stats', f'{datatype.upper()}_LMM_noLID_vs_LID')
+        store_path = join(get_project_path('results'), 'stats',
+                          f'data_{DATA_VERSION}_ft_{FT_VERSION}',
+                          f'{datatype.upper()}_LMM_noLID_vs_LID')
 
         with open(join(store_path, f'{datatype.upper()}_LMM_results_'
                                    f'pvalues_{p_SAVED_DATE}.json'),
@@ -762,7 +768,6 @@ def plot_scaling_LID(
         elif side == 'all_nonmatch': ax_title = f'{datatype} versus all ipsilateral dyskinesia'
         
         # if PLOT_ONLY_MATCH: ax_title = f'{datatype} versus all contralateral dyskinesia'
-        print(side)
 
         for i_cat, cat in enumerate(psds_to_plot[side].keys()):
             n_subs = n_subs_incl[side][cat]
@@ -841,18 +846,21 @@ def plot_scaling_LID(
                     sig_mask = np.array(ps) < (.05 / 68)  # 68 freqs compared
                     loop_ax.fill_between(x=x_axis, y1=PSD['mean'] - PSD['sd'],
                                             y2=PSD['mean'] + PSD['sd'],
-                                            alpha=.3, where=sig_mask,
-                                            # label=f'{list(cdrs_cat_coding.keys())[int(cat)]}'
-                                            # f' dyskinesia (n={n_subs})',
+                                            alpha=.3,
+                                            # where=sig_mask,
                                             color=colors[int(cat)], )
-                    # none-significant part of line
-                    loop_ax.fill_between(x=x_axis, y1=PSD['mean'] - PSD['sd'],
-                                            y2=PSD['mean'] + PSD['sd'],
-                                            alpha=.3, where=~sig_mask,
-                                            # label=f'{list(cdrs_cat_coding.keys())[int(cat)]} dyskinesia'
-                                            # f' (n={n_subs})',
-                                            edgecolor=colors[int(cat)],
-                                            facecolor='None', hatch='//',)
+                    # # none-significant part of line
+                    # loop_ax.fill_between(x=x_axis, y1=PSD['mean'] - PSD['sd'],
+                    #                         y2=PSD['mean'] + PSD['sd'],
+                    #                         alpha=.3, where=~sig_mask,
+                    #                         edgecolor=colors[int(cat)],
+                    #                         facecolor='None', hatch='//',)
+
+                    # one significance shade for all severities
+                    loop_ax.fill_between(x=x_axis, y1=-100, y2=100,
+                                        alpha=.1,
+                                        where=sig_mask,
+                                        color=colors[5],)
                 else:
                     loop_ax.fill_between(x=x_axis, y1=PSD['mean'] - PSD['sd'],
                                             y2=PSD['mean'] + PSD['sd'],
@@ -905,9 +913,12 @@ def plot_scaling_LID(
         plt.tight_layout()
 
         if SAVE_PLOT:
-            plt.savefig(join(get_project_path('figures'), 'ft_exploration',
-                             f'data_{DATA_VERSION}_ft_{FT_VERSION}',
-                             'descr_PSDs', fig_name),
+            path = join(get_project_path('figures'),
+                        'ft_exploration',
+                        f'data_{DATA_VERSION}_ft_{FT_VERSION}',
+                        'descr_PSDs')
+            if not exists(path): makedirs(path)
+            plt.savefig(join(path, fig_name),
                         facecolor='w', dpi=300,)
 
         if SHOW_PLOT: plt.show()
