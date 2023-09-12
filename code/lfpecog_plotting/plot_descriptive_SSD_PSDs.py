@@ -235,7 +235,7 @@ def plot_STN_PSD_vs_LID(
     plt_ax_to_return=False,
     fsize=12,
     fig_name='PLOT_STN_PSD_vs_DYSK',
-    CALC_FREQ_CORR=False,
+    RETURN_FREQ_CORR=False,
     SINGLE_SUB_LINES=False,
     PLOT_ONLY_MATCH=False,
     SHOW_ONLY_GAMMA=False,
@@ -291,7 +291,7 @@ def plot_STN_PSD_vs_LID(
     else: n_reps = 1
 
     ft_cdrs = {'LID': [], 'noLID': []}
-    if CALC_FREQ_CORR: FREQ_CORRs = {}
+    if RETURN_FREQ_CORR: FREQ_CORRs = {}
 
     if sel_subs:
         subs = [sub for sub in all_timefreqs.keys()
@@ -401,7 +401,7 @@ def plot_STN_PSD_vs_LID(
                                             preLID_separate=False,
                                             convert_inBetween_zeros=False)
                 cdrs_categs['bi_match1'] = cdrs_cats[bi_lid_sel]
-                if CALC_FREQ_CORR: cdrs_full['bi_match1'] = ft_cdrs['LID'][bi_lid_sel]
+                if RETURN_FREQ_CORR: cdrs_full['bi_match1'] = ft_cdrs['LID'][bi_lid_sel]
                 # add match-lfp-side with NONMATCHING body side (is new)
                 tf_values['bi_nonmatch1'] = tf_values['match'][:, bi_lid_sel]
                 cdrs_cats = categorical_CDRS(y_full_scale=ft_cdrs['noLID'],  # was bi, should be match-LID
@@ -409,7 +409,7 @@ def plot_STN_PSD_vs_LID(
                                             preLID_separate=False,
                                             convert_inBetween_zeros=False)
                 cdrs_categs['bi_nonmatch1'] = cdrs_cats[bi_lid_sel]
-                if CALC_FREQ_CORR: cdrs_full['bi_nonmatch1'] = ft_cdrs['noLID'][bi_lid_sel]
+                if RETURN_FREQ_CORR: cdrs_full['bi_nonmatch1'] = ft_cdrs['noLID'][bi_lid_sel]
 
             # select unilat LID itself, changes tf_values
             if LAT_or_SCALE in ['LAT_UNI', 'SCALE']:
@@ -485,7 +485,7 @@ def plot_STN_PSD_vs_LID(
                                             convert_inBetween_zeros=False,
                                             return_coding_dict=True)
                 cdrs_categs['bi_nonmatch2'] = cdrs_cats[bi_lid_sel]
-                if CALC_FREQ_CORR: cdrs_full['bi_nonmatch2'] = ft_cdrs['LID'][bi_lid_sel]
+                if RETURN_FREQ_CORR: cdrs_full['bi_nonmatch2'] = ft_cdrs['LID'][bi_lid_sel]
                 # take for nonmatch-epys-hemisphere, the MATCHING noLID_cdrs side 
                 tf_values['bi_match2'] = tf_values['nonmatch'][:, bi_lid_sel]
                 cdrs_cats, coding_dict = categorical_CDRS(y_full_scale=ft_cdrs['noLID'],  # was bi
@@ -494,7 +494,7 @@ def plot_STN_PSD_vs_LID(
                                             convert_inBetween_zeros=False,
                                             return_coding_dict=True)
                 cdrs_categs['bi_match2'] = cdrs_cats[bi_lid_sel]
-                if CALC_FREQ_CORR: cdrs_full['bi_match2'] = ft_cdrs['noLID'][bi_lid_sel]
+                if RETURN_FREQ_CORR: cdrs_full['bi_match2'] = ft_cdrs['noLID'][bi_lid_sel]
                 
             # select nonmatching EPHYS to unilat LID
             if LAT_or_SCALE in ['LAT_UNI', 'SCALE']:
@@ -508,7 +508,7 @@ def plot_STN_PSD_vs_LID(
                     cdrs_categs['nonmatch'] = cdrs_cats[uni_lid_sel]
 
             # create sub dict for FREQxCORR
-            if CALC_FREQ_CORR: FREQ_CORRs[sub] = {}
+            if RETURN_FREQ_CORR: FREQ_CORRs[sub] = {}
 
             # calculate MEAN PSD VALUES (match vs non-match) for LATERALITY
             for match_label in ['match', 'nonmatch']:  # loops over two STNs
@@ -559,7 +559,7 @@ def plot_STN_PSD_vs_LID(
                             for i_lab, lab in enumerate([f'{label}1', f'{label}2']):
 
                                 # create sub dict for FREQxCORR
-                                if CALC_FREQ_CORR:
+                                if RETURN_FREQ_CORR:
                                     if i_lab == 0:
                                         # start array with baseline values
                                         bl_values = np.array(tf_values[f'{match_label}_BL'])
@@ -587,7 +587,7 @@ def plot_STN_PSD_vs_LID(
                                     except KeyError: subs_incl[label][cat] = [sub,]
                             
 
-                            if CALC_FREQ_CORR:
+                            if RETURN_FREQ_CORR:
                                 FREQ_CORRs[sub][label] = (freqCorr_arr, freqCorr_scores, tf_freqs)
 
         # process sub stats at end of subject iteration
@@ -620,7 +620,7 @@ def plot_STN_PSD_vs_LID(
                 combi_psds['all_match'][cat].extend(psds_to_plot[side][cat])
         psds_to_plot = combi_psds
 
-    if CALC_FREQ_CORR:
+    if RETURN_FREQ_CORR:
         print('not plotting, only returning freq corr values')
         return FREQ_CORRs
 
@@ -857,8 +857,8 @@ def plot_scaling_LID(
                     #                         facecolor='None', hatch='//',)
 
                     # one significance shade for all severities
-                    loop_ax.fill_between(x=x_axis, y1=-100, y2=100,
-                                        alpha=.1,
+                    loop_ax.fill_between(x=x_axis, y1=-50, y2=100,
+                                        alpha=.05,
                                         where=sig_mask,
                                         color=colors[5],)
                 else:
@@ -1434,8 +1434,12 @@ def plot_ECOG_PSD_vs_LID(
     if PROCESS_STATS:
         mean_stats['freqs'] = tf_freqs
         process_mean_stats(datatype='ECOG', mean_stats=mean_stats,
+                           DATA_VERSION=DATA_VERSION,
+                           FT_VERSION=FT_VERSION,
                            save_stats=True,)
-        get_binary_p_perHz(datatype='ECOG', save_date=p_SAVED_DATE,)
+        get_binary_p_perHz(datatype='ECOG', save_date=p_SAVED_DATE,
+                           DATA_VERSION=DATA_VERSION,
+                           FT_VERSION=FT_VERSION,)
 
 
     ### PLOTTING PART

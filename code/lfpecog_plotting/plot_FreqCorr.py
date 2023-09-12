@@ -3,7 +3,8 @@ Plot Frequency-Correlation-Plots
 """
 
 # import public functions
-from os.path import join
+from os.path import join, exists
+from os import makedirs
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.pylab as pl
@@ -99,6 +100,8 @@ def calculate_Rs_FreqCorr(
 def plot_FreqCorr(frqCor_values, freqs,
                   fig_name=None, save_dir=None,
                   use_exact_values=False,):
+
+    if not exists(save_dir): makedirs(save_dir)
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 6),
                             #  sharey='row',

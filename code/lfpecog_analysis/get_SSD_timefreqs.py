@@ -20,14 +20,17 @@ from lfpecog_features.get_ssd_data import get_subject_SSDs
 def get_all_ssd_timeFreqs(
     SUBS, DATA_VERSION='v4.0', FT_VERSION='v4',
     WIN_LEN=10, WIN_OVERLAP=0.5, SSD_BROAD=True,
+    FORCE_PSD_CREATION=False, 
 ):
     TFs = {}
 
     for sub in SUBS:
         psd_sub = get_SSD_timeFreq(
-            sub=sub, DATA_VERSION=DATA_VERSION, FT_VERSION=FT_VERSION,
+            sub=sub, DATA_VERSION=DATA_VERSION,
+            FT_VERSION=FT_VERSION,
             WIN_LEN=WIN_LEN, WIN_OVERLAP=WIN_OVERLAP,
-            SSD_BROAD=SSD_BROAD,    
+            SSD_BROAD=SSD_BROAD,
+            FORCE_PSD_CREATION=FORCE_PSD_CREATION,  
         )
         
         tf_sub = {}
@@ -51,7 +54,8 @@ TimeFreqTuple = namedtuple('TimeFreqTuple',
 
 def get_SSD_timeFreq(
     sub, DATA_VERSION='v4.0', FT_VERSION='v4',
-    WIN_LEN=10, WIN_OVERLAP=0.5, SSD_BROAD=True,    
+    WIN_LEN=10, WIN_OVERLAP=0.5, SSD_BROAD=True,
+    FORCE_PSD_CREATION=False,   
 ):
     dict_out = {}
 
@@ -73,9 +77,11 @@ def get_SSD_timeFreq(
         create_PSDs = True
     else:
         create_PSDs = False
+    
+    if FORCE_PSD_CREATION: create_PSDs = True
 
     if create_PSDs: 
-        print(f'START CREATING SSD PSDs for sub-{sub} in get_SSD_timeFreq()')
+        print(f'START CREATING SSD PSDs for sub-{sub} (fts: {FT_VERSION}) in get_SSD_timeFreq()')
         ssd_subClass = get_subject_SSDs(
             sub=sub,
             incl_stn=True,
@@ -101,7 +107,7 @@ def get_SSD_timeFreq(
         return dict_out    
     
     elif not create_PSDs:
-        print(f'load existing powers for sub-{sub} ({filename})')
+        print(f'load existing powers for sub-{sub} (fts: {FT_VERSION}, {filename})')
 
         # load dict from json
         with open(join(path, filename), 'r') as f:
@@ -173,7 +179,7 @@ def create_SSD_timeFreqArray(subSourceSSD, win_len_sec=1,):
     max_f = max([max(r) for r in bands.values()])
 
     for i, bw in enumerate(bands.keys()):
-
+        print(f'create_SSD_timefreq: {bw}')
         # convert windows with overlap into continuous array
         cont_arr, cont_time_arr, cont_time_secs = get_cont_ssd_arr(
             subSourceSSD=subSourceSSD, bw=bw
@@ -194,7 +200,7 @@ def create_SSD_timeFreqArray(subSourceSSD, win_len_sec=1,):
         # define freq-ranges for band
         bw_range = bands[bw]
         if bw == 'hi_beta': bw_range[1] = 50
-        if bw == 'gamma': bw_range[0] = 50
+        if bw in ['gamma', 'gamma1']: bw_range[0] = 50
         # select and add PSD values for ranges
         sel = px.T[bw_range[0]:bw_range[1] + 1, :]
         sum_timefreq.loc[bw_range[0]:bw_range[1]] = sel

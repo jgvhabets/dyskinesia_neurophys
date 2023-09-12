@@ -255,10 +255,12 @@ def load_windowed_ssds(sub, dType, settings: dict):
             ssd_win_fname = f'broad{ssd_win_fname}'
     except:
         ssd_win_fname=ssd_win_fname
+    
 
     meta_f = join(win_path, ssd_win_fname + '.json')
     data_f = join(win_path, ssd_win_fname + '.npy')
-    
+    print('load windowed ssd', meta_f, data_f)
+
     # # assure existence of files
     # assert np.logical_and(exists(meta_f), exists(data_f)), (
     #     f'inserted SSD data files {ssd_win_fname} (.npy, .json)'

@@ -34,6 +34,7 @@ def plot_indiv_ssd_timefreq_allSources(
     SAVE_PLOT = False,
     SHOW_PLOT = False,
     CDRS_RATER='Jeroen',
+    FORCE_PSD_CREATION=False,
 ):
     # adjust
     fig_name = f'{fig_name_base}_sub{sub}'
@@ -42,8 +43,10 @@ def plot_indiv_ssd_timefreq_allSources(
     if PERC_CHANGE: fig_name += 'PerCh'
     if ZSCORE: fig_name += '_Z'
 
-    PSD_ssd_dict = ssd_TimeFreq.get_SSD_timeFreq(sub=sub, DATA_VERSION=DATA_VERSION,
-                                      FT_VERSION=FT_VERSION,)
+    PSD_ssd_dict = ssd_TimeFreq.get_SSD_timeFreq(
+        sub=sub, DATA_VERSION=DATA_VERSION,
+        FT_VERSION=FT_VERSION,
+        FORCE_PSD_CREATION=FORCE_PSD_CREATION,)
     sources = PSD_ssd_dict.keys()
     
     # CREATE FIGURE
