@@ -127,7 +127,7 @@ def plot_FreqCorr(frqCor_values, freqs,
             # use exact numbers
             if use_exact_values:
                 # plot bars with mean correlations
-                print(f'color: {bar_clrs[i]}')
+                print(f'{state} color: {bar_clrs[i]}')
                 sign = frqCor_values[state]['p'].values < (.05 / len(freqs))
                 axes[i_ax].bar(np.array(freqs)[sign],
                                frqCor_values[state]['R'][sign],
@@ -139,7 +139,11 @@ def plot_FreqCorr(frqCor_values, freqs,
                                 width=bar_ws[i], align='edge',
                                 # label=f'{leg_labs[state]} non-sign',
                                 color=bar_clrs[i], alpha=.4,)
-
+                # plot legend
+                if i == 2:
+                    axes[1].legend()
+                
+                
                 if 'R_stderr' in frqCor_values[state].keys():
                     axes[i_ax].fill_between(freqs,
                                             y1=frqCor_values[state]['R'] - frqCor_values[state]['R_stderr'],
@@ -193,8 +197,7 @@ def plot_FreqCorr(frqCor_values, freqs,
 
     # # split legend over axes
     hnd, lab = axes[1].get_legend_handles_labels()
-    print(hnd)
-    print(lab)
+
     axes[0].legend([hnd[0]], [lab[0]], fontsize=fsize-2, ncol=1, frameon=False,
             loc='center left', bbox_to_anchor=(.1, 1.01))
     axes[1].legend([hnd[1]], [lab[1]], fontsize=fsize-2, ncol=1, frameon=False,

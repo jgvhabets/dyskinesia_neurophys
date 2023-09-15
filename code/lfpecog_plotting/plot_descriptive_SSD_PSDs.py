@@ -6,7 +6,7 @@ Plot overview PSDs for Paper
 from os.path import join, exists
 from os import makedirs
 import numpy as np
-from pandas import Series
+from pandas import Series, isna
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from itertools import compress
@@ -228,6 +228,8 @@ def plot_STN_PSD_vs_LID(
     all_timefreqs, sel_subs=None,
     CDRS_RATER='Patricia',
     LAT_or_SCALE='LAT_UNI',
+    incl_PRE_LID=False,  # currently coded as category 0.5
+    PRELID_MIN=10,  # in minutes
     LOG_POWER=True, ZSCORE_FREQS=True,
     SMOOTH_PLOT_FREQS=0,
     BASELINE_CORRECT=False,
@@ -311,7 +313,7 @@ def plot_STN_PSD_vs_LID(
         stats_lid_pow = {'match': [], 'nonmatch': []}
         stats_lid_cdrs = {'match': [], 'nonmatch': []}
         # enable combining of unilateral and bilateral dyskinesia for 'LAT_ALL_SCALE'
-        for i_rep in np.arange(n_reps)[:1]:
+        for i_rep in np.arange(n_reps):
             
             # if 'LAT_ALL_SCALE' is defined, first run uni, than bilat
             if n_reps == 2 and i_rep == 0: LAT_or_SCALE = 'SCALE'
@@ -319,7 +321,7 @@ def plot_STN_PSD_vs_LID(
 
             # check for presence unilateral LID
             (LID_side, noLID_side, LFP_match_side,
-            LFP_nonmatch_side) = find_unilateral_LID_sides(sub, CDRS_RATER=CDRS_RATER)
+             LFP_nonmatch_side) = find_unilateral_LID_sides(sub, CDRS_RATER=CDRS_RATER)
             
             if LAT_or_SCALE == 'LAT_UNI':
                 if not LID_side: continue  # skip subject if no UNILATERAL DYSKINESIA PRESENT
@@ -362,12 +364,30 @@ def plot_STN_PSD_vs_LID(
                 _, ft_cdrs['bi'] = find_select_nearest_CDRS_for_ephys(
                     sub=sub, side='both', ft_times=tf_times['match'],
                     cdrs_rater=CDRS_RATER,
-                ) 
+                )
+                if incl_PRE_LID:
+                    start_lid_i = np.where(ft_cdrs['bi'] > 0)[0][0]
+                    start_lid_t = tf_times['match'][start_lid_i]
+                    start_prelid_t = start_lid_t - PRELID_MIN
+                    prelid_sel = np.logical_and(tf_times['match'] > start_prelid_t,
+                                                tf_times['match'] < start_lid_t)
+                    # select ft values for pre LID
+                    tf_values['match_preLID'] = tf_values['match'][:, prelid_sel]
+                    cdrs_categs['match_preLID'] = [0.5] * len(tf_values['match_preLID'])
+
+
             
             # extract BASELINE and BILAT selections from tf_values, before
             # tf_values itself is adjusted due to the unilat selection
             if BASELINE_CORRECT:
                 bl_sel = np.logical_and(ft_cdrs['LID'] == 0, ft_cdrs['noLID'] == 0)
+                # # excl pre LID from BASELINE
+                if incl_PRE_LID and start_prelid_t > 5:
+                    bl_sel = bl_sel.astype(int) - prelid_sel.astype(int)
+                    bl_sel[bl_sel == -1] = 0
+                    bl_sel = bl_sel.astype(bool)
+
+                # select baseline
                 tf_values['match_BL'] = tf_values['match'][:, bl_sel]
 
                 if i_rep == 0:  # add tuple 
@@ -383,6 +403,7 @@ def plot_STN_PSD_vs_LID(
                                             preLID_separate=False,
                                             convert_inBetween_zeros=False)
                 cdrs_categs['bi_match'] = cdrs_cats[bi_lid_sel]
+
                 # add match STN during bilateral LID for STATS
                 stats_lid_pow['match'].append(tf_values[f'bi_match']) 
                 stats_lid_cdrs['match'].append(ft_cdrs['LID'][bi_lid_sel])  # add cdrs values for body side corr to powers
@@ -401,7 +422,9 @@ def plot_STN_PSD_vs_LID(
                                             preLID_separate=False,
                                             convert_inBetween_zeros=False)
                 cdrs_categs['bi_match1'] = cdrs_cats[bi_lid_sel]
+                
                 if RETURN_FREQ_CORR: cdrs_full['bi_match1'] = ft_cdrs['LID'][bi_lid_sel]
+                
                 # add match-lfp-side with NONMATCHING body side (is new)
                 tf_values['bi_nonmatch1'] = tf_values['match'][:, bi_lid_sel]
                 cdrs_cats = categorical_CDRS(y_full_scale=ft_cdrs['noLID'],  # was bi, should be match-LID
@@ -409,6 +432,7 @@ def plot_STN_PSD_vs_LID(
                                             preLID_separate=False,
                                             convert_inBetween_zeros=False)
                 cdrs_categs['bi_nonmatch1'] = cdrs_cats[bi_lid_sel]
+
                 if RETURN_FREQ_CORR: cdrs_full['bi_nonmatch1'] = ft_cdrs['noLID'][bi_lid_sel]
 
             # select unilat LID itself, changes tf_values
@@ -421,13 +445,12 @@ def plot_STN_PSD_vs_LID(
                                                 preLID_minutes=0,
                                                 preLID_separate=False,
                                                 convert_inBetween_zeros=False)
-                    cdrs_categs['match'] = cdrs_cats[uni_lid_sel]
-                    # print(f'Subject-{sub} unilateral-LID: n={sum(uni_lid_sel)}')    
+                    cdrs_categs['match'] = cdrs_cats[uni_lid_sel]                        
+                
                 # add matching STN during unilateral LID for STATS
                 stats_lid_pow['match'].append(tf_values['match'])
                 stats_lid_cdrs['match'].append(ft_cdrs['LID'][uni_lid_sel])  # add cdrs values for body side corr to powers
-                
-
+            
             
             # NON-matching LFP side to LID
             _, ft_cdrs['LID'] = find_select_nearest_CDRS_for_ephys(
@@ -443,11 +466,26 @@ def plot_STN_PSD_vs_LID(
                     sub=sub, side='both', ft_times=tf_times['nonmatch'],
                     cdrs_rater=CDRS_RATER,
                 )
+                if incl_PRE_LID:
+                    start_lid_i = np.where(ft_cdrs['bi'] > 0)[0][0]
+                    start_lid_t = tf_times['nonmatch'][start_lid_i]
+                    start_prelid_t = start_lid_t - PRELID_MIN
+                    prelid_sel = np.logical_and(tf_times['nonmatch'] > start_prelid_t,
+                                                tf_times['nonmatch'] < start_lid_t)
+                    # select preLID timefreq values
+                    tf_values['nonmatch_preLID'] = tf_values['nonmatch'][:, prelid_sel]
+                    cdrs_categs['nonmatch_preLID'] = [0.5] * len(tf_values['nonmatch_preLID'])
                 
             # extract BASELINE and BILAT selections from tf_values, before
             # tf_values itself is adjusted due to the unilat selection
             if BASELINE_CORRECT:
                 bl_sel = np.logical_and(ft_cdrs['LID'] == 0, ft_cdrs['noLID'] == 0)
+                # excl pre LID from BASELINE
+                if incl_PRE_LID and start_prelid_t > 5:
+                    bl_sel = bl_sel.astype(int) - prelid_sel.astype(int)
+                    bl_sel[bl_sel == -1] = 0
+                    bl_sel = bl_sel.astype(bool)
+                # select baseline
                 tf_values['nonmatch_BL'] = tf_values['nonmatch'][:, bl_sel]
 
                 if i_rep == 0:  # add tuple 
@@ -467,6 +505,7 @@ def plot_STN_PSD_vs_LID(
                                             convert_inBetween_zeros=False,
                                             return_coding_dict=True)
                 cdrs_categs['bi_nonmatch'] = cdrs_cats[bi_lid_sel]
+
                 # add nonmatch STN during bilateral LID for STATS
                 stats_lid_pow['nonmatch'].append(tf_values[f'bi_nonmatch'])                        
                 stats_lid_cdrs['nonmatch'].append(ft_cdrs['noLID'][bi_lid_sel])  # add cdrs values for body side corr to powers
@@ -485,7 +524,9 @@ def plot_STN_PSD_vs_LID(
                                             convert_inBetween_zeros=False,
                                             return_coding_dict=True)
                 cdrs_categs['bi_nonmatch2'] = cdrs_cats[bi_lid_sel]
+
                 if RETURN_FREQ_CORR: cdrs_full['bi_nonmatch2'] = ft_cdrs['LID'][bi_lid_sel]
+
                 # take for nonmatch-epys-hemisphere, the MATCHING noLID_cdrs side 
                 tf_values['bi_match2'] = tf_values['nonmatch'][:, bi_lid_sel]
                 cdrs_cats, coding_dict = categorical_CDRS(y_full_scale=ft_cdrs['noLID'],  # was bi
@@ -494,6 +535,7 @@ def plot_STN_PSD_vs_LID(
                                             convert_inBetween_zeros=False,
                                             return_coding_dict=True)
                 cdrs_categs['bi_match2'] = cdrs_cats[bi_lid_sel]
+
                 if RETURN_FREQ_CORR: cdrs_full['bi_match2'] = ft_cdrs['noLID'][bi_lid_sel]
                 
             # select nonmatching EPHYS to unilat LID
@@ -537,6 +579,19 @@ def plot_STN_PSD_vs_LID(
                         dict_lab = label.split('_')[0]  # take match/nonmatch/bi
                     
                         if LAT_or_SCALE == 'SCALE':
+                            # add preLID category
+                            if incl_PRE_LID:
+                                prelid_psd = np.nanmean(tf_values[f'{match_label}_preLID'],
+                                                     axis=1)
+                                if BASELINE_CORRECT:
+                                    prelid_psd = (prelid_psd - bl_psd) / bl_psd * 100
+                                if 0.5 not in psds_to_plot[dict_lab].keys():
+                                    psds_to_plot[dict_lab][0.5] = []
+                                if not all(isna(prelid_psd)):
+                                    psds_to_plot[dict_lab][0.5].append(list(prelid_psd))
+                                    # keep track of individual subs included
+                                    try: subs_incl[dict_lab][0.5].append(sub)
+                                    except KeyError: subs_incl[dict_lab][0.5] = [sub,]
                             # add subject-mean per category (add empty list if necessary)
                             for cat in np.unique(cdrs_categs[label]):
                                 cat_sel = cdrs_categs[label] == cat
@@ -649,11 +704,17 @@ def plot_STN_PSD_vs_LID(
         get_binary_p_perHz(datatype='STN', save_date=p_SAVED_DATE,
                            DATA_VERSION=DATA_VERSION,
                            FT_VERSION=FT_VERSION,)
-        
+
+    if incl_PRE_LID:
+        coding_keys = list(coding_dict.keys())
+        coding_values = list(coding_dict.values())
+        coding_dict ={coding_keys[0]: coding_values[0],
+                      'pre-LID': 0.5}
+        for k, v in zip(coding_keys[1:], coding_values[1:]):
+            coding_dict[k] = v
 
     ### PLOTTING PART
     if LAT_or_SCALE == 'LAT_UNI':
-        print('PLOT UNILAT')
         plot_unilateral_LID(plt_ax_to_return=plt_ax_to_return,
                             datatype='STN',
                             psds_to_plot=psds_to_plot,
@@ -752,8 +813,9 @@ def plot_scaling_LID(
         axes = plt_ax_to_return
     
     # colors = [list(get_colors('PaulTol).values())[c] for c in [4, 3, 0, 7]]  # colors are called by cat-value, so 0 is never used if baseline corrected
-    colors = get_colors('Jacoba_107')  # colors are called by cat-value, so 0 is never used if baseline corrected
-
+    colors = get_colors('Jacoba_107')
+    if not 'pre-LID' in cdrs_cat_coding.keys(): colors = colors[1:]   # skip gray
+    
     for i_ax, side in enumerate(psds_to_plot.keys()):
         # prevent error with none subscriptable ax vs axes
         if len(psds_to_plot) == 1: loop_ax = axes
@@ -770,11 +832,15 @@ def plot_scaling_LID(
         # if PLOT_ONLY_MATCH: ax_title = f'{datatype} versus all contralateral dyskinesia'
 
         for i_cat, cat in enumerate(psds_to_plot[side].keys()):
+
+            cat_sel = [v == cat for v in cdrs_cat_coding.values()]
+            cat_name = list(cdrs_cat_coding.keys())[np.where(cat_sel)[0][0]]
             n_subs = n_subs_incl[side][cat]
+
             PSD = {}
             psds = np.array(psds_to_plot[side][cat])
-            PSD['mean'] = np.mean(psds, axis=0)
-            PSD['sd'] = np.std(psds, axis=0)
+            PSD['mean'] = np.nanmean(psds, axis=0)
+            PSD['sd'] = np.nanstd(psds, axis=0)
             if STD_ERR: PSD['sd'] = PSD['sd'] / np.sqrt(psds.shape[0])
             
             # blank freqs irrelevant after SSD
@@ -831,16 +897,16 @@ def plot_scaling_LID(
             # PLOT MEAN PSD LINE, AND STDDEV SHADING
             if single_sub_lines and n_subs_cat <= 5:
                 loop_ax.plot(x_axis, psds.T, lw=3, alpha=.5,
-                                label=f'{list(cdrs_cat_coding.keys())[int(cat)]} dyskinesia'
+                                label=f'{cat_name} dyskinesia'
                                 f' (n={n_subs})',  # n_subs instead of n_subs_cat
-                                color=colors[int(cat)], )
+                                color=colors[int(i_cat)], )
             
             elif not single_sub_lines:
                 # plot full line
                 loop_ax.plot(x_axis, PSD['mean'], lw=5, alpha=.5,
-                                label=f'{list(cdrs_cat_coding.keys())[int(cat)]} dyskinesia'
+                                label=f'{cat_name} dyskinesia'
                                 f' (n={n_subs})',
-                                color=colors[int(cat)], )
+                                color=colors[int(i_cat)], )
                 # PLOT VARIANCE SHADING
                 if SHOW_SIGN:
                     sig_mask = np.array(ps) < (.05 / 68)  # 68 freqs compared
@@ -848,12 +914,12 @@ def plot_scaling_LID(
                                             y2=PSD['mean'] + PSD['sd'],
                                             alpha=.3,
                                             # where=sig_mask,
-                                            color=colors[int(cat)], )
+                                            color=colors[int(i_cat)], )
                     # # none-significant part of line
                     # loop_ax.fill_between(x=x_axis, y1=PSD['mean'] - PSD['sd'],
                     #                         y2=PSD['mean'] + PSD['sd'],
                     #                         alpha=.3, where=~sig_mask,
-                    #                         edgecolor=colors[int(cat)],
+                    #                         edgecolor=colors[int(i_cat)],
                     #                         facecolor='None', hatch='//',)
 
                     # one significance shade for all severities
@@ -864,7 +930,7 @@ def plot_scaling_LID(
                 else:
                     loop_ax.fill_between(x=x_axis, y1=PSD['mean'] - PSD['sd'],
                                             y2=PSD['mean'] + PSD['sd'],
-                                            alpha=.3, edgecolor=colors[int(cat)],
+                                            alpha=.3, edgecolor=colors[int(i_cat)],
                                             facecolor='None', hatch='//')
         
         # SET AXTICKS
