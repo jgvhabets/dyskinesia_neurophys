@@ -4,6 +4,7 @@ from os import listdir
 import json
 from pandas import read_csv, read_excel, DataFrame
 import numpy as np
+from scipy.spatial.distance import euclidean
 
 from utils.utils_fileManagement import get_onedrive_path
 
@@ -14,6 +15,67 @@ STN_bids_codes = {'101': 'L005',
                   '107': 'L015',
                   '108': 'L016',
                   '109': 'L017'}
+
+electr_levels = {'MDT': {0: ['01'],
+                         1: ['02', '03', '04'],
+                         2: ['05', '06', '07'],
+                         3: ['08']},
+                 'BST': {0: ['01'],
+                         1: ['02', '03', '04'],
+                         2: ['05', '06', '07'],
+                         3: ['08', '09', '10'],
+                         4: ['11', '12', '13'],
+                         5: ['14', '15', '16']}}
+
+def get_sweet_bip_sandwich(sub, ch_names,):
+    """
+    
+    Input:
+        - sub
+        - ch_names: available channels in data within
+            only one source!
+    """
+    # define datasource
+    for s in ['LFP_L', 'LFP_R', 'ECOG_R', 'ECOG_L']:
+        if s in ch_names[0]: source = s
+    
+
+    if 'ECOG' in source:
+        sandwich = get_ecog_sandwich(ch_names, source)
+    
+    elif 'LFP' in source:
+        coords = get_contact_coords(sub=sub, ch_names=ch_names)
+        print(coords)
+        find_closest_to_sweetspot(
+            coords=coords, source=source,
+            chs_present=ch_names,
+        )
+    
+    return sandwich
+
+
+def get_ecog_sandwich(ch_names, source):
+    """
+    For ECoG, always take a sandwich bipolar montage
+    starting from the first channel present from the
+    burrhole (starting with 6, 5, etc). 1 is the most
+    distal contact
+    """
+
+    most_prox_ch = ch_names[-1]
+    ch_num = int(most_prox_ch.split('_')[-1])
+    dist_ch = False
+
+    while not dist_ch:
+        ch_num -= 1
+        if ch_num < 10: ch_name = f'{source}_0{ch_num}'
+        else: ch_name = f'{source}_{ch_num}'
+
+        if ch_name in ch_names: dist_ch = ch_name
+
+    return (most_prox_ch, dist_ch)
+
+
 
 def get_contact_coords(sub, ch_names):
 
@@ -77,7 +139,13 @@ def find_closest_to_sweetspot(coords, source, chs_present='all',):
                       1: np.nanmean(coords[['x', 'y', 'z']].values[1:4], axis=0),
                       2: np.nanmean(coords[['x', 'y', 'z']].values[4:7], axis=0),
                       3: coords[['x', 'y', 'z']].values[7]}
-        
+    
+    eucl_opt_i = np.argmin([euclidean(lev, swspots[source])
+                  for lev in xyz_levels.values()])
+    eucl_opt_level = list(xyz_levels.keys())[eucl_opt_i]
+    print('EUCcntcts', MDT_lev_contacts[eucl_opt_level])
+
+
     return xyz_levels
 
 

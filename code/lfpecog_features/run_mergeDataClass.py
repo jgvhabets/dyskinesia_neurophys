@@ -94,8 +94,7 @@ if __name__ == '__main__':
         - dataframe data/ index/ columnnames stored
             in path: data/merged_sub_data/DATAVERSION/
     """
-    all_subs = ['105', '107', '108', '109',
-                '019', '020', '021',]  # '106' exteme noisy
+    all_subs = ['110', '022',]  # '106' exteme noisy
     # all_subs = 'define all subs'
 
     OVERWRITE = False  # if False, existing files are not new created and overwritten

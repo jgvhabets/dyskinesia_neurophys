@@ -159,6 +159,7 @@ def rename_raw_ch_names(ch_names, sub=None):
             ch_names[i] = f'LFP_{ch[3]}_{ch[4:6]}'
             
         if 'ECOG' in ch.upper() or 'ECX' in ch.upper():
+            if sub[0] == '1': continue  # no ecog for stn-only subs
             ecog_side = get_ecog_side(sub=sub).upper()[0]
             ch_names[i] = f'ECOG_{ecog_side}_{ch[4:6]}'
         
