@@ -325,7 +325,7 @@ def select_taps_in_data(
 
 
 
-def custom_tap_finding_017(acc_class, acc_side,
+def custom_tap_finding(acc_class, acc_side,
                            move_type='tap',):
     """
     custom needed due to restless legs and
@@ -340,46 +340,66 @@ def custom_tap_finding_017(acc_class, acc_side,
         - acc: acc class from pickle acc 017
     """
     fs = int(acc_class.fs)
+    print(acc_class.sub, acc_side)
 
-    if acc_side == 'left' and move_type == 'tap':
-        sel = acc_class.data[:, 4] == 'tap'  # 4 is task column
-        d = acc_class.data[:, 1][sel]  # 1 because of ACC_L_X
-        t = acc_class.times[sel]
-        idx = np.arange(acc_class.data.shape[0])[sel]
+    if acc_class.sub == '017':
 
-        THR=.5e-7
-        peak_idx, peak_props = find_peaks(d, height=THR, distance=int(fs*5))
+        if acc_side == 'left' and move_type == 'tap':
+            sel = acc_class.data[:, 4] == 'tap'  # 4 is task column
+            d = acc_class.data[:, 1][sel]  # 1 because of ACC_L_X
+            t = acc_class.times[sel]
+            idx = np.arange(acc_class.data.shape[0])[sel]
 
-        peak_t = t[peak_idx]
-        peak_i = idx[peak_idx]
+            THR=.5e-7
+            peak_idx, peak_props = find_peaks(d, height=THR, distance=int(fs*5))
 
-        # create boolean positive during tap
-        tap_bool = np.zeros(acc_class.data.shape[0])
+            peak_t = t[peak_idx]
+            peak_i = idx[peak_idx]
 
-        for i in peak_i:
-            try:
-                if acc_class.times[i+fs] - acc_class.times[i-(2*fs)] > 3:
+            # create boolean positive during tap
+            tap_bool = np.zeros(acc_class.data.shape[0])
+
+            for i in peak_i:
+                try:
+                    if acc_class.times[i+fs] - acc_class.times[i-(2*fs)] > 3:
+                        tap_bool[i - (2*fs):i] = 1
+                    else: tap_bool[i - (2*fs):i+fs] = 1
+                except IndexError:
                     tap_bool[i - (2*fs):i] = 1
-                else: tap_bool[i - (2*fs):i+fs] = 1
-            except IndexError:
-                tap_bool[i - (2*fs):i] = 1
-    
-    elif acc_side == 'right' and move_type == 'tap':
-        tap_bool = np.zeros(acc_class.data.shape[0])
-        peak_i = None
-        peak_t = None
-    
-    elif move_type == 'move':
-        dat = acc_class.data[:, 1:4]
         
-        svm = np.sqrt((dat[:, 0] ** 2 +
-                       dat[:, 1] ** 2 +
-                       dat[:, 2] ** 2).astype(np.float64))
+        elif acc_side == 'right' and move_type == 'tap':
+            tap_bool = np.zeros(acc_class.data.shape[0])
+            peak_i = None
+            peak_t = None
+        
+        elif move_type == 'move':
+            dat = acc_class.data[:, 1:4]
+            
+            svm = np.sqrt((dat[:, 0] ** 2 +
+                        dat[:, 1] ** 2 +
+                        dat[:, 2] ** 2).astype(np.float64))
 
-        if acc_side == 'left': tap_bool = svm > .8e-6
-        elif acc_side == 'right': tap_bool = svm > .1e-6
+            if acc_side == 'left': tap_bool = svm > .8e-6
+            elif acc_side == 'right': tap_bool = svm > .1e-6
 
-        peak_i = None
-        peak_t = None
+            peak_i = None
+            peak_t = None
 
-    return peak_i, peak_t, tap_bool
+        return peak_i, peak_t, tap_bool
+
+    elif acc_class.sub == '105':
+        if acc_side == 'left':
+            col_idx = np.where([c == 'left_tap' for c in acc_class.colnames])[0][0]
+            left_tap = acc_class.data[:, col_idx]
+            return None, None, left_tap
+        
+        elif acc_side == 'right':
+            # right acc data requried
+            R_col = np.where([c == 'ACC_R_Z' for c in acc_class.colnames])[0][0]
+            task_col = np.where([c == 'task' for c in acc_class.colnames])[0][0]
+            right_tap = np.logical_and(
+                acc_class.data[:, R_col] > .25e-6,
+                acc_class.data[:, task_col] == 'tap'
+            )
+            print('done searching')
+            return None, None, right_tap

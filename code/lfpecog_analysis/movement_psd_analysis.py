@@ -12,6 +12,7 @@ from utils.utils_fileManagement import (get_project_path,
                                         load_ft_ext_cfg)
 from lfpecog_plotting.plotHelpers import get_colors
 from lfpecog_plotting.plot_descriptive_SSD_PSDs import break_x_axis_psds_ticks
+from lfpecog_analysis.prep_movement_psd_analysis import custom_tap_finding_017
 
 
 def load_movement_psds(data_version='v4.0', ft_version='v4',):
@@ -196,9 +197,19 @@ def plot_overview_tap_detection(
     
     fig, ax = plt.subplots(1, 1, figsize=(8, 4))
     # plot both tap data columns
-    ax.plot(acc.times/60, acc.data[:, 5], label=acc.colnames[5])
-    ax.plot(acc.times/60, acc.data[:, 6], label=acc.colnames[6])
-
+    if acc.sub != '017':
+        ax.plot(acc.times/60, acc.data[:, 5], label=acc.colnames[5])
+        ax.plot(acc.times/60, acc.data[:, 6], label=acc.colnames[6])
+    else:
+        _, _, tap_left = custom_tap_finding_017(
+                acc, acc_side='left', move_type='tap',
+        )
+        _, _, tap_right = custom_tap_finding_017(
+                acc, acc_side='right', move_type='tap',
+        )
+        ax.plot(acc.times/60, tap_left, label='TAP left')
+        ax.plot(acc.times/60, tap_right, label='TAP right')
+        
     ax.plot(acc.times/60, acc.data[:, 4], lw=5, alpha=.6,
             label='task')
 
@@ -223,7 +234,6 @@ def plot_overview_tap_detection(
         fig_name = f'acc_tap_detect_sub{acc.sub}'
         save_path = os.path.join(get_project_path('figures'),
                                 'ft_exploration',
-                                acc.data_version,
                                 'movement', 'tap_detect',
                                 fig_name)
         plt.savefig(save_path, facecolor='w', dpi=150,)
