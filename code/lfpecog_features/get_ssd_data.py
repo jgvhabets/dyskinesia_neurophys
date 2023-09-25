@@ -354,6 +354,12 @@ class create_SSDs():
                                'merged_sub_data',
                                 SETTINGS['DATA_VERSION'],
                                 f'sub-{self.sub}')
+        if SETTINGS['DATA_VERSION'] == 'v4.2':
+            # use mergeddata v4.0 for creation v4.2 windows and SSD
+            mergedData_path = join(get_project_path('data'),
+                                   'merged_sub_data',
+                                   'v4.0',
+                                   f'sub-{self.sub}')
         windows_path = join(get_project_path('data'),
                             'windowed_data_classes_'
                             f'{SETTINGS["WIN_LEN_sec"]}s_'
@@ -406,18 +412,25 @@ class create_SSDs():
                 print('\t...create data ....')
                 dat_fname = (f'{self.sub}_mergedData_{SETTINGS["DATA_VERSION"]}'
                             f'_{dType}.P')
+                if SETTINGS['DATA_VERSION'] == 'v4.2':
+                    dat_fname = f'{self.sub}_mergedData_v4.0_{dType}.P'
 
-                # check existence of file in folder
+                # # check existence of file in folder
                 if dat_fname not in listdir(mergedData_path):
                     print(f'!!! {dat_fname} NOT AVAILABLE')
                     continue
 
-                # load data (as mergedData class)
+                # load dat_fnamedata (as mergedData class)
                 print(f'\t...{dat_fname} loading...')
                 data = load_class_pickle(join(mergedData_path, dat_fname))
                 print(f'\t...{dat_fname} loaded')
                 
-                # divides full dataframe in present windows
+                # check whether tap-epochs should be left out of windows
+                try:
+                    EXCL_TAPS = SETTINGS['EXCL_TAP_IN_WINDOWS']
+                except KeyError:
+                    EXCL_TAPS = False
+                # divides full data(frame) in present windows
                 windows = get_windows(
                     data=data.data,
                     fs=int(data.fs),
@@ -425,6 +438,9 @@ class create_SSDs():
                     winLen_sec=SETTINGS['WIN_LEN_sec'],
                     part_winOverlap=SETTINGS['WIN_OVERLAP_part'],
                     min_winPart_present=.5,
+                    EXCL_TAPS=EXCL_TAPS,
+                    DATA_VERSION=SETTINGS['DATA_VERSION'],
+                    sub=self.sub,
                     remove_nan_timerows=False,
                     return_as_class=True,
                     only_ipsiECoG_STN=False,

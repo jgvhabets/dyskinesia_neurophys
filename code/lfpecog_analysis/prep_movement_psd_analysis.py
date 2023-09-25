@@ -9,14 +9,9 @@ import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, welch
 
 # import own functions
-import lfpecog_analysis.load_SSD_features as load_ssd_fts
-import lfpecog_features.get_ssd_data as ssd
-import lfpecog_analysis.get_SSD_timefreqs as ssd_TimeFreq
-import utils.utils_fileManagement as utilsFiles
+# import lfpecog_analysis.load_SSD_features as load_ssd_fts
 from utils.utils_fileManagement import (get_project_path,
                                         load_class_pickle,
-                                        save_class_pickle,
-                                        mergedData,
                                         correct_acc_class)
 
 
@@ -26,6 +21,9 @@ def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
                              states_to_save=['tap', 'rest_no_move',
                                              'free_no_move', 'free_move'],):
     # TODO: ADD CHECK FOR EXISTING DATA
+    import lfpecog_features.get_ssd_data as ssd
+    import lfpecog_analysis.get_SSD_timefreqs as ssd_TimeFreq
+
     # define main directory with stored merged data
     main_data_path = os.path.join(get_project_path('data'),
                                   'merged_sub_data', data_version)
@@ -92,13 +90,13 @@ def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
 
         # get tapping or movement times
         if ssd_sub.sub == '017':
-            _, _, tap_bool = custom_tap_finding_017(
+            _, _, tap_bool = custom_tap_finding(
                 acc, acc_side=acc_side, move_type='tap',
             )
-            _, _, move_side_bool = custom_tap_finding_017(
+            _, _, move_side_bool = custom_tap_finding(
                 acc, acc_side=acc_side, move_type='move',
             )
-            _, _, othermove_side_bool = custom_tap_finding_017(
+            _, _, othermove_side_bool = custom_tap_finding(
                 acc, acc_side=lfp_side, move_type='move',
             )
             move_total_bool = np.logical_or(move_side_bool,
@@ -323,6 +321,115 @@ def select_taps_in_data(
     if return_nontap: return tap_data, no_tap_data 
 
 
+def get_sub_tapTimings(sub,
+                       custom_tappers=['105', '017'],
+                       DATA_VERSION='v4.0'):
+    # use merged-data v4.0 for creation of v4.2
+    if DATA_VERSION == 'v4.2': DATA_VERSION = 'v4.0'
+    
+    sub_data_path = os.path.join(get_project_path('data'),
+                                 'merged_sub_data',
+                                  DATA_VERSION,
+                                  f'sub-{sub}')
+    fname = (f'{sub}_mergedData_{DATA_VERSION}'
+             '_acc_left.P')  # side does not matter for already detected bool labels
+    # load Acc-detected movement labels
+    acc = load_class_pickle(os.path.join(sub_data_path, fname))
+    acc = correct_acc_class(acc)
+
+    temp = {}
+    temp['times_min'] = acc.times / 60
+    for col in ['left_tap', 'right_tap', 'task']:
+        idx = np.where([c == col for c in acc.colnames])[0][0]
+        temp[col] = acc.data[:, idx]
+    
+    if sub in custom_tappers:
+        for side in ['left', 'right']:
+            if side == 'right':
+                # load right sided timeseries
+                fname = (f'{sub}_mergedData_{DATA_VERSION}'
+                         '_acc_right.P')
+                acc = load_class_pickle(os.path.join(sub_data_path,
+                                                     fname))
+                acc = correct_acc_class(acc)
+            # find taps based on custom function
+            _, _, taps = custom_tap_finding(
+                acc, acc_side=side, move_type='tap',
+            )
+            temp[f'{side}_tap'] = taps
+    
+    # correct specific task-label error
+    if sub == '108':
+        sel = np.logical_and(temp['times_min'] > 15,
+                             temp['times_min'] < 20)
+        temp['task'][sel] = 'free'
+
+    # delete all non tap-task taps from tap-boolean
+    sel = temp['task'] != 'tap'
+    for s in ['left_tap', 'right_tap']: temp[s][sel] = 0
+
+    # create sum bool for tap in one of the sides
+    temp['tap_all'] = np.logical_or(temp['right_tap'],
+                                    temp['left_tap'])
+
+    return temp
+
+
+def get_tap_times(tap_dict=False, sub=None, tap_border_sec=1,
+                  return_in_secs=False, DATA_VERSION='v4.0',):
+    """
+    takes dict with tap results, returns start timings
+    in minutes: start and end timings of every epoch
+    """
+    if not tap_dict:
+        tap_dict = get_sub_tapTimings(sub=sub,
+                                      DATA_VERSION=DATA_VERSION,)
+    # find start and end timestamps of total tapping
+    starts = np.where(np.diff(tap_dict['tap_all']) == 1)[0]
+    ends = np.where(np.diff(tap_dict['tap_all']) == -1)[0]
+    starts = tap_dict['times_min'][starts]
+    ends = tap_dict['times_min'][ends]
+    # include border into tapping epoch
+    starts -= (tap_border_sec/60)
+    ends += (tap_border_sec/60)
+
+    if return_in_secs:
+        starts *= 60
+        ends *= 60
+
+    return starts, ends
+
+
+def select_taps_out_window(win_times, starts, ends):
+    """
+    Input:
+        - starts and ends: timestamps (in minutes?!)
+            for blocks of total tapping
+        - win_times: should be same unit as timestamps
+    
+    Returns:
+        - win_sel: boolean array, true if data should
+            be included (none tap data), false is
+            data should be excluded based on tapping
+    """
+    win_start = win_times[0]
+    win_end = win_times[-1]
+    # bool array to return
+    win_sel = np.ones_like(win_times)  # if no tap in window, all is true
+
+    if any(starts[np.logical_and(starts > win_start,
+                                 starts < win_end)]):
+        # select which tap epochs start within this window
+        tap_sel = np.logical_and(starts > win_start,
+                                 starts < win_end)
+        # loop over epoch starts and ends
+        for t1, t2 in zip(starts[tap_sel], ends[tap_sel]):
+            # select matching window based on times
+            temp_sel = np.logical_and(win_times > t1,
+                                      win_times < t2)
+            win_sel[temp_sel] = 0  # set tap-matching window to false
+
+    return win_sel.astype(bool)
 
 
 def custom_tap_finding(acc_class, acc_side,
@@ -340,7 +447,7 @@ def custom_tap_finding(acc_class, acc_side,
         - acc: acc class from pickle acc 017
     """
     fs = int(acc_class.fs)
-    print(acc_class.sub, acc_side)
+    print(f'custom tap finding: {acc_class.sub}, {acc_side}')
 
     if acc_class.sub == '017':
 

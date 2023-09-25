@@ -12,7 +12,7 @@ from utils.utils_fileManagement import (get_project_path,
                                         load_ft_ext_cfg)
 from lfpecog_plotting.plotHelpers import get_colors
 from lfpecog_plotting.plot_descriptive_SSD_PSDs import break_x_axis_psds_ticks
-from lfpecog_analysis.prep_movement_psd_analysis import custom_tap_finding_017
+from lfpecog_analysis.prep_movement_psd_analysis import custom_tap_finding
 
 
 def load_movement_psds(data_version='v4.0', ft_version='v4',):

@@ -11,6 +11,9 @@ from array import array
 from typing import Any
 from itertools import compress
 
+from lfpecog_analysis.prep_movement_psd_analysis import (
+    select_taps_out_window, get_tap_times
+)
 
 def get_windows(
     data,
@@ -19,6 +22,9 @@ def get_windows(
     winLen_sec = 180,
     part_winOverlap = .5,
     min_winPart_present = .66,
+    EXCL_TAPS=False,
+    DATA_VERSION=None,
+    sub=None,
     remove_nan_timerows: bool = True,
     movement_part_acceptance: float = 1.,
     return_as_class = False,
@@ -61,6 +67,13 @@ def get_windows(
         - arr_times_sec: corresponding times of window
             start dopa-times
     """
+    # import tap timings if necessary
+    if EXCL_TAPS:
+        tap_starts, tap_ends = get_tap_times(sub=sub,
+                                             return_in_secs=True,
+                                             DATA_VERSION=DATA_VERSION,
+                                             tap_border_sec=1)
+
     if isinstance(data, DataFrame):
         try:  # if dopa-time is as column
             times = np.around(data['dopa_time'], 6).values
@@ -178,9 +191,8 @@ def get_windows(
     i_start = None
 
     # LOOP OVER POSSIBLE WINDOWS IN TIME RANGE
-    for win0_sec in np.arange(
-        tStart, times[-1], sec_hop
-    ):
+    for win0_sec in np.arange(tStart, times[-1], sec_hop
+                              ):
         # separate flow for DataFrames
         if isinstance(data, DataFrame):
             wintemp = data.loc[win0_sec:win0_sec + winLen_sec]
@@ -204,6 +216,7 @@ def get_windows(
             # if full window is present (last second also in secs_present), select on index
             if min_dist_end == 0:
                 wintemp = data[i_start:i_start + winLen_samples]
+                wintimes = times[i_start:i_start + winLen_samples]
                 i_start += sample_hop  # SAVE START-INDEX TO SAVE MAJOR COMPUTATIONAL TIME
                 if verbose: print('\tselected on end-sample-presence')
             # if end of window is too far off, skip window
@@ -214,10 +227,10 @@ def get_windows(
             
             # if window only partly present, select based on timestamps
             else:
-                sel = np.logical_and(
-                    win0_sec < times, times < (win0_sec + winLen_sec)
-                )
+                sel = np.logical_and(win0_sec < times,
+                                     times < (win0_sec + winLen_sec))
                 wintemp = data[sel]
+                wintimes = times[sel]
                 i_start = None  # reset start index
                 if verbose: print('\tselected on time')
             
@@ -229,13 +242,25 @@ def get_windows(
             if verbose: print(f'\tINCLUDED shape is {wintemp.shape}')
 
 
-        ### INCLUDE ACCELEROMETER ACTIVITY FILTERING  (currently only works for DataFrame data)
-        if movement_part_acceptance < 1:  # 1 is default and means no filtering
-            move_part = 1 - (sum(wintemp['no_move']) / wintemp.shape[0])
-            # skip window if it contains too many movement samples
-            if move_part > movement_part_acceptance:
-                print(f'\t window skipped due to MOVEMENT ({win0_sec} s)')
-                continue
+        # ### INCLUDE ACCELEROMETER ACTIVITY FILTERING  (currently only works for DataFrame data)
+        # if movement_part_acceptance < 1:  # 1 is default and means no filtering
+        #     move_part = 1 - (sum(wintemp['no_move']) / wintemp.shape[0])
+        #     # skip window if it contains too many movement samples
+        #     if move_part > movement_part_acceptance:
+        #         print(f'\t window skipped due to MOVEMENT ({win0_sec} s)')
+        #         continue
+        
+        ### EXCLUDE TAP-epochs for clean-PSDs (data v4.2)
+        if EXCL_TAPS:
+            win_tap_bool = select_taps_out_window(wintimes,
+                                                  tap_starts,
+                                                  tap_ends)
+            # check whether data is excluded
+            if any(win_tap_bool == False):
+                # exclude data related to tapping
+                wintemp = wintemp[win_tap_bool]
+                print(f'\tin win@ {win0_sec}s: tap-removed: {sum(~win_tap_bool) / fs} seconds')
+
 
         # NaN-PAD WINDOWS NOT FULLY PRESENT (to fit 3d-array shape)
         if wintemp.shape[0] < nWin:
@@ -260,7 +285,7 @@ def get_windows(
     # remove starttimes for same windows
     arr_times_sec = list(compress(arr_times_sec, arr_bool))
     print(f'...removed # {sum(~np.array(arr_bool))} windows bcs of length of end of windowing')
-    print(f'STARTTIMES length ({len(arr_times_sec)}) vs'
+    print(f'STARTTIMES length ({len(arr_times_sec)}) vs '
           f'ARRAYS length ({len(win_array)})')
 
     if return_as_class:
