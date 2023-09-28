@@ -69,10 +69,13 @@ def get_windows(
     """
     # import tap timings if necessary
     if EXCL_TAPS:
+        print(f'...WINDOWING: sub-{sub}; DATA {DATA_VERSION}')
         tap_starts, tap_ends = get_tap_times(sub=sub,
                                              return_in_secs=True,
                                              DATA_VERSION=DATA_VERSION,
                                              tap_border_sec=1)
+        print(len(tap_starts), len(tap_ends))
+        print(tap_starts.shape, tap_ends.shape)
 
     if isinstance(data, DataFrame):
         try:  # if dopa-time is as column

@@ -196,7 +196,7 @@ class SSD_bands_windowed:
         
         # create data if not found
         except FileNotFoundError:
-            print('\t...windowed SSD data doesnot exist yet'
+            print('\n\t...windowed SSD data doesnot exist yet'
                   f' for {self.datasource} of sub-{self.sub}')
             create_SSDs(sub=self.sub, settings=self.settings,
                         incl_ecog=self.incl_ecog,
@@ -259,7 +259,7 @@ def load_windowed_ssds(sub, dType, settings: dict):
 
     meta_f = join(win_path, ssd_win_fname + '.json')
     data_f = join(win_path, ssd_win_fname + '.npy')
-    print('load windowed ssd', meta_f, data_f)
+    print('...loading windowed ssd', meta_f, data_f)
 
     # # assure existence of files
     # assert np.logical_and(exists(meta_f), exists(data_f)), (
@@ -267,10 +267,23 @@ def load_windowed_ssds(sub, dType, settings: dict):
     #     f'do not exist in {win_path}'
     # )
 
-    # load files
+    # load meta-file
     with open(meta_f, 'r') as meta_f:
         meta_ssd = json.load(meta_f)
-    data_ssd = np.load(data_f, allow_pickle=True,).astype(np.float64)
+    
+    # load data-file
+    try:  # first try local storage
+        data_ssd = np.load(data_f, allow_pickle=True,).astype(np.float64)
+    except FileNotFoundError:
+        print(f'try EXT HD DATA for sub-{sub}: {ssd_win_fname}')
+        ext_data_f = join(get_project_path('data', extern_HD=True),
+                          'windowed_data_classes_'
+                          f'{settings["WIN_LEN_sec"]}s_'
+                          f'{settings["WIN_OVERLAP_part"]}overlap',
+                          settings['DATA_VERSION'],
+                          f'sub-{sub}',
+                          f'{ssd_win_fname}.npy')
+        data_ssd = np.load(ext_data_f, allow_pickle=True,).astype(np.float64)
 
     
     return data_ssd, meta_ssd
@@ -328,6 +341,7 @@ class create_SSDs():
     save_ssd_windows: bool = True
     check_matrix: bool = False
     MATRIX_REGULARIZATION: bool = False
+    READ_EXT_HD: int = False
     
     def __post_init__(self,):
         ### load settings from json
@@ -348,6 +362,8 @@ class create_SSDs():
             self.ephys_sources.append(f'ecog_{ecog_side}')
         if self.incl_stn:
             self.ephys_sources.extend(['lfp_left', 'lfp_right'])
+        
+        if SETTINGS['DATA_VERSION'] == 'v4.2': self.READ_EXT_HD = True
 
         ### Define paths
         mergedData_path = join(get_project_path('data'),
@@ -360,7 +376,7 @@ class create_SSDs():
                                    'merged_sub_data',
                                    'v4.0',
                                    f'sub-{self.sub}')
-        windows_path = join(get_project_path('data'),
+        windows_path = join(get_project_path('data', extern_HD=self.READ_EXT_HD),
                             'windowed_data_classes_'
                             f'{SETTINGS["WIN_LEN_sec"]}s_'
                             f'{SETTINGS["WIN_OVERLAP_part"]}overlap',
@@ -409,7 +425,7 @@ class create_SSDs():
                 print(f'\tWINDOWS LOADED from {dType_fname} in {windows_path}')
 
             else:
-                print('\t...create data ....')
+                print('\t...create windowed data ....')
                 dat_fname = (f'{self.sub}_mergedData_{SETTINGS["DATA_VERSION"]}'
                             f'_{dType}.P')
                 if SETTINGS['DATA_VERSION'] == 'v4.2':

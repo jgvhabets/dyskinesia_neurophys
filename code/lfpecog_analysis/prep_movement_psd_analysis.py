@@ -345,13 +345,11 @@ def get_sub_tapTimings(sub,
     
     if sub in custom_tappers:
         for side in ['left', 'right']:
-            if side == 'right':
-                # load right sided timeseries
-                fname = (f'{sub}_mergedData_{DATA_VERSION}'
-                         '_acc_right.P')
-                acc = load_class_pickle(os.path.join(sub_data_path,
-                                                     fname))
-                acc = correct_acc_class(acc)
+            # load sided timeseries
+            fname = (f'{sub}_mergedData_{DATA_VERSION}'
+                        f'_acc_{side}.P')
+            acc = load_class_pickle(os.path.join(sub_data_path, fname))
+            acc = correct_acc_class(acc)
             # find taps based on custom function
             _, _, taps = custom_tap_finding(
                 acc, acc_side=side, move_type='tap',
@@ -371,7 +369,7 @@ def get_sub_tapTimings(sub,
     # create sum bool for tap in one of the sides
     temp['tap_all'] = np.logical_or(temp['right_tap'],
                                     temp['left_tap'])
-
+    
     return temp
 
 
@@ -385,10 +383,12 @@ def get_tap_times(tap_dict=False, sub=None, tap_border_sec=1,
         tap_dict = get_sub_tapTimings(sub=sub,
                                       DATA_VERSION=DATA_VERSION,)
     # find start and end timestamps of total tapping
-    starts = np.where(np.diff(tap_dict['tap_all']) == 1)[0]
-    ends = np.where(np.diff(tap_dict['tap_all']) == -1)[0]
+    starts = np.where(np.diff(tap_dict['tap_all'].astype(int)) == 1)[0]
+    ends = np.where(np.diff(tap_dict['tap_all'].astype(int)) == -1)[0]
+
     starts = tap_dict['times_min'][starts]
     ends = tap_dict['times_min'][ends]
+
     # include border into tapping epoch
     starts -= (tap_border_sec/60)
     ends += (tap_border_sec/60)
@@ -396,6 +396,11 @@ def get_tap_times(tap_dict=False, sub=None, tap_border_sec=1,
     if return_in_secs:
         starts *= 60
         ends *= 60
+
+    assert len(starts) == len(ends), (
+        f'TAP-STARTS (n={len(starts)}) and ENDS '
+        f'(n={len(ends)}) should have equal length'
+    )
 
     return starts, ends
 
