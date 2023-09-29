@@ -11,6 +11,7 @@ from main functions in:
 
 # Import general packages and functions
 import os
+from os.path import join
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass, field
@@ -18,7 +19,10 @@ import csv
 from array import array
 
 # import own functions
-import utils.utils_fileManagement as fileMng
+from utils.utils_fileManagement import (
+    mergedData, save_class_pickle,
+    get_project_path, load_class_pickle
+)
 
 
 
@@ -240,8 +244,8 @@ def load_stored_merged_data(
             separate data-array (np), fs (int),
             col_names (list), and indices (floats)        
     """
-    data_path = fileMng.get_project_path('data')
-    path = os.path.join(data_path, 'merged_sub_data',
+    data_path = get_project_path('data')
+    path = join(data_path, 'merged_sub_data',
                         data_version,)
     files = os.listdir(path)
     files = [f for f in files if sub in f]
@@ -251,9 +255,8 @@ def load_stored_merged_data(
     # load pickle if present
     pickle_name = f'{sub}_mergedDataClass_{data_version}'
     if f'{pickle_name}.P' in files:
-        from utils.utils_fileManagement import mergedData, load_class_pickle
         print('...load pickled mergedData Class')
-        mergedData_class = load_class_pickle(os.path.join(
+        mergedData_class = load_class_pickle(join(
             path, f'{sub}_mergedDataClass_{data_version}.P'
         ))
         dat_arr = mergedData_class.data
@@ -269,13 +272,13 @@ def load_stored_merged_data(
                 f'sub {sub} in data version {data_version}')
         
         data_file = [f for f in files if 'data' in f][0]
-        dat_arr = np.load(os.path.join(path, data_file),
+        dat_arr = np.load(join(path, data_file),
                         allow_pickle=True,)
         print('\t...data loaded')
         
         # load COLUMN-NAMES from txt
         names_file = [f for f in files if 'columnNames' in f][0]
-        col_names = np.loadtxt(os.path.join(path, names_file),
+        col_names = np.loadtxt(join(path, names_file),
                             dtype=str, delimiter=',')
         
         # extract TIMES for data array
@@ -292,7 +295,7 @@ def load_stored_merged_data(
         # convert and save file as pickle for later usage
         if save_as_pickle:
             print('...saving pickle')
-            mergedData_class = fileMng.mergedData(
+            mergedData_class = mergedData(
                 sub=sub,
                 data_version=data_version,
                 data=dat_arr,
@@ -300,13 +303,13 @@ def load_stored_merged_data(
                 times=time_arr,
                 fs=fs,
             )
-            fileMng.save_class_pickle(
+            save_class_pickle(
                 class_to_save=mergedData_class,
                 path=path, filename=pickle_name,
             )
             # seperate mergedDataClass for none-ephys data
             sel = ['LFP' not in k and 'ECOG' not in k for k in col_names]
-            mergedData_class = fileMng.mergedData(
+            mergedData_class = mergedData(
                 sub=sub,
                 data_version=data_version,
                 data=dat_arr[:, sel],
@@ -314,7 +317,7 @@ def load_stored_merged_data(
                 times=time_arr,
                 fs=fs,
             )
-            fileMng.save_class_pickle(
+            save_class_pickle(
                 class_to_save=mergedData_class,
                 path=path, filename=f'{pickle_name}_noEphys',
             )
@@ -396,24 +399,36 @@ class dopaTimedDf:
         self.fs = int(fs)
 
 
-def find_proc_data(
-    sub: str,
-    version: str,
-    project_path: str,
-):
+def find_proc_data(sub: str, version: str,
+                   load_EXT_HD: bool = False):
     '''
     Find available runs, datatypes, and all filenames
     for one subject, considers specific data-version
     used for preprocessing settings
     '''
-    sub_proc_path = os.path.join(project_path,
-                                 'data', 'preprocessed_data',
-                                 f'sub-{sub}', version,)
-    # get available files for sub + version
-    files = os.listdir(sub_proc_path)
-    # select npy files
-    datafiles = [f for f in files if f[-3:] == 'npy']
-    namefiles = [f for f in files if f[-3:] == 'csv']
+    # first try local directory
+    try:
+        # get available files for sub + version
+        sub_proc_path = join(
+            get_project_path('data', extern_HD=load_EXT_HD),
+            'preprocessed_data', f'sub-{sub}', version,
+        )
+        files = os.listdir(sub_proc_path)
+        # select relevant npy/json files
+        datafiles = [f for f in files if f[-3:] == 'npy']
+        namefiles = [f for f in files if f[-3:] == 'csv']
+    
+    # try ext HD if local not working
+    except:
+        # get available files for sub + version
+        sub_proc_path = join(
+            get_project_path('data', extern_HD=True),
+            'preprocessed_data', f'sub-{sub}', version,
+        )
+        files = os.listdir(sub_proc_path)
+        # select relevant npy/json files
+        datafiles = [f for f in files if f[-3:] == 'npy']
+        namefiles = [f for f in files if f[-3:] == 'csv']
 
     dtypes = []
     for f in namefiles:
@@ -450,9 +465,8 @@ def create_dopa_timed_array(
                     
         rec = datFile.split('_')[3]
         nameFile = [f for f in nameFiles if rec in f][0]
-        names = list(pd.read_csv(os.path.join(
-            sub_proc_path, nameFile
-        )))[1:]  # exclude run_time  # TODO. hardcoded -> change
+        names = list(pd.read_csv(join(sub_proc_path,
+                                      nameFile)))[1:]  # exclude run_time  # TODO. hardcoded -> change
 
         task = datFile.split('_')[2]
         if 'rest' in task.lower(): task = 'rest'
@@ -469,21 +483,15 @@ def create_dopa_timed_array(
         if nFile == 0:
 
             data_out = pd.DataFrame(
-                data=np.load(os.path.join(
-                    sub_proc_path, datFile
-                ))[1:, :].T,
-                columns=names
-            )
+                data=np.load(join(sub_proc_path, datFile))[1:, :].T,
+                columns=names)
             data_out['task'] = [task] * data_out.shape[0]
         
         else:
 
             rec_data = pd.DataFrame(
-                data=np.load(os.path.join(
-                    sub_proc_path, datFile
-                ))[1:, :].T,
-                columns=names,
-                index=None,
+                data=np.load(join(sub_proc_path, datFile))[1:, :].T,
+                columns=names, index=None,
             )
 
             rec_data['task'] = [task] * rec_data.shape[0]
@@ -529,8 +537,7 @@ def merge_ephys_sources(
     
     for i in np.arange(1, len(sources)):
 
-        merged_df = merged_df.join(
-            getattr(subdat, sources[i]).data.set_index(
+        merged_df = merged_df.join(getattr(subdat, sources[i]).data.set_index(
                 'dopa_time'), rsuffix='_DUPL'
         )
         print(f'...datatype added ({i + 1}/{len(sources)})...')
@@ -565,11 +572,10 @@ def read_ieeg_file(npy_f, fdir):
     '''
     csv_f = f'{npy_f[:-8]}rownames.csv'
 
-    data = np.load(os.path.join(fdir, npy_f))
+    data = np.load(join(fdir, npy_f))
     names = []
     try:
-        with open(os.path.join(fdir, csv_f),
-                newline='') as csvfile:
+        with open(join(fdir, csv_f), newline='') as csvfile:
             reader = csv.reader(csvfile, delimiter=',')
             for row in reader:
                 names = row
@@ -583,5 +589,4 @@ def read_ieeg_file(npy_f, fdir):
                         f' names for {npy_f}')
 
     return data, names
-
 

@@ -19,7 +19,8 @@ from utils.utils_fileManagement import (get_project_path,
 
 def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
                              states_to_save=['tap', 'rest_no_move',
-                                             'free_no_move', 'free_move'],):
+                                             'free_no_move', 'free_move'],
+                             custom_tappers=['105', '010', '017'],):
     # TODO: ADD CHECK FOR EXISTING DATA
     import lfpecog_features.get_ssd_data as ssd
     import lfpecog_analysis.get_SSD_timefreqs as ssd_TimeFreq
@@ -89,7 +90,7 @@ def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
         lfp_arr = np.array(lfp_arr)
 
         # get tapping or movement times
-        if ssd_sub.sub == '017':
+        if ssd_sub.sub in custom_tappers:
             _, _, tap_bool = custom_tap_finding(
                 acc, acc_side=acc_side, move_type='tap',
             )
@@ -437,8 +438,7 @@ def select_taps_out_window(win_times, starts, ends):
     return win_sel.astype(bool)
 
 
-def custom_tap_finding(acc_class, acc_side,
-                           move_type='tap',):
+def custom_tap_finding(acc_class, acc_side, move_type='tap',):
     """
     custom needed due to restless legs and
     very slow hand raising
@@ -450,9 +450,17 @@ def custom_tap_finding(acc_class, acc_side,
 
     Inputs: 
         - acc: acc class from pickle acc 017
+        - acc_side
+        - moveType: tap or move
+    
+    Returns:
+        - peak_i
+        - peak_t
+        - tap_bool
     """
     fs = int(acc_class.fs)
     print(f'custom tap finding: {acc_class.sub}, {acc_side}')
+    task_i = np.where([c == 'task' for c in acc_class.colnames])[0][0]
 
     if acc_class.sub == '017':
 
@@ -508,10 +516,57 @@ def custom_tap_finding(acc_class, acc_side,
         elif acc_side == 'right':
             # right acc data requried
             R_col = np.where([c == 'ACC_R_Z' for c in acc_class.colnames])[0][0]
-            task_col = np.where([c == 'task' for c in acc_class.colnames])[0][0]
             right_tap = np.logical_and(
                 acc_class.data[:, R_col] > .25e-6,
-                acc_class.data[:, task_col] == 'tap'
+                acc_class.data[:, task_i] == 'tap'
             )
-            print('done searching')
+
             return None, None, right_tap
+    
+    elif acc_class.sub == '010':
+
+        svm = np.sqrt(acc_class.data[:, 1].astype(np.float64)**2 +
+                      acc_class.data[:, 2].astype(np.float64)**2 +
+                      acc_class.data[:, 3].astype(np.float64)**2)
+        # find peaks
+        x_peaks, props = find_peaks(svm, height=.25e-6, distance=3*acc_class.fs)
+        # find indices of tap start and end
+        peak_indices = []
+        margin = int(acc_class.fs/4)
+        for i in x_peaks:
+            i_start, i_end = False, False
+            temp_i = i
+            # find start: first value below THR before peak
+            while not i_start:
+                temp_i -= 1
+                if all(svm[temp_i-margin:temp_i] < .5e-7): i_start = temp_i
+            # find end: first value below THR after peak
+            temp_i = i
+            while not i_end:
+                temp_i += 1
+                if all(svm[temp_i:temp_i+margin] < .5e-7): i_end = temp_i
+            # add values to peak_list
+            peak_indices.append([i, i_start, i_end])
+        # convert to array (n-taps x [peak, start, end])
+        peak_indices = np.array(peak_indices)  # double start and ends are possible with fused taps
+
+        # find bool-arr (considers fused taps)
+        tap_bool = np.zeros_like(svm)
+        for i1, i2 in zip(np.unique(peak_indices[:, 1]),
+                          np.unique(peak_indices[:, 2])):
+            tap_bool[i1:i2] = 1
+        # remove (OR include) non-tap-task moments
+        if move_type == 'tap':
+            tap_bool = np.logical_and(tap_bool.astype(bool),
+                                    acc_class.data[:, task_i] == 'tap')
+            peak_i = np.array([i for i in peak_indices[:, 0]
+                            if acc_class.data[i, task_i] == 'tap'])
+            peak_t = acc_class.data[peak_i, 0]
+        elif move_type == 'move':
+            tap_bool = np.logical_and(tap_bool.astype(bool),
+                                    acc_class.data[:, task_i] != 'tap')
+            peak_i = np.array([i for i in peak_indices[:, 0]
+                            if acc_class.data[i, task_i] != 'tap'])
+            peak_t = acc_class.data[peak_i, 0]
+                    
+        return peak_i, peak_t, tap_bool

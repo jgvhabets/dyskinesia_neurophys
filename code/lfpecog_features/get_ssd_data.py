@@ -261,29 +261,33 @@ def load_windowed_ssds(sub, dType, settings: dict):
     data_f = join(win_path, ssd_win_fname + '.npy')
     print('...loading windowed ssd', meta_f, data_f)
 
-    # # assure existence of files
-    # assert np.logical_and(exists(meta_f), exists(data_f)), (
-    #     f'inserted SSD data files {ssd_win_fname} (.npy, .json)'
-    #     f'do not exist in {win_path}'
-    # )
-
-    # load meta-file
-    with open(meta_f, 'r') as meta_f:
-        meta_ssd = json.load(meta_f)
     
-    # load data-file
-    try:  # first try local storage
-        data_ssd = np.load(data_f, allow_pickle=True,).astype(np.float64)
+    # first try local storage
+    try:
+        # load meta-file
+        with open(meta_f, 'r') as meta_f:
+            meta_ssd = json.load(meta_f)
+        # load data-file
+        data_ssd = np.load(data_f, allow_pickle=True).astype(np.float64)
+
+    # try external harddrive storage
     except FileNotFoundError:
         print(f'try EXT HD DATA for sub-{sub}: {ssd_win_fname}')
-        ext_data_f = join(get_project_path('data', extern_HD=True),
+        
+        # define external path on hard-drive
+        ext_path = join(get_project_path('data', extern_HD=True),
                           'windowed_data_classes_'
                           f'{settings["WIN_LEN_sec"]}s_'
                           f'{settings["WIN_OVERLAP_part"]}overlap',
                           settings['DATA_VERSION'],
-                          f'sub-{sub}',
-                          f'{ssd_win_fname}.npy')
-        data_ssd = np.load(ext_data_f, allow_pickle=True,).astype(np.float64)
+                          f'sub-{sub}')
+
+        # load meta-file
+        with open(join(ext_path, f'{ssd_win_fname}.json'), 'r') as meta_f:
+            meta_ssd = json.load(meta_f)
+        # load data-file                          
+        data_ssd = np.load(join(ext_path, f'{ssd_win_fname}.npy'),
+                           allow_pickle=True,).astype(np.float64)
 
     
     return data_ssd, meta_ssd

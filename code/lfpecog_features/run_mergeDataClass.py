@@ -35,25 +35,22 @@ class subjectData:
     Input:
         - sub (str): subject code
         - data_version (str): e.g. v2.2
-        - project_path (str): main project-directory
-            where data is stored
     """
     sub: str
     data_version: str
-    project_path: str
     dType_excl: list = field(default_factory=lambda: [])
+    load_EXT_HD: bool = False
 
     def __post_init__(self,):
-
+        
         (self.dtypes,
-         self.nameFiles,
-         self.dataFiles,
-         sub_path) = read_data_funcs.find_proc_data(
-            sub=self.sub,
-            version=self.data_version,
-            project_path=self.project_path
+        self.nameFiles,
+        self.dataFiles,
+        sub_path) = read_data_funcs.find_proc_data(
+            sub=self.sub, version=self.data_version,
+            load_EXT_HD=self.load_EXT_HD,
         )
-
+        
         if len(self.dType_excl) > 0:
             dType_remove = []
             for dType in self.dtypes:
@@ -63,16 +60,12 @@ class subjectData:
         
         for dType in self.dtypes:
 
-            setattr(
-                self,
-                dType,
-                read_data_funcs.dopaTimedDf(
+            setattr(self,
                     dType,
-                    self.nameFiles,
-                    self.dataFiles,
-                    sub_path,
-                )
-            )
+                    read_data_funcs.dopaTimedDf(dType,
+                                                self.nameFiles,
+                                                self.dataFiles,
+                                                sub_path,))
 
 
 
@@ -134,11 +127,7 @@ if __name__ == '__main__':
             f'(1st variable: {SUB}) incorrect e.g.:"001"')
         ### create dataclass with data per source as attribute
         # (lfp-L/R / ecog / acc-L/R) as dopaTimedDf Class
-        data = subjectData(
-            sub=SUB,
-            data_version=DATA_VERSION,
-            project_path=get_project_path(),
-        )
+        data = subjectData(sub=SUB, data_version=DATA_VERSION,)
 
         ### Merge dataframes of different data-groups
         if not PICKLE_PER_SOURCE:

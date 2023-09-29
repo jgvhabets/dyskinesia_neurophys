@@ -192,19 +192,20 @@ def plotPSD_rest_vs_tap(PSDs, freqs, n_subs_incl,
 
 def plot_overview_tap_detection(
     acc, fsize=14, SAVE_FIG=False,
+    custom_tappers=['010', '017', '105']
 ):
 
     
     fig, ax = plt.subplots(1, 1, figsize=(8, 4))
     # plot both tap data columns
-    if acc.sub != '017':
+    if acc.sub not in custom_tappers:
         ax.plot(acc.times/60, acc.data[:, 5], label=acc.colnames[5])
         ax.plot(acc.times/60, acc.data[:, 6], label=acc.colnames[6])
     else:
-        _, _, tap_left = custom_tap_finding_017(
+        _, _, tap_left = custom_tap_finding(
                 acc, acc_side='left', move_type='tap',
         )
-        _, _, tap_right = custom_tap_finding_017(
+        _, _, tap_right = custom_tap_finding(
                 acc, acc_side='right', move_type='tap',
         )
         ax.plot(acc.times/60, tap_left, label='TAP left')

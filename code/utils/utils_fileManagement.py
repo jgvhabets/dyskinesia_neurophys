@@ -227,6 +227,13 @@ class mergedData:
             f'match shape of array {self.data}'
         )
 
+        if self.sub == '010':
+            new_tasks = correct_tasks_010(colnames=self.colnames,
+                                          data_arr=self.data)
+            task_col = where([c == 'task' for c in self.colnames])[0][0]
+            self.data[:, task_col] = new_tasks
+            
+
 
 def save_class_pickle(
     class_to_save,
@@ -278,6 +285,13 @@ def load_class_pickle(
         with open(file_to_load, 'rb') as f:
             output = pickle.load(f)
             f.close()
+    
+    print(file_to_load)
+    if '010_mergedData_v4.0' in file_to_load:
+        print(f'\n\t...correct tasks in {file_to_load}')
+        new_tasks = correct_tasks_010(data_class=output)
+        task_col = where([c == 'task' for c in output.colnames])[0][0]
+        output.data[:, task_col] = new_tasks
 
     # if times is just indices 0,1,2,...
     if 'times' in vars(output).keys():
@@ -381,3 +395,39 @@ def correct_acc_class(acc):
         setattr(acc, 'colnames', names)
     
     return acc
+
+
+
+def correct_tasks_010(data_class=False, colnames=False, data_arr=False):
+
+    if not colnames and not data_arr:
+        colnames = data_class.colnames
+        data_arr = data_class.data
+    # tasks based on labbook notes
+    task_timesTuples = (('rest', -20, -14),
+                        ('tap', -14, 0),
+                        ('rest', 0, 3),
+                        ('tap', 3, 14),
+                        ('rest', 14, 18),
+                        ('tap', 18, 25),
+                        ('free', 25, 36),
+                        ('rest', 36, 43),
+                        ('tap', 43, 49),
+                        ('free', 49, 63),
+                        ('rest', 63, 67),
+                        ('tap', 68, 78),
+                        ('free', 78, 85),
+                        ('rest', 86, 91))
+
+    task_col = where([c == 'task' for c in colnames])[0][0]
+    task_col = data_arr[:, task_col]
+
+    time_col = where([c == 'dopa_time' for c in colnames])[0][0]
+    time_min = data_arr[:, time_col] / 60
+
+    for tsk, t1, t2 in task_timesTuples:
+        sel = logical_and(time_min > t1,
+                            time_min < t2)
+        task_col[sel] = tsk
+
+    return task_col
