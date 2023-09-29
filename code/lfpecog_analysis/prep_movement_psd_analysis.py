@@ -323,7 +323,7 @@ def select_taps_in_data(
 
 
 def get_sub_tapTimings(sub,
-                       custom_tappers=['105', '017'],
+                       custom_tappers=['105', '017', '010'],
                        DATA_VERSION='v4.0'):
     # use merged-data v4.0 for creation of v4.2
     if DATA_VERSION == 'v4.2': DATA_VERSION = 'v4.0'

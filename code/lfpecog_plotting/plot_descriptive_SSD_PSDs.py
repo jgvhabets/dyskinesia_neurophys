@@ -92,6 +92,8 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
 
                 if timing == 0:
                     sel = tf_times < 0
+                    # take only rest-PreDopa for sub-010
+                    if sub == '010': sel = tf_times < -14
                     # take first 5 minutes if no pre-LDOPA data
                     if sum(sel) == 0:
                         sel = tf_times < 5
@@ -813,7 +815,7 @@ def plot_scaling_LID(
         axes = plt_ax_to_return
     
     # colors = [list(get_colors('PaulTol).values())[c] for c in [4, 3, 0, 7]]  # colors are called by cat-value, so 0 is never used if baseline corrected
-    colors = get_colors('Jacoba_107')
+    colors = get_colors('Jacoba')
     if not 'pre-LID' in cdrs_cat_coding.keys(): colors = colors[1:]   # skip gray
     
     for i_ax, side in enumerate(psds_to_plot.keys()):
@@ -926,7 +928,7 @@ def plot_scaling_LID(
                     loop_ax.fill_between(x=x_axis, y1=-50, y2=100,
                                         alpha=.05,
                                         where=sig_mask,
-                                        color=colors[5],)
+                                        color=colors[-1],)
                 else:
                     loop_ax.fill_between(x=x_axis, y1=PSD['mean'] - PSD['sd'],
                                             y2=PSD['mean'] + PSD['sd'],

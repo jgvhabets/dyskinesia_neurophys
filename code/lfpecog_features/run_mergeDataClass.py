@@ -154,9 +154,6 @@ if __name__ == '__main__':
         if PICKLE_PER_SOURCE:
 
             for dType in data.dtypes:
-                # if not logical_and(SUB == '019', dType == 'lfp_right'):
-                #     print(f'skip sub-{SUB}, {dType}')
-                #     continue
                 print(f'PROCESS sub-{SUB}, {dType}')
                 # skip other dtypes
                 if True not in [dType.lower().startswith(s)
@@ -184,14 +181,13 @@ if __name__ == '__main__':
                 
                 # get sampling freq, convert to class, and save
                 fs = getattr(data, dType).fs
-                data_class = mergedData(
-                    sub=SUB,
-                    data_version=DATA_VERSION,
-                    data=data_df.values,
-                    colnames=list(data_df.keys()),
-                    times=list(data_df.index.values),
-                    fs=fs,
-                )
+                data_class = mergedData(sub=SUB,
+                                        data_version=DATA_VERSION,
+                                        data=data_df.values,
+                                        colnames=list(data_df.keys()),
+                                        times=list(data_df.index.values),
+                                        fs=fs,)
+                
                 if TO_SAVE == False:
                     print(f'dataclass created WITHOUT saving for {dType}')
                     continue
