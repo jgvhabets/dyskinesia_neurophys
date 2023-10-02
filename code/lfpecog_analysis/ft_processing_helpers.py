@@ -15,10 +15,12 @@ from lfpecog_preproc.preproc_import_scores_annotations import(
 )
 from lfpecog_analysis.load_SSD_features import ssdFeatures
 
+
 def find_select_nearest_CDRS_for_ephys(
     sub, ft_times, side: str,
     cdrs_rater: str = 'Patricia',
     EXCL_UNILAT_OTHER_SIDE_LID=False,
+    INCL_CORE_CDRS=False,
 ):
     """
     Get nearest-CDRS values for neurophys-timings
@@ -52,10 +54,13 @@ def find_select_nearest_CDRS_for_ephys(
     assert side in allowed_sides, (f'side not in {allowed_sides}')
 
     # SUM OF BILATERAL CDRS WANTED
-    if side in ['both', 'all', 'bilat', 'sum']:
+    if side in ['both', 'all', 'bilat', 'sum', 'full', 'total']:
+        # include only bilat extremities, or core-items as well
+        if INCL_CORE_CDRS: bilat_code = 'full'
+        else: bilat_code = 'both'
         # get timestamps and values of clinical CDRS LID assessment
         cdrs_times, cdrs_scores = get_cdrs_specific(
-            sub=sub, rater=cdrs_rater, side='both',)
+            sub=sub, rater=cdrs_rater, side=bilat_code,)
         
         # find closest CDRS value for ft-values based on timestamps
         cdrs_idx_fts = [np.argmin(abs(t - cdrs_times)) for t in ft_times]
@@ -229,6 +234,7 @@ def load_feature_df_for_pred(
     INCL_BURSTS: bool = True,
     sel_bandwidths = 'all',
     sel_source = 'all',
+    EXCL_IPSI_ECOG: int = False,
     settings_json: str = 'ftExtr_spectral_v1.json',
     preproc_data_version='vX',
     verbose: bool = False,
@@ -357,6 +363,29 @@ def load_feature_df_for_pred(
                              index=corr_times,
                              columns=features.keys())
         print('corrected feature timings for sub-013 due to incorrect day')
+
+
+    # EXCLUDE windows w/ unilateral dyskinesia IPSI-lat to ECoG
+    if sub.startswith('0') and EXCL_IPSI_ECOG:
+        times, ipsi_cdrs = get_cdrs_specific(sub=sub, side='ipsi ecog')
+        _, contra_cdrs = get_cdrs_specific(sub=sub, side='contra ecog')
+        # check whether unilat
+        unilat_bool = np.logical_and(ipsi_cdrs > 0, contra_cdrs == 0)
+        if unilat_bool.any():
+            excl_uni_rows = []
+            for t in features.index:
+                if np.min(
+                    [abs(t - v) for v in times[unilat_bool].values]
+                ) < np.min(
+                    [abs(t - v) for v in times[~unilat_bool].values]
+                ):
+                    # if feature-row-time is closer to uni-dysk to excl:
+                    excl_uni_rows.append(True)
+                else:
+                    excl_uni_rows.append(False)
+            # delete selected rows
+            features = features.iloc[~np.array(excl_uni_rows), :]
+            print(f'...deleted {sum(excl_uni_rows)} rows (uni-LID ipsi-lat to ECoG)')
 
         
     return features

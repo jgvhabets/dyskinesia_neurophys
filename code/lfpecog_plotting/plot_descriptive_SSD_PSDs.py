@@ -816,7 +816,7 @@ def plot_scaling_LID(
     
     # colors = [list(get_colors('PaulTol).values())[c] for c in [4, 3, 0, 7]]  # colors are called by cat-value, so 0 is never used if baseline corrected
     colors = get_colors('Jacoba')
-    if not 'pre-LID' in cdrs_cat_coding.keys(): colors = colors[1:]   # skip gray
+    # if not 'pre-LID' in cdrs_cat_coding.keys(): colors = colors[:]   # skip gray
     
     for i_ax, side in enumerate(psds_to_plot.keys()):
         # prevent error with none subscriptable ax vs axes
@@ -901,14 +901,14 @@ def plot_scaling_LID(
                 loop_ax.plot(x_axis, psds.T, lw=3, alpha=.5,
                                 label=f'{cat_name} dyskinesia'
                                 f' (n={n_subs})',  # n_subs instead of n_subs_cat
-                                color=colors[int(i_cat)], )
+                                color=colors[int(cat)], )
             
             elif not single_sub_lines:
                 # plot full line
                 loop_ax.plot(x_axis, PSD['mean'], lw=5, alpha=.5,
                                 label=f'{cat_name} dyskinesia'
                                 f' (n={n_subs})',
-                                color=colors[int(i_cat)], )
+                                color=colors[int(cat)], )
                 # PLOT VARIANCE SHADING
                 if SHOW_SIGN:
                     sig_mask = np.array(ps) < (.05 / 68)  # 68 freqs compared
@@ -916,7 +916,7 @@ def plot_scaling_LID(
                                             y2=PSD['mean'] + PSD['sd'],
                                             alpha=.3,
                                             # where=sig_mask,
-                                            color=colors[int(i_cat)], )
+                                            color=colors[int(cat)], )
                     # # none-significant part of line
                     # loop_ax.fill_between(x=x_axis, y1=PSD['mean'] - PSD['sd'],
                     #                         y2=PSD['mean'] + PSD['sd'],
@@ -932,7 +932,7 @@ def plot_scaling_LID(
                 else:
                     loop_ax.fill_between(x=x_axis, y1=PSD['mean'] - PSD['sd'],
                                             y2=PSD['mean'] + PSD['sd'],
-                                            alpha=.3, edgecolor=colors[int(i_cat)],
+                                            alpha=.3, edgecolor=colors[int(cat)],
                                             facecolor='None', hatch='//')
         
         # SET AXTICKS

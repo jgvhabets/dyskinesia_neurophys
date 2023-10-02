@@ -21,7 +21,7 @@ def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
                              states_to_save=['tap', 'rest_no_move',
                                              'free_no_move', 'free_move'],
                              custom_tappers=['105', '010', '017'],):
-    # TODO: ADD CHECK FOR EXISTING DATA
+
     import lfpecog_features.get_ssd_data as ssd
     import lfpecog_analysis.get_SSD_timefreqs as ssd_TimeFreq
 
@@ -41,6 +41,13 @@ def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
         print(f'...\nSKIP sub-{sub}, all files present')
         return
     
+    if len(states_to_save) == 1 and 'tap' in states_to_save:
+            if np.logical_and(f'{sub}_lfp_left_tapSigs.npy' in files,
+                              f'{sub}_lfp_right_tapSigs.npy' in files):
+                print(f'skip tap-detection for sub-{sub}')
+                return None
+            
+
     # load all SSD timeseries for subject
     ssd_sub = ssd.get_subject_SSDs(sub=sub,
                                    incl_stn=True, incl_ecog=False,
@@ -56,12 +63,7 @@ def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
             continue
         
         print(f'...\nstart LFP-{lfp_side}, ACC-{acc_side} (sub-{sub})')
-        # # exclude combinations without tapping performed
-        # if (sub, acc_side) in [('017', 'right'),
-        #                     #    ('017', 'left'),  # for left tapping 017 no_move has to be checked
-        #                        ]:
-        #     print(f'skip acc-side {acc_side} for sub-{sub} due to no tapping')
-
+        
         # get lfp data
         lfp = getattr(ssd_sub, f'lfp_{lfp_side}')
 
@@ -78,8 +80,7 @@ def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
             print('corrected 103 ACC timings')
 
         # create 2d array with bands
-        for i_bw, bw in enumerate(['delta', 'alpha', 'lo_beta',
-                                   'hi_beta', 'gamma']):
+        for i_bw, bw in enumerate(ssd_sub.settings['SPECTRAL_BANDS'].keys()):
             bw_sig, sig_times, _ = ssd_TimeFreq.get_cont_ssd_arr(
                 subSourceSSD=lfp, bw=bw,
                 winLen_sec=ssd_sub.settings['WIN_LEN_sec'],
@@ -94,14 +95,14 @@ def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
             _, _, tap_bool = custom_tap_finding(
                 acc, acc_side=acc_side, move_type='tap',
             )
-            _, _, move_side_bool = custom_tap_finding(
-                acc, acc_side=acc_side, move_type='move',
-            )
-            _, _, othermove_side_bool = custom_tap_finding(
-                acc, acc_side=lfp_side, move_type='move',
-            )
-            move_total_bool = np.logical_or(move_side_bool,
-                                            othermove_side_bool)
+            # _, _, move_side_bool = custom_tap_finding(
+            #     acc, acc_side=acc_side, move_type='move',
+            # )
+            # _, _, othermove_side_bool = custom_tap_finding(
+            #     acc, acc_side=lfp_side, move_type='move',
+            # )
+            # move_total_bool = np.logical_or(move_side_bool,
+            #                                 othermove_side_bool)
 
         else:
             i_col_sidetap = [i for i, c in enumerate(acc.colnames)
@@ -123,7 +124,9 @@ def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
         i_col_task = [i for i, c in enumerate(acc.colnames)
                       if c == 'task'][0]
         
-        if 'tap' in states_to_save:
+        if np.logical_and('tap' in states_to_save,
+                          (f'{sub}_lfp_{lfp_side}_tapSigs.npy'
+                           not in os.listdir(results_path))):
             # get tap task data
             tap_lfp_arr, tap_sig_times = excl_specific_task(
                 data_arr=lfp_arr.copy(),
@@ -142,7 +145,9 @@ def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
             )
             print('...added tap')
 
-        if 'rest_no_move' in states_to_save:
+        if np.logical_and('rest_no_move' in states_to_save,
+                          (f'{sub}_lfp_{lfp_side}_restNoMoveSigs.npy'
+                           not in os.listdir(results_path))):
             # get no-tap, only rest, no movement data
             rest_lfp_arr, rest_sig_times = excl_specific_task(
                 data_arr=lfp_arr.copy(),
@@ -174,7 +179,9 @@ def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
                 task_times=acc.times,
                 task_to_excl=['tap', 'rest']
             )
-            if 'free_no_move' in states_to_save:
+            if np.logical_and('free_no_move' in states_to_save,
+                          (f'{sub}_lfp_{lfp_side}_freeNoMoveSigs.npy'
+                           not in os.listdir(results_path))):
                 # excl movement moments (take 2nd return var)
                 _, data_dict['freeNoMove'] = select_taps_in_data(
                     neural_data=free_lfp_arr,
@@ -188,7 +195,9 @@ def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
                     margin_around_tap_sec=2,
                 )
                 print('...added free no move')
-            if 'free_move' in states_to_save:
+            if np.logical_and('free_move' in states_to_save,
+                          (f'{sub}_lfp_{lfp_side}_freeMoveSigs.npy'
+                           not in os.listdir(results_path))):
                 # excl movement moments (take 2nd return var)
                 data_dict['freeMove'] = select_taps_in_data(
                     neural_data=free_lfp_arr,

@@ -431,3 +431,34 @@ def correct_tasks_010(data_class=False, colnames=False, data_arr=False):
         task_col[sel] = tsk
 
     return task_col
+
+
+def get_avail_ssd_subs(
+    DATA_VERSION, FT_VERSION,
+    IGNORE_PTS=[],
+    INCL_STN_ONLY_PTS=True,
+    WIN_LEN=10, WIN_OVERLAP=.5,
+    SSD_BROAD=True, 
+):
+# get all available subs with features
+
+    ssd_folder = 'SSD_feats'
+    if SSD_BROAD: ssd_folder += '_broad'
+    ssd_folder += f'_{FT_VERSION}'
+    ssd_path = join(get_project_path('results'), 'features',
+                            ssd_folder, DATA_VERSION,
+                            f'windows_{WIN_LEN}s_'
+                            f'{WIN_OVERLAP}overlap')
+    SUBS = list(set([name.split('_')[1]
+                    for name in listdir(ssd_path)]))
+
+    # remove ignore patients and e.g. STN onlys
+    remove_subs = []
+    if not INCL_STN_ONLY_PTS:
+        for sub in SUBS:
+            if sub.startswith('1'): remove_subs.append(sub)
+
+    for sub in IGNORE_PTS + remove_subs:
+        if sub in SUBS: SUBS.remove(sub)
+
+    return SUBS

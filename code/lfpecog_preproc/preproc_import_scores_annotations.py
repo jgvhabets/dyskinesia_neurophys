@@ -275,7 +275,7 @@ def get_cdrs_specific(
     sub, side='both', rater='Patricia',
     regularize=False,
     subs_PK_todo=['101', '102', '103', '105', '107', '108', '109',
-                  '019', '020', '021'],
+                  '019', '020', '021', '022', '023'],
 ):
     """
     Gives uni- or bilateral CDRS scores
@@ -284,7 +284,8 @@ def get_cdrs_specific(
     Input:
         - sub
         - side: should be left, right, both,
-            or 'contra ecog'
+            or 'contra ecog'; 'total', 'full' to incl
+            core categories (face, neck, trunk)
         - rater: should be Patricia, Jeroen or Mean
     
     Returns:
@@ -300,37 +301,40 @@ def get_cdrs_specific(
         times = scores['dopa_time']
 
         if side == 'both':
-            # take total (INCL AXIAL SCORES)
+            # take total (EXCL AXIAL SCORES)
             scores = scores['CDRS_total']
         
-        elif np.logical_and(
-            'contra' in side.lower(),
-            'ecog' in side.lower()
-        ):
+        elif np.logical_and('contra' in side.lower(),
+                            'ecog' in side.lower()):
             # take CORRESPONDING BODY SIDE to ECOG
             ecogside = get_ecog_side(sub)
             if ecogside == 'left': side = 'right'
             elif ecogside == 'right': side = 'left'
             scores = scores[f'CDRS_total_{side}']
         
-        elif np.logical_and(
-            'ipsi' in side.lower(),
-            'ecog' in side.lower()
-        ):
+        elif np.logical_and('ipsi' in side.lower(),
+                            'ecog' in side.lower()):
             # take NONE-CORRESPONDING BODY SIDE to ECOG
             side = get_ecog_side(sub)
             scores = scores[f'CDRS_total_{side}']
         
-        elif np.logical_or(
-            side.lower() == 'left',
-            side.lower() == 'right',
-        ):
+        elif np.logical_or(side.lower() == 'left',
+                           side.lower() == 'right',):
             side = side.lower()
             scores = scores[f'CDRS_total_{side}']
         
+        elif side.lower() in ['total', 'full']:
+            side = side.lower()
+            tempscores = scores[f'CDRS_total']
+            tempscores += scores[f'CDRS_trunk']
+            tempscores += scores[f'CDRS_neck']
+            tempscores += scores[f'CDRS_face']
+            scores = tempscores
+        
         else:
             raise ValueError('side should be "left", '
-                    '"right", "both" or "contra ecog"')
+                    '"right", "both", "contra", "ipsi",'
+                    ' "ecog", or "full"')
 
         if regularize:
             og_scores = traces.TimeSeries()
@@ -384,3 +388,82 @@ def get_cdrs_specific(
                          'Patricia, Jeroen or Mean')
 
     return times, scores
+
+
+# # for plotting CDRS different raters
+# import traces
+# import datetime as dt
+
+
+# max_scores_bilat = []
+# max_scores_ecoglat = []
+# rater='Patricia'
+
+# for s in ['008', '009', '010', '012',
+#              '013', '014', '016', '017']:
+
+#     t, scores = get_cdrs_specific(
+#         sub=s, rater=rater, side='both')
+#     max_scores_bilat.append(np.nanmax(scores))
+
+#     # t, scores = get_cdrs_specific(
+#     #     sub=s, rater=rater, side='full')
+#     # max_scores_bilat.append(np.nanmax(scores))
+
+#     t, scores = get_cdrs_specific(
+#         sub=s, rater=rater, side='contra ecog')
+#     max_scores_ecoglat.append(np.nanmax(scores))
+
+# print('BILATERAL', max_scores_bilat, np.mean(max_scores_bilat))
+# print('ECoG lat.', max_scores_ecoglat, np.mean(max_scores_ecoglat))
+
+# # CHECK CLINICAL RATINGS
+# subs_incl = ['008', '009', '010', '012',
+#              '013', '014', '016']
+
+# clrs = get_colors('Jacoba')
+# styles = ['solid', 'dotted']
+# fig, axes = plt.subplots(1,1, figsize=(12, 6))
+
+# for i_sub, sub in enumerate(subs_incl):
+#     reg_t, reg_scores = {}, {}
+#     for i_r, rater in enumerate(['Patricia', 'Jeroen']):
+#         t, scores = importClin.get_cdrs_specific(sub=sub, rater=rater)
+#         axes.plot(t, scores,  # [0]
+#                 color=clrs[i_sub], ls=styles[i_r], lw=3, label=f'{sub} ({rater})')
+
+#         # regularize scores
+#         reg_t[i_r], reg_scores[i_r] = importClin.get_cdrs_specific(
+#             sub=sub, rater=rater, regularize=True,)
+#         # axes[1].plot(reg_t[i_r], reg_scores[i_r],
+#         #         color=clrs[i_sub], ls=styles[i_r], lw=3, )
+    
+#     # calculate correlations
+#     # only take minutes present in both scores
+#     t_start = max([reg_t[i_r][0] for i_r in [0, 1]])
+#     t_stop = min([reg_t[i_r][-1] for i_r in [0, 1]])
+#     sel0 = [time >= t_start and time <= t_stop for time in reg_t[0]]
+#     sel1 = [time >= t_start and time <= t_stop for time in reg_t[1]]
+    
+#     print(sub, pearsonr(reg_scores[0][sel0], reg_scores[1][sel1]))
+
+# # axes[0].set_title('Inserted scores per timepoint', size=14)
+# # axes[1].set_title('Interpolated scores (per 1 minute)', size=14)
+# handles, labels = axes.get_legend_handles_labels()
+# plt.legend(handles, labels, ncol=5, bbox_to_anchor=(.5, -.25),
+#                loc='upper center', fontsize=14,)
+# # for ax in axes:
+# axes.set_ylabel('CDRS score', fontsize=14)
+# axes.set_xlabel('Time (minutes vs LDOPA-intake)', fontsize=14)
+# axes.tick_params(axis='both', labelsize=14, size=14)
+
+# plt.tight_layout()
+# # figname = 'CDRS_scores_2rater_interpolation'
+# # plt.savefig(os.path.join(figpath, 'clinical_scores', figname), dpi=150,
+# #             facecolor='w',)
+# # figname = 'CDRS_scores_2raters'
+# # plt.savefig(os.path.join(figpath, 'clinical_scores', figname), dpi=150,
+# #             facecolor='w',)
+# plt.close()
+
+

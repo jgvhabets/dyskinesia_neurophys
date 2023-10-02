@@ -76,7 +76,7 @@ class ssdFeatures:
     data_version: str = 'v3.0'
     incl_powers: bool = True
     incl_localPAC: bool = False
-    incl_bursts: bool = True
+    incl_bursts: bool = False
     incl_coherence: bool = True
     verbose: bool = False
 
