@@ -30,7 +30,9 @@ def get_group_arrays_for_prediction(
         - ft_times_total
         - ft_names
     """
-    assert CDRS_CODING in ['binary', 'categorical'], 'CDRS_CODING should be categorical or binary'
+    assert CDRS_CODING in ['binary', 'categorical'], (
+        'CDRS_CODING should be categorical or binary'
+    )
     # create empty list to store individual values for next process part
     X_total = []
     y_total_coded = []

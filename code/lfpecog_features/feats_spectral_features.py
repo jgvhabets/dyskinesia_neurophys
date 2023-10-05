@@ -52,12 +52,23 @@ def bandpass(sig, freqs, fs, order=3,):
 @dataclass
 class Spectralfunctions():
     """
-    standard variables order in functions: f, psd, ssd_sig, f_sel
+    Input:
+        - f (freqs corr to psd)
+        - psd: spectral pwoers from welch
+        - ssd_sig: time series, possibly unfiltered depending
+            on feature version
+        - f_sel: bool array which frequencies fall in current bw-range
+        - f_range: freq range start and stop
+        - s_freq: sampling freq
+        - SSD_FILTERED: bool whether ssd signal is bandpass filtered
     """
     f: np.ndarray = np.array([])
     psd: np.ndarray = np.array([])
     ssd_sig: np.ndarray = np.array([])
     f_sel: np.ndarray = np.array([])
+    f_range: np.ndarray = np.array([])
+    sfreq: int = 0
+    SSD_FILTERED: bool = True
 
     def get_SSD_max_psd(self):
         max_peak = np.max(self.psd[self.f_sel])
@@ -73,7 +84,13 @@ class Spectralfunctions():
         return mean_peak
 
     def get_SSD_variation(self):
-        cv_signal = variation(self.ssd_sig)
+        if not self.SSD_FILTERED:
+            filt_sig = bandpass(self.ssd_sig,
+                                freqs=self.f_range,
+                                fs=self.sfreq)
+        else: filt_sig = self.ssd_sig
+        env = abs(signal.hilbert(filt_sig))
+        cv_signal = variation(env)
         return cv_signal
     
 

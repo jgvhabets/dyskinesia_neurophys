@@ -89,19 +89,23 @@ class extract_local_SSD_powers():
                     ssd_signal = ssd_signal[~isna(ssd_signal)]
 
                     # Convert SSD'd signal into Power Spectrum
-                    f, psd = welch(ssd_signal, axis=-1,
-                                    nperseg=data.fs, fs=data.fs)
-                    f_sel = [f_range[0] < freq < f_range[1] for freq in f]  # select psd in freq of interest
+                    f_arr, psd = welch(ssd_signal, axis=-1,
+                                       nperseg=data.fs, fs=data.fs)
+                    f_sel = [f_range[0] < freq < f_range[1] for freq in f_arr]  # select psd in freq of interest
 
                     # CALCULATE SPECTRAL PEAK FEATURES
                     # loop over ft-names and ft-funcs ensures correct ft-order
                     for ft_name in fts_incl:
                         if fts_incl[ft_name] and ft_name.startswith('SSD_'):
                             # get value from function corresponding to ft-name
-                            ft_func = getattr(specFeats.Spectralfunctions(
-                                psd=psd, ssd_sig=ssd_signal,
-                                f=f, f_sel=f_sel
-                            ), f'get_{ft_name}')
+                            ft_func = getattr(
+                                specFeats.Spectralfunctions(
+                                    psd=psd, ssd_sig=ssd_signal,
+                                    f=f_arr, f_sel=f_sel,
+                                    SSD_FILTERED=SETTINGS['use_filtered_SSD'],
+                                    f_range=f_range, sfreq=data.fs,
+                                ), f'get_{ft_name}'
+                            )
                             feats_win.append(ft_func())
                        
                 # END OF WINDOW -> STORE list with window features to total list

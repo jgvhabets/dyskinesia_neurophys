@@ -73,7 +73,6 @@ class ssdFeatures:
     """
     settings_json: str = 'ftExtr_spectral_v1.json'
     sub_list: list = field(default_factory=lambda: [])
-    data_version: str = 'v3.0'
     incl_powers: bool = True
     incl_localPAC: bool = False
     incl_bursts: bool = False
@@ -83,6 +82,7 @@ class ssdFeatures:
     def __post_init__(self,):
         # load feature extraction settings
         self.ftExtract_settings = load_ft_ext_cfg(cfg_fname=self.settings_json)
+        self.data_version = self.ftExtract_settings["DATA_VERSION"]
         self.win_len_sec = self.ftExtract_settings['WIN_LEN_sec']
         self.win_overlap_part = self.ftExtract_settings['WIN_OVERLAP_part']
 
