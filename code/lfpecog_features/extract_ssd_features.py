@@ -44,6 +44,7 @@ class extract_local_SSD_powers():
     
     def __post_init__(self,):
         SETTINGS = self.sub_SSD.settings
+        self.overwrite_features = SETTINGS['OVERWRITE_FEATURES']
 
         # loop over possible datatypes
         for dType in self.sub_SSD.ephys_sources:
@@ -55,6 +56,7 @@ class extract_local_SSD_powers():
             if exists(join(self.feat_path, feat_fname)) and not self.overwrite_features:
                 print(f'...\tfeatures already exist for {dType}'
                       ' and are NOT overwritten, skip!')
+                continue
 
             ### Create storing of features
             fts_incl = SETTINGS['FEATS_INCL']  # get features to include

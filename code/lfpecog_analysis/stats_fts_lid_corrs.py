@@ -10,6 +10,7 @@ import os
 from statsmodels.formula.api import mixedlm
 import gpboost as gpb
 from scipy.stats import norm, pearsonr
+from itertools import product
 
 # import own functions
 from utils.utils_fileManagement import (get_project_path,
@@ -20,15 +21,24 @@ from utils.utils_fileManagement import (get_project_path,
 def replace_gammas_for_maxGamma(df):
 
     gamma_keys = [k for k in list(df.keys()) if 'gamma' in k]
-    n_fts = len(gamma_keys) // 3
 
-    print(gamma_keys)
+    # check local spectral features
+    for source, var in product(['lfp', 'ecog'],
+                               ['mean_psd', 'variation']):
+        g_keys = [k for k in gamma_keys
+                  if source in k and var in k]
+        if len(g_keys) > 0:
+            new_name = g_keys[0].replace('gamma1', 'gamma')
+            df[new_name] = df[g_keys].max(axis=1)
 
-    for i_gamma in np.arange(n_fts):
-        new_ft = gamma_keys[i_gamma * 3].replace('gamma1', 'gammaMax')
-        print(f'{new_ft}: {gamma_keys[i_gamma * 3:i_gamma * 3 + 3]}')
-        new_values = df[gamma_keys[i_gamma * 3:i_gamma * 3 + 3]].max(axis=1)
-        df[new_ft] = new_values
+    # check coherences
+    for source, var in product(['STN_STN', 'STN_ECOG'],
+                               ['sq_coh', 'imag_coh']):
+        g_keys = [k for k in gamma_keys
+                  if source in k and var in k]
+        if len(g_keys) > 0:
+            new_name = g_keys[0].replace('gamma1', 'gamma')
+            df[new_name] = df[g_keys].max(axis=1)
 
     df = df.drop(columns=gamma_keys)
 

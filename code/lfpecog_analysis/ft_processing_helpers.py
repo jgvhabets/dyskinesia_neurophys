@@ -94,18 +94,18 @@ class FeatLidClass:
         # features to corr with dyskinesia
         cohtype = 'imag'
         corr_feats = ['delta_mean_psd', 'delta_variation',
-                    'alpha_mean_psd', 'alpha_variation',
-                    'lo_beta_mean_psd', 'lo_beta_variation',
-                    'hi_beta_mean_psd', 'hi_beta_variation',
-                    'gamma1_mean_psd', 'gamma2_mean_psd', 'gamma3_mean_psd',
-                    'gamma1_variation', 'gamma2_variation','gamma3_variation',
-                    f'{cohtype}_coh_STN_STN_delta',
-                    f'{cohtype}_coh_STN_STN_alpha',
-                    f'{cohtype}_coh_STN_STN_lo_beta',
-                    f'{cohtype}_coh_STN_STN_hi_beta',
-                    f'{cohtype}_coh_STN_STN_gamma1',
-                    f'{cohtype}_coh_STN_STN_gamma2',
-                    f'{cohtype}_coh_STN_STN_gamma3']
+                      'alpha_mean_psd', 'alpha_variation',
+                      'lo_beta_mean_psd', 'lo_beta_variation',
+                      'hi_beta_mean_psd', 'hi_beta_variation',
+                      'gamma1_mean_psd', 'gamma2_mean_psd', 'gamma3_mean_psd',
+                      'gamma1_variation', 'gamma2_variation', 'gamma3_variation',
+                      f'{cohtype}_coh_STN_STN_delta',
+                      f'{cohtype}_coh_STN_STN_alpha',
+                      f'{cohtype}_coh_STN_STN_lo_beta',
+                      f'{cohtype}_coh_STN_STN_hi_beta',
+                      f'{cohtype}_coh_STN_STN_gamma1',
+                      f'{cohtype}_coh_STN_STN_gamma2',
+                      f'{cohtype}_coh_STN_STN_gamma3']
             
         if self.TO_CALC_CORR:
             self.corrs, self.stat_df = self.calc_corrs()
