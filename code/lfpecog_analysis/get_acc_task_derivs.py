@@ -9,9 +9,14 @@ from pandas import DataFrame
 import numpy as np
 from collections import namedtuple
 from scipy.signal import resample_poly
+import json
 
 from utils.utils_fileManagement import (
-    load_class_pickle, get_project_path
+    load_class_pickle, get_project_path,
+    make_object_jsonable
+)
+from lfpecog_features.moveDetection_preprocess import (
+    signalvectormagn
 )
 
 def get_n_and_length_taps(win_tap_bool, acc_fs):
@@ -288,3 +293,89 @@ def define_OFF_ON_times(
         on_times_sel = np.logical_and(on_times_sel, task_sel)
     
     return off_times_sel, on_times_sel
+
+
+def calc_windowed_rms(acc_sig, acc_times,
+                      win_times, win_len):
+    """
+    Calculate root mean square of acc-signal for
+    defined windows with starting times and
+    equal window lengths
+    """
+    rms = []
+    for t in win_times:
+        t2 = t + win_len
+        win_sel = np.logical_and(acc_times > t,
+                                 acc_times < t2)
+        rms.append(np.sqrt(np.mean(acc_sig[win_sel] ** 2)))
+    
+    rms = np.array(rms)
+
+    return rms
+
+
+def get_acc_rms_for_windows(sub, acc_side, featClass,
+                            Z_SCORE=True, SAVE_RMS=False,):
+
+    # select feature data
+    dat = featClass.FEATS[sub]
+    win_times_sec = dat.index.values * 60
+
+    # select and load acc-data
+    if acc_side in ['left', 'right']:
+        MEAN_ACC = False
+    elif acc_side in ['both', 'mean']:
+        acc_side = 'left'
+        MEAN_ACC = True
+
+    fname = (f'{sub}_mergedData_{featClass.DATA_VERSION}'
+            f'_acc_{acc_side}.P')
+    acc = load_class_pickle(join(get_project_path('data'),
+                                 'merged_sub_data',
+                                 featClass.DATA_VERSION,
+                                 f'sub-{sub}', fname))
+
+    # calculate rms per feat-window
+    acc_axes = ['ACC_' in c for c in acc.colnames]
+    svm = signalvectormagn(acc.data[:, acc_axes])
+    rms = calc_windowed_rms(acc_sig=svm, win_times=win_times_sec,
+                            acc_times=acc.times,
+                            win_len=featClass.WIN_LEN_sec)
+    
+    if MEAN_ACC:
+        fname = (f'{sub}_mergedData_{featClass.DATA_VERSION}'
+                f'_acc_right.P')
+        acc = load_class_pickle(join(get_project_path('data'),
+                                     'merged_sub_data',
+                                     featClass.DATA_VERSION,
+                                     f'sub-{sub}', fname))
+
+        # calculate rms per feat-window
+        acc_axes = ['ACC_' in c for c in acc.colnames]
+        svm = signalvectormagn(acc.data[:, acc_axes])
+        rms2 = calc_windowed_rms(acc_sig=svm, win_times=win_times_sec,
+                                 acc_times=acc.times,
+                                 win_len=featClass.WIN_LEN_sec)
+
+        # save if defined
+        if SAVE_RMS:
+            filepath = join(get_project_path('results'),
+                            'features',
+                            f'SSD_feats_broad_{featClass.FT_VERSION}',
+                            featClass.DATA_VERSION,
+                            f'windows_{featClass.WIN_LEN_sec}s_'
+                            f'{featClass.WIN_OVERLAP_part}overlap',
+                            f'windowed_ACC_RMS_{sub}.json')
+            
+            sub_rms = {'left': rms, 'right': rms2}
+            sub_rms = make_object_jsonable(sub_rms)
+
+            with open(filepath, 'w') as f: json.dump(sub_rms, f)
+
+        rms += rms2
+    
+    if not Z_SCORE: return rms
+
+    elif Z_SCORE:
+        rms_z = (rms - np.mean(rms)) / np.std(rms)
+        return rms_z

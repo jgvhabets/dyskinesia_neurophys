@@ -244,7 +244,7 @@ def save_class_pickle(
 
     if not exists(path): makedirs(path)
 
-    if not filename[-2:] == '.P': filename + extension
+    if not filename.endswith(extension): filename += extension
     
     pickle_path = join(path, filename)
 
@@ -286,7 +286,7 @@ def load_class_pickle(
             output = pickle.load(f)
             f.close()
     
-    print(file_to_load)
+    print(f'... pickle loading: {file_to_load}')
     if '010_mergedData_v4.0' in file_to_load:
         print(f'\n\t...correct tasks in {file_to_load}')
         new_tasks = correct_tasks_010(data_class=output)
@@ -308,7 +308,15 @@ def load_class_pickle(
         if 'data' in vars(output).keys():
             if isinstance(output.data, ndarray):
                 setattr(output, 'data', output.data.astype(float64))
-
+    print(file_to_load)
+    if '103_mergedData_v4.0' in file_to_load:
+        print(f'correcting {max(output.times)}')
+        if max(output.times) > 2e6:
+            setattr(output,
+                    'times',
+                    array(output.times) - float64(27 * 24 * 60 * 60))
+            output.data[:, 0] = output.times
+            print(f'corrected incorrect times in {file_to_load}')
 
     return output
 
@@ -318,6 +326,8 @@ def make_object_jsonable(obj):
     give object to convert content 
     to json-compatible datatypes (list instead
     of array, no np floats or integers)
+
+    PM: json.dump(DICT, f)
     """
     if isinstance(obj, ndarray):
 
@@ -451,6 +461,9 @@ def get_avail_ssd_subs(
                             f'{WIN_OVERLAP}overlap')
     SUBS = list(set([name.split('_')[1]
                     for name in listdir(ssd_path)]))
+    
+    SUBS = [s for s in SUBS if s[0] in ['0', '1']]
+    print('excl ACC from SUBS')
 
     # remove ignore patients and e.g. STN onlys
     remove_subs = []

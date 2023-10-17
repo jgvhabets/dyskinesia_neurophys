@@ -35,6 +35,20 @@ def remove_duplicate_legend(
     return handles, labels
 
 
+def convert_ft_names(names, find: str='delta',
+                     replace: str='theta'):
+
+    new_names = []
+
+    for n in names:
+        if find in n:
+            new_names.append(n.replace(find, replace))
+        else:
+            new_names.append(n)
+    
+    return new_names
+
+
 def get_colors(scheme='PaulTol'):
     """
     if scheme is 'access_colors_PaulTol' Paul Tol's

@@ -6,13 +6,133 @@ Plot Frequency-Correlation-Plots
 from os.path import join, exists
 from os import makedirs
 import numpy as np
+from itertools import compress, product
 import matplotlib.pyplot as plt
 import matplotlib.pylab as pl
+from matplotlib.colors import ListedColormap
 from scipy.stats import pearsonr
 
 # import own functions
-from lfpecog_plotting.plotHelpers import get_colors
+from lfpecog_plotting.plotHelpers import (
+    get_colors, convert_ft_names
+)
+from lfpecog_analysis.ft_processing_helpers import (
+    FeatLidClass
+)
+from utils.utils_fileManagement import get_project_path
 
+
+def plot_heatmap_ftSettings_vs_Dyskinesia(
+    settingsDict, fig_name,
+):
+    """
+    Input:
+        - settingsDict: dict with different settings
+            of feature settings and dyskinesia-label
+            settings used to create features, should
+            contain FT_VERSION, CORR_TARGET, CATEG_CDRS,
+            INCL_STN, INCL_ECOG
+    """
+    classDict = {}
+
+    for setting in settingsDict:
+        label = f'ft-{setting["FT_VERSION"]}'
+        if setting["CORR_TARGET"] == 'LID': label += '_bin'
+        elif (setting["CORR_TARGET"] == 'CDRS' and
+              setting["CATEG_CDRS"]): label += '_cat'
+        else: label += '_lin'
+                
+        # create feat label class
+        classDict[label] = FeatLidClass(
+            FT_VERSION=setting["FT_VERSION"],
+            CORR_TARGET=setting['CORR_TARGET'],
+            CATEGORICAL_CDRS=setting["CATEG_CDRS"],
+            INCL_ECOG=setting["INCL_ECOG"],
+            INCL_STN=setting["INCL_STN"],
+            TO_CALC_CORR=True,)
+    
+    # plot STN-only and ECoG-required features separately
+    grid_feats = list(list(classDict.values())[0].corrs.keys())
+
+    # select out STN only feats if STN AND ECOG are included
+    if np.logical_and(list(classDict.values())[0].INCL_ECOG,
+                      list(classDict.values())[0].INCL_STN):
+        ecog_sel = ~np.array(['lfp' in f or 'STN_STN' in f
+                                for f in grid_feats])
+        grid_feats = list(compress(grid_feats, ecog_sel))
+        print(f'ECoG requiring feats: {grid_feats}')
+
+    # create grid with NaNs (n-features x n-ft/label-settings)
+    R_grid = np.array([[np.nan] * len(classDict)
+                       ] * len(grid_feats))
+    p_grid = R_grid.copy()
+
+    for i, sett_label in enumerate(classDict):
+        ftCorrs = np.array(list(classDict[sett_label].corrs.values()))
+
+        Rs = ftCorrs[:, 0]
+        ps = ftCorrs[:, 1]
+        # exclude only-STN features if necessary
+        if np.logical_and(list(classDict.values())[0].INCL_ECOG,
+                          list(classDict.values())[0].INCL_STN):
+            Rs = Rs[ecog_sel]
+            ps = ps[ecog_sel]
+        # add R and p to grid for specific setting column
+        R_grid[:, i] = Rs
+        p_grid[:, i] = ps
+
+    # plot heatmap
+    plot_ftCorr_heatMap(R_grid=R_grid, p_grid=p_grid,
+                        grid_feats=grid_feats,
+                        sett_labels=list(classDict.keys()),
+                        fig_name=fig_name,)
+
+def plot_ftCorr_heatMap(R_grid, p_grid, fig_name,
+                        grid_feats, sett_labels,
+                        FS = 24,):
+    
+    # define sign mask
+    sig_mask = p_grid < (.05 / len(grid_feats))  # correct alpha (0.05) for mult comparisons
+    # create sep sign and non-sig grids for plotting difference sig vs no-sig
+    sig_R_grid, nonsig_R_grid = R_grid.copy(), R_grid.copy()
+    sig_R_grid[~sig_mask] = np.nan
+    nonsig_R_grid[sig_mask] = np.nan
+
+    grid_feats = convert_ft_names(grid_feats, find='delta', replace='theta')
+
+    none_map = ListedColormap(['none'])
+
+    fig, ax = plt.subplots(1, 1, figsize=(20, 12), )
+    # full colored for sign Rs
+    sig_map = ax.pcolormesh(sig_R_grid, vmin=-1, vmax=1,
+                            cmap='RdBu_r', edgecolors='w',)
+    # color with hatch stripes
+    nonsig_map = ax.pcolormesh(nonsig_R_grid, vmin=-1, vmax=1,
+                               cmap='RdBu_r', edgecolors='w',)
+    hatch = plt.pcolor(nonsig_R_grid, vmin=-1, vmax=1,
+                       hatch='//', cmap=none_map,
+                       edgecolor='w', )
+    # show colorbar
+    cbar = fig.colorbar(sig_map, pad=.01)
+    cbar.set_label('LMM - Coefficient (a.u.)', size=FS, weight='bold')
+    cbar.ax.tick_params(size=FS, labelsize=FS-2,)
+
+    ax.set_yticks(np.arange(.5, R_grid.shape[0] + .5, 1))
+    ax.set_yticklabels(grid_feats)
+
+    ax.set_xticks(np.arange(.5, R_grid.shape[1] + .5, 1))
+    ax.set_xticklabels(sett_labels)
+
+    ax.tick_params(top=True, labeltop=True,
+                bottom=False, labelbottom=False,
+                size=FS, labelsize=FS,)
+
+    plt.tight_layout()
+
+    plt.savefig(join(get_project_path('figures'),
+                     'feat_dysk_corrs', fig_name),
+                dpi=300, facecolor='w',)
+    plt.close()
 
 def calculate_Rs_FreqCorr(
     FreqCorr_dict, mean_per_score = True,
@@ -100,6 +220,11 @@ def calculate_Rs_FreqCorr(
 def plot_FreqCorr(frqCor_values, freqs,
                   fig_name=None, save_dir=None,
                   use_exact_values=False,):
+    """
+    did not follow up on plots because single
+    frequencies over time do not seem to make
+    sense after SSD
+    """
 
     if not exists(save_dir): makedirs(save_dir)
 

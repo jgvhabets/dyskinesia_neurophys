@@ -9,14 +9,20 @@ import numpy as np
 from pandas import DataFrame, concat
 from itertools import compress, product
 from dataclasses import dataclass, field
+from os.path import join, exists
+import json
 
 # import own custom functions
-from utils.utils_fileManagement import get_avail_ssd_subs
+from utils.utils_fileManagement import (get_avail_ssd_subs,
+                                        get_project_path)
 from lfpecog_preproc.preproc_import_scores_annotations import(
     get_cdrs_specific, get_ecog_side
 )
 from lfpecog_analysis.load_SSD_features import ssdFeatures
 import lfpecog_analysis.stats_fts_lid_corrs as ftLidCorr
+from lfpecog_analysis.get_acc_task_derivs import(
+    get_acc_rms_for_windows
+)
 
 @dataclass(init=True, repr=True)
 class FeatLidClass:
@@ -27,8 +33,10 @@ class FeatLidClass:
     ANALYSIS_SIDE: str = 'BILAT'
     INCL_STN: bool = True
     INCL_ECOG: bool = True
+    EXCL_IPSI_ECOG: bool = True
     INCL_CORE_CDRS: bool = True
     INCL_PSD_FTS: list = field(default_factory=lambda: ['mean_psd', 'variation'])
+    INCL_ACC_RMS: bool = False
     IGNORE_PTS: list = field(default_factory=lambda: ['011', '104', '106'])
     CATEGORICAL_CDRS: bool = True
     cutMild: float = 4
@@ -52,6 +60,7 @@ class FeatLidClass:
         print(f'SUBS: n={len(self.SUBS)} ({self.SUBS})')
 
         self.FEATS, self.FT_LABELS = {}, {}
+        if self.INCL_ACC_RMS: self.ACC_RMS = {}
 
         for sub in self.SUBS:
             print(f'load {sub}')
@@ -64,23 +73,27 @@ class FeatLidClass:
                 sub,
                 INCL_PSD=self.INCL_PSD_FTS,
                 LATERALITY=self.ANALYSIS_SIDE,
-                EXCL_IPSI_ECOG=True,
+                EXCL_IPSI_ECOG=self.EXCL_IPSI_ECOG,
                 INCL_STN=self.INCL_STN,
                 INCL_ECOG=self.INCL_ECOG,
                 FT_VERSION=self.FT_VERSION,
             )
 
             # LOAD CLINICAL SCORES AND CORRESPONDING WINDOW SELECTION
-            (select_bool,
-             ecog_related_cdrs) = find_select_nearest_CDRS_for_ephys(
+            ecog_related_cdrs = find_select_nearest_CDRS_for_ephys(
                 sub=sub, ft_times=self.FEATS[sub].index,
                 cdrs_rater=self.CDRS_RATER,
                 side=self.ANALYSIS_SIDE,
                 INCL_CORE_CDRS=self.INCL_CORE_CDRS,
             )
+            self.FT_LABELS[sub] = ecog_related_cdrs
             # select features and clinical scores to include
-            self.FEATS[sub] = self.FEATS[sub].iloc[select_bool]
-            self.FT_LABELS[sub] = ecog_related_cdrs[select_bool]
+            if (isinstance(ecog_related_cdrs, tuple) and
+                len(ecog_related_cdrs) == 2):
+                print('split cdrs tuple bcs of side exclusion')
+                select_bool, ecog_related_cdrs = ecog_related_cdrs
+                self.FEATS[sub] = self.FEATS[sub].iloc[select_bool]
+                self.FT_LABELS[sub] = ecog_related_cdrs[select_bool]
 
             if self.CATEGORICAL_CDRS:
                 self.FT_LABELS[sub] = categorical_CDRS(
@@ -91,24 +104,16 @@ class FeatLidClass:
                     cutoff_moderateSevere=self.cutSevere,
                 )
             
-        # features to corr with dyskinesia
-        cohtype = 'imag'
-        corr_feats = ['delta_mean_psd', 'delta_variation',
-                      'alpha_mean_psd', 'alpha_variation',
-                      'lo_beta_mean_psd', 'lo_beta_variation',
-                      'hi_beta_mean_psd', 'hi_beta_variation',
-                      'gamma1_mean_psd', 'gamma2_mean_psd', 'gamma3_mean_psd',
-                      'gamma1_variation', 'gamma2_variation', 'gamma3_variation',
-                      f'{cohtype}_coh_STN_STN_delta',
-                      f'{cohtype}_coh_STN_STN_alpha',
-                      f'{cohtype}_coh_STN_STN_lo_beta',
-                      f'{cohtype}_coh_STN_STN_hi_beta',
-                      f'{cohtype}_coh_STN_STN_gamma1',
-                      f'{cohtype}_coh_STN_STN_gamma2',
-                      f'{cohtype}_coh_STN_STN_gamma3']
+
+            if self.INCL_ACC_RMS:
+                self.ACC_RMS[sub] = self.load_matching_acc_rms(
+                    sub=sub, RMS_ZSCORE=True, ACC_SIDE='mean',
+                )
+        
             
         if self.TO_CALC_CORR:
             self.corrs, self.stat_df = self.calc_corrs()
+
 
     def calc_corrs(self):
         # get correlations
@@ -120,6 +125,35 @@ class FeatLidClass:
         )
 
         return corrs, stat_df
+
+
+    def load_matching_acc_rms(self, sub: str, ACC_SIDE = 'mean',
+                              RMS_ZSCORE=True):
+
+        rms_fpath = join(get_project_path('results'),
+                            'features',
+                            f'SSD_feats_broad_{self.FT_VERSION}',
+                            self.DATA_VERSION,
+                            f'windows_{self.WIN_LEN_sec}s_'
+                            f'{self.WIN_OVERLAP_part}overlap',
+                            f'windowed_ACC_RMS_{sub}.json')
+
+        if exists(rms_fpath):
+            with open(rms_fpath, 'r') as f:
+                sub_rms = json.load(f)
+            
+            if ACC_SIDE == 'mean':
+                rms = np.array(sub_rms['left']) + np.array(sub_rms['right'])
+            else: rms = sub_rms[ACC_SIDE]
+
+            if RMS_ZSCORE: rms = (rms - np.mean(rms)) / np.std(rms)
+
+        else:
+            rms = get_acc_rms_for_windows(
+                sub=sub, acc_side=ACC_SIDE, Z_SCORE=RMS_ZSCORE,
+                featClass=self, SAVE_RMS=True,)
+        
+        return rms
 
 
 def load_feature_df_for_pred(
@@ -306,7 +340,10 @@ def find_select_nearest_CDRS_for_ephys(
         - ft_times: array with all ft_times to
             be selected in MINUTES
         - side: side of CDRS scores, if only 'left',
-            or 'right' given, then this refers to BODYSIDE
+            or 'right', 'both' given, then this
+            refers to BODYSIDE. 
+        - INCL_CORE_CDRS: incl core categories: 
+            face, neck, trunk
         - cdrs_rater: should be: Patricia, Jeroen or Mean
 
     Returns:
@@ -320,7 +357,7 @@ def find_select_nearest_CDRS_for_ephys(
     assert max(ft_times) < 120, 'ft_times should be in MINUTES'
     side = side.lower()
     allowed_sides = ['both', 'all', 'bilat', 'sum',
-                    'right', 'left',
+                    'right', 'left','full', 'total',
                     'contralat ecog', 'ipsilat ecog',
                     'ecog match', 'ecog nonmatch',
                     'lfp_right', 'lfp_left']
@@ -394,7 +431,8 @@ def find_select_nearest_CDRS_for_ephys(
     if not isinstance(cdrs_for_fts, np.ndarray):
         cdrs_for_fts = cdrs_for_fts.values
     
-    return select_bool, cdrs_for_fts
+    if EXCL_UNILAT_OTHER_SIDE_LID: return select_bool, cdrs_for_fts
+    else: return cdrs_for_fts
 
 
 def categorical_CDRS(
