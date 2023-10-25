@@ -468,8 +468,8 @@ def calculate_connectivity_per_band(
 
             if not isinstance(freq_sel, np.ndarray):
                 # if freq_sel is still None, create boolean for freq-bin selection
-                freq_sel = np.logical_and(f > band_range[0],
-                                        f < band_range[1])
+                freq_sel = np.logical_and(f >= band_range[0],
+                                        f <= band_range[1])
                 values['freqs'] = list(f[freq_sel])
 
             if incl_imag_coh:

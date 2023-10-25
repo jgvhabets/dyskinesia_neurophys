@@ -58,7 +58,8 @@ def get_SSD_component(
     
     Returns:
         - SSD_filtered_data
-        - SSD_pattern
+        - SSD_pattern (max/min indicates dipoles,
+            interpret absolute values)
         - SSD_eigvals
 
     """

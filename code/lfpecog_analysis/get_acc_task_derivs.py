@@ -295,6 +295,46 @@ def define_OFF_ON_times(
     return off_times_sel, on_times_sel
 
 
+def get_raw_acc_traces(sub, side, data_version):
+    """
+    Returns pickled dataclass containing merged 
+    accelerometer sub-data (attr: data, colnames,
+    fs, times)
+    """
+
+    sub_data_path = join(get_project_path('data'),
+                                'merged_sub_data',
+                                data_version,
+                                f'sub-{sub}')
+    # load Acc-detected movement labels
+    fname = (f'{sub}_mergedData_{data_version}'
+                f'_acc_{side}.P')
+    acc = load_class_pickle(join(sub_data_path, fname))
+
+    return acc
+
+
+def get_any_resolution_acc_rms(sub, epoch_times_sec,
+                               epoch_length_s,
+                               data_version='v4.0'):
+    
+    rms = {'left': [], 'right': []}
+
+    for side in ['left', 'right']:
+        
+        dat = get_raw_acc_traces(sub=sub, side=side,
+                                 data_version=data_version)
+        acc_cols = ['ACC' in c for c in dat.colnames]
+        svm_arr = signalvectormagn(dat.data[:, acc_cols])
+        rms = calc_windowed_rms(acc_sig=svm_arr, acc_times=dat.times,
+                                win_times=epoch_times_sec,
+                                win_len=epoch_length_s)
+    
+    rms = np.array([rms['left'], rms['left']], axis=0)
+
+    return rms
+
+
 def calc_windowed_rms(acc_sig, acc_times,
                       win_times, win_len):
     """
@@ -379,3 +419,109 @@ def get_acc_rms_for_windows(sub, acc_side, featClass,
     elif Z_SCORE:
         rms_z = (rms - np.mean(rms)) / np.std(rms)
         return rms_z
+
+
+def select_tf_on_movement(feat10sClass, sub,
+                          tf_values_arr, tf_times_arr,
+                          SELECT_ON_ACC_RMS,
+                          RMS_Z_THRESH=-0.5,):
+    """
+    Function used within plot_descriptive_SSD_PSDs
+    to select time-frequency values and times
+    based on RMS-ACC movement.
+    Currently selects one-second windows based on
+    closest 10-second RMS-ACC values. Future 1-sec
+    RMS resolution needs long computational time
+    to prepare and store generated data.
+
+    Inputs:
+        - feat10sClass: priorly imported FeatLidClass
+            with features, labels, and acc-rms
+        - sub: current sub id
+        - tf_values_arr, tf_times_arr (minutes, 1Hz): array with
+            1d or 2d-values, for STN processing this
+            are the keys of the dicts with match/nonmatch
+            keys, generated within plot_STN_PSD_vs_LID()
+        - SELECT_ON_ACC_RMS: either INCL_MOVE or EXCL_MOVE
+        - RMS_Z_THRESH: z-score for mvoement threshold, defaults
+            to -0.5.
+    
+    Returns:
+        - tf_values_arr: corrected
+        - tf_times_arr: corrected
+    """
+    
+    # print(f'extract RMS for sub {sub}, {match_key}')
+    # # calculate rms per feat-window (second resolution)
+    # epoch_rms = get_any_resolution_acc_rms(
+    #     sub=sub, epoch_times_sec=tf_times['match'] * 60,
+    #     epoch_length_s=1, data_version=DATA_VERSION
+    # )
+
+    # fast way: RMS per 10 seconds
+    rms = feat10sClass.ACC_RMS[sub]  # std zscored mean-rms
+    rms_move = (rms > RMS_Z_THRESH).astype(int)
+    rms_time = feat10sClass.FEATS[sub].index.values * 60  # in minutes, convert to seconds
+    move_mask = np.zeros_like(tf_times_arr)
+
+    for rms_t, rms_bool in zip(rms_time, rms_move):
+        tf_i1 = np.argmin(abs((tf_times_arr * 60) - rms_t))  # convert to seconds for rounding accuracy
+        move_mask[tf_i1:tf_i1 + feat10sClass.WIN_LEN_sec] = rms_bool
+    
+    print(f'Movement selection ({SELECT_ON_ACC_RMS}) for sub-{sub}:\n'
+          f'rms-shape: {rms.shape}, mask-shape: {move_mask.shape}, '
+          f'nr of movement-moments: {sum(move_mask)}, tf-arr-shape: {tf_values_arr.shape}')
+    
+    # select based on found windows
+    if SELECT_ON_ACC_RMS == 'INCL_MOVE':
+        move_sel = move_mask.astype(bool)
+    elif SELECT_ON_ACC_RMS == 'EXCL_MOVE':
+        move_sel = ~move_mask.astype(bool)
+    
+    tf_times_arr = tf_times_arr[move_sel]
+    tf_values_arr = tf_values_arr[:, move_sel]
+
+    return tf_values_arr, tf_times_arr
+
+
+def select_tf_on_movement_10s(feat10sClass, sub,
+                              tf_values_arr, tf_times_arr,
+                              SELECT_ON_ACC_RMS,
+                              RMS_Z_THRESH=-0.5,):
+    """
+    Function used within plot_COHs_spectra
+    to select time-frequency values and times
+    based on RMS-ACC movement.
+    Selects per 10-SECOND WINDOW!
+
+    Inputs:
+        - feat10sClass: priorly imported FeatLidClass
+            with features, labels, and acc-rms
+        - sub: current sub id
+        - tf_values_arr, tf_times_arr (minutes, 1Hz): array with
+            1d or 2d-values, for STN processing this
+            are the keys of the dicts with match/nonmatch
+            keys, generated within plot_COH_spectra()
+        - SELECT_ON_ACC_RMS: either INCL_MOVE or EXCL_MOVE
+        - RMS_Z_THRESH: z-score for mvoement threshold, defaults
+            to -0.5.
+    
+    Returns:
+        - tf_values_arr: corrected
+        - tf_times_arr: corrected
+    """
+    rms = feat10sClass.ACC_RMS[sub]  # std zscored mean-rms
+    rms_move = (rms > RMS_Z_THRESH).astype(int)
+    rms_time = feat10sClass.FEATS[sub].index.values * 60  # in minutes, convert to seconds
+    move_mask = np.zeros_like(tf_times_arr)
+
+    for i_t, coh_t in enumerate(tf_times_arr):
+        try: i_rms = np.where(rms_time == coh_t)[0][0]
+        except: i_rms = np.argmin(abs(rms_time - coh_t))
+        move_mask[i_t] = rms_move[i_rms]
+    if 'INCL' in SELECT_ON_ACC_RMS: sel_move = move_mask.astype(bool)
+    elif 'EXCL' in SELECT_ON_ACC_RMS: sel_move = ~move_mask.astype(bool)
+    tf_values_arr = tf_values_arr[sel_move, :]
+    tf_times_arr = tf_times_arr[sel_move]
+
+    return tf_values_arr, tf_times_arr

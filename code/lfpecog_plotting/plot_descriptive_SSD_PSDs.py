@@ -14,16 +14,20 @@ from itertools import compress
 # import own functions
 from lfpecog_analysis.ft_processing_helpers import (
     find_select_nearest_CDRS_for_ephys,
-    categorical_CDRS
+    categorical_CDRS, FeatLidClass
 )
 from lfpecog_plotting.plotHelpers import get_colors
 from lfpecog_preproc.preproc_import_scores_annotations import (
     get_cdrs_specific, get_ecog_side
 )
-from utils.utils_fileManagement import get_project_path
+from utils.utils_fileManagement import (get_project_path,
+                                        load_class_pickle)
 from lfpecog_plotting.plotHelpers import remove_duplicate_legend
 from lfpecog_analysis.psd_lid_stats import (
     process_mean_stats, get_binary_p_perHz
+)
+from lfpecog_analysis.get_acc_task_derivs import(
+    select_tf_on_movement
 )
 
 def plot_PSD_vs_DopaTime(all_timefreqs,
@@ -140,6 +144,7 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
         blank_sel = np.logical_and(tf_freqs > 35, tf_freqs < 60)
         # psd_mean[blank_sel] = np.nan
         # tf_freqs[blank_sel] = np.nan
+
         # smoothen signal for plot
         if SMOOTH_PLOT_FREQS > 0:
             psd_mean = Series(psd_mean).rolling(
@@ -184,7 +189,8 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
     if BASELINE_CORRECT: ylabel = 'Power %-change vs pre - L-DOPA' + ylabel[5:]
     ax.set_ylabel(ylabel, size=fsize,)
 
-    ax.legend(frameon=False, fontsize=fsize-3, ncol=2)
+    ax.legend(frameon=False, fontsize=fsize-3, ncol=1,
+              loc='lower right')
 
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -235,6 +241,7 @@ def plot_STN_PSD_vs_LID(
     LOG_POWER=True, ZSCORE_FREQS=True,
     SMOOTH_PLOT_FREQS=0,
     BASELINE_CORRECT=False,
+    SELECT_ON_ACC_RMS=False,
     BREAK_X_AX=False, STD_ERR=True,
     plt_ax_to_return=False,
     fsize=12,
@@ -267,6 +274,9 @@ def plot_STN_PSD_vs_LID(
             smoothen PSDs values
         - BASELINE_CORRECT: plot difference of time-windows
             versus pre-Dopa-intake
+        - SELECT_ON_ACC_RMS: defaults to False, no movement selection
+            applied; if 'INCL_MOV' or 'EXCL_MOV', movement threshold
+            is 0 within z-scored averaged RMS of both ACCs.
         - BREAK_X_AX: break x-axis between beta and gamma
         - plt_ax_to_return: if plotted as subplot in another plot,
             give the defined axis here
@@ -306,6 +316,16 @@ def plot_STN_PSD_vs_LID(
     n_uni_subs = 0
     subs_incl = {k: {} for k in psds_to_plot.keys()}  # keep track of indiv subs per cat
     
+    # if movement selection on RMS is defined, load pickled class for all subjects
+    if SELECT_ON_ACC_RMS:
+        featLabPath = join(get_project_path('data'),
+                           'prediction_data',
+                           'featLabelClasses',
+                           f'featLabels_ft{FT_VERSION}_Cdrs_StnOnly.P')
+        feat10sClass = load_class_pickle(featLabPath,
+                                         convert_float_np64=True)
+        print(f'10s-feature class loaded for RMS-ACC selection ({featLabPath})')
+
     # gets per hemisphere the subject ID and the mean-psd-array (no LID and LID)
     # CDRS contains the scores corresponding to LID
     mean_stats = {'LID': [], 'noLID': [], 'CDRS': []}
@@ -351,19 +371,33 @@ def plot_STN_PSD_vs_LID(
             tf_times['match'] = all_timefreqs[sub][f'lfp_{LFP_match_side}'].times / 60
             tf_times['nonmatch'] = all_timefreqs[sub][f'lfp_{LFP_nonmatch_side}'].times / 60
             tf_freqs = all_timefreqs[sub][f'lfp_{LFP_match_side}'].freqs
+
             
+            ### SELECT OUT ON ACC RMS IF DEFINED HERE ###
+            if SELECT_ON_ACC_RMS:
+                for match_key in ['match', 'nonmatch']:
+                    (tf_values[match_key],
+                     tf_times[match_key]) = select_tf_on_movement(
+                        feat10sClass=feat10sClass, sub=sub,
+                        tf_values_arr=tf_values[match_key],
+                        tf_times_arr=tf_times[match_key],
+                        SELECT_ON_ACC_RMS=SELECT_ON_ACC_RMS,
+                        # RMS_Z_THRESH=0,  # defaults to -0.5
+                    )
+            
+
             # find matching windows (UNILAT LID) for both LFP PSDs
             # matching LFP side to LID
-            _, ft_cdrs['LID'] = find_select_nearest_CDRS_for_ephys(
+            ft_cdrs['LID'] = find_select_nearest_CDRS_for_ephys(
                 sub=sub, side=LID_side, ft_times=tf_times['match'],
                 cdrs_rater=CDRS_RATER,
             ) 
-            _, ft_cdrs['noLID'] = find_select_nearest_CDRS_for_ephys(
+            ft_cdrs['noLID'] = find_select_nearest_CDRS_for_ephys(
                 sub=sub, side=noLID_side, ft_times=tf_times['match'],
                 cdrs_rater=CDRS_RATER,
             )
             if LAT_or_SCALE in ['SCALE', 'LAT_BILAT']:
-                _, ft_cdrs['bi'] = find_select_nearest_CDRS_for_ephys(
+                ft_cdrs['bi'] = find_select_nearest_CDRS_for_ephys(
                     sub=sub, side='both', ft_times=tf_times['match'],
                     cdrs_rater=CDRS_RATER,
                 )
@@ -455,16 +489,16 @@ def plot_STN_PSD_vs_LID(
             
             
             # NON-matching LFP side to LID
-            _, ft_cdrs['LID'] = find_select_nearest_CDRS_for_ephys(
+            ft_cdrs['LID'] = find_select_nearest_CDRS_for_ephys(
                 sub=sub, side=LID_side, ft_times=tf_times['nonmatch'],
                 cdrs_rater=CDRS_RATER,
             ) 
-            _, ft_cdrs['noLID'] = find_select_nearest_CDRS_for_ephys(
+            ft_cdrs['noLID'] = find_select_nearest_CDRS_for_ephys(
                 sub=sub, side=noLID_side, ft_times=tf_times['nonmatch'],
                 cdrs_rater=CDRS_RATER,
             )
             if LAT_or_SCALE in ['SCALE', 'LAT_BILAT']:
-                _, ft_cdrs['bi'] = find_select_nearest_CDRS_for_ephys(
+                ft_cdrs['bi'] = find_select_nearest_CDRS_for_ephys(
                     sub=sub, side='both', ft_times=tf_times['nonmatch'],
                     cdrs_rater=CDRS_RATER,
                 )
@@ -910,30 +944,18 @@ def plot_scaling_LID(
                                 f' (n={n_subs})',
                                 color=colors[int(cat)], )
                 # PLOT VARIANCE SHADING
+                loop_ax.fill_between(x=x_axis, y1=PSD['mean'] - PSD['sd'],
+                                     y2=PSD['mean'] + PSD['sd'],
+                                     alpha=.3,
+                                     color=colors[int(cat)], )
+
+                # one significance shade for all severities
                 if SHOW_SIGN:
                     sig_mask = np.array(ps) < (.05 / 68)  # 68 freqs compared
-                    loop_ax.fill_between(x=x_axis, y1=PSD['mean'] - PSD['sd'],
-                                            y2=PSD['mean'] + PSD['sd'],
-                                            alpha=.3,
-                                            # where=sig_mask,
-                                            color=colors[int(cat)], )
-                    # # none-significant part of line
-                    # loop_ax.fill_between(x=x_axis, y1=PSD['mean'] - PSD['sd'],
-                    #                         y2=PSD['mean'] + PSD['sd'],
-                    #                         alpha=.3, where=~sig_mask,
-                    #                         edgecolor=colors[int(i_cat)],
-                    #                         facecolor='None', hatch='//',)
-
-                    # one significance shade for all severities
                     loop_ax.fill_between(x=x_axis, y1=-50, y2=100,
                                         alpha=.05,
                                         where=sig_mask,
                                         color=colors[-1],)
-                else:
-                    loop_ax.fill_between(x=x_axis, y1=PSD['mean'] - PSD['sd'],
-                                            y2=PSD['mean'] + PSD['sd'],
-                                            alpha=.3, edgecolor=colors[int(cat)],
-                                            facecolor='None', hatch='//')
         
         # SET AXTICKS
         if BREAK_X_AX:
@@ -1151,7 +1173,6 @@ def break_x_axis_psds_ticks(tf_freqs, PSD, PSD_sd=False,
 
         xticks = np.arange(len(PSD))
         
-    
     xlabels = [''] * len(xticks)
     low_ticks = plt_freqs[plt_freqs < x_break[0]]
     xlabels[:len(low_ticks)] = low_ticks
@@ -1171,6 +1192,7 @@ def plot_ECOG_PSD_vs_LID(
     CDRS_RATER='Patricia',
     LAT_or_SCALE='LAT_UNI',
     LOG_POWER=True, ZSCORE_FREQS=False,
+    SELECT_ON_ACC_RMS=False,
     SMOOTH_PLOT_FREQS=0, STD_ERR=True,
     BASELINE_CORRECT=False,
     BREAK_X_AX=False, plt_ax_to_return=False,
@@ -1198,6 +1220,8 @@ def plot_ECOG_PSD_vs_LID(
             LID), or SCALE (PSDs vs CDRS categories),
             or LAT_ALL_SCALE for all uni- and bilat LID splitted
             on contralat and ipsilat;
+        - SELECT_ON_ACC_RMS: defaults False: no selection,
+            INCL_MOVE or EXCL_MOVE
         - LOG_POWER: plot powers logarithmic
         - ZSCORE_FREQS: plot PSDs as z-Scores per freq-bin
         - SMOOTH_PLOT_FREQS: if > 0, window (n freqs) to
@@ -1236,6 +1260,16 @@ def plot_ECOG_PSD_vs_LID(
 
     n_uni_subs = 0
     subs_incl = {k: {} for k in psds_to_plot.keys()}  # keep track of indiv subs per cat
+
+    # if movement selection on RMS is defined, load pickled class for all subjects
+    if SELECT_ON_ACC_RMS:
+        featLabPath = join(get_project_path('data'),
+                           'prediction_data',
+                           'featLabelClasses',
+                           f'featLabels_ft{FT_VERSION}_Cdrs_StnOnly.P')
+        feat10sClass = load_class_pickle(featLabPath,
+                                         convert_float_np64=True)
+        print(f'10s-feature class loaded for RMS-ACC selection ({featLabPath})')
 
     # gets per hemisphere the subject ID and the mean-psd-array (no LID and LID)
     # CDRS contains the scores corresponding to LID
@@ -1296,18 +1330,28 @@ def plot_ECOG_PSD_vs_LID(
             tf_times = all_timefreqs[sub][f'ecog_{ecog_side}'].times / 60
             tf_freqs = all_timefreqs[sub][f'ecog_{ecog_side}'].freqs
 
+
+            ### SELECT OUT ON ACC RMS IF DEFINED HERE ###
+            if SELECT_ON_ACC_RMS:
+                tf_values, tf_times = select_tf_on_movement(
+                    feat10sClass=feat10sClass, sub=sub,
+                    tf_values_arr=tf_values, tf_times_arr=tf_times,
+                    SELECT_ON_ACC_RMS=SELECT_ON_ACC_RMS,
+                    # RMS_Z_THRESH=0,  # defaults to -0.5
+                )
+
             # find matching windows (UNILAT LID) for both ECoG PSDs
             # matching LFP side to LID
-            _, ft_cdrs['LID'] = find_select_nearest_CDRS_for_ephys(
+            ft_cdrs['LID'] = find_select_nearest_CDRS_for_ephys(
                 sub=sub, side=LID_side, ft_times=tf_times,
                 cdrs_rater=CDRS_RATER,
             ) 
-            _, ft_cdrs['noLID'] = find_select_nearest_CDRS_for_ephys(
+            ft_cdrs['noLID'] = find_select_nearest_CDRS_for_ephys(
                 sub=sub, side=noLID_side, ft_times=tf_times,
                 cdrs_rater=CDRS_RATER,
             )
             if LAT_or_SCALE in ['SCALE', 'LAT_BILAT']:
-                _, ft_cdrs['bi'] = find_select_nearest_CDRS_for_ephys(
+                ft_cdrs['bi'] = find_select_nearest_CDRS_for_ephys(
                     sub=sub, side='both', ft_times=tf_times,
                     cdrs_rater=CDRS_RATER,
                 ) 

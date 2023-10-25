@@ -2,9 +2,8 @@
 Convert SSD-timeseries into combined
 timefrequency arrays and Power Spectra
 """
-
 import numpy as np
-from pandas import DataFrame
+from pandas import DataFrame, read_csv
 from collections import namedtuple
 from scipy.signal import welch
 import json
@@ -32,7 +31,7 @@ def get_all_ssd_timeFreqs(
             SSD_BROAD=SSD_BROAD,
             FORCE_PSD_CREATION=FORCE_PSD_CREATION,  
         )
-        
+
         tf_sub = {}
         
         for src in psd_sub.keys():
@@ -240,3 +239,44 @@ def correct_timeFreq_baseline(tf_values, tf_times,
     print(f'baseline timing: {minute_bl_timing}')
 
     return tf_values
+
+
+def get_coh_tf_per_sub(sub, COH_type, COH_source,
+                       FT_VERSION, DATA_VERSION,
+                       WIN_LEN_s=10, WIN_OVERLAP=0.5):
+    """
+    Input:
+        - COH_type: imag_coh or sq_coh
+        - COH_source: STN_STN or STN_ECOG 
+
+    Returns:
+        - coh_values,
+        - coh_times,
+        - coh_freqs
+    """
+    assert COH_type in ['sq_coh', 'imag_coh'], 'wrong COH_type'
+    assert COH_source in ['STN_STN', 'STN_ECOG'], 'wrong COH_source'
+    
+    ft_path = join(get_project_path('results'),
+                        'features',
+                        f'SSD_feats_broad_{FT_VERSION}',
+                        DATA_VERSION,
+                        f'windows_{WIN_LEN_s}s_{WIN_OVERLAP}overlap')
+
+    coh_sub_files = [f for f in listdir(ft_path) if
+    sub in f and COH_type in f and COH_source in f]
+
+    freqs = np.arange(4, 91)
+    coh_sub_df = DataFrame(columns=freqs)
+
+    for f in coh_sub_files:
+        temp_cohs = read_csv(join(ft_path, f),
+                                header=0, index_col=0)
+        for c in temp_cohs.keys():
+            coh_sub_df[int(float(c))] = temp_cohs[c]
+
+    coh_times = coh_sub_df.index.values
+    coh_freqs = np.array(coh_sub_df.keys())
+    coh_values = coh_sub_df.values
+
+    return coh_values, coh_times, coh_freqs

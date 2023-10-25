@@ -59,8 +59,7 @@ class FeatLidClass:
                                 IGNORE_PTS=self.IGNORE_PTS)
         print(f'SUBS: n={len(self.SUBS)} ({self.SUBS})')
 
-        self.FEATS, self.FT_LABELS = {}, {}
-        if self.INCL_ACC_RMS: self.ACC_RMS = {}
+        self.FEATS, self.FT_LABELS, self.ACC_RMS = {}, {}, {}
 
         for sub in self.SUBS:
             print(f'load {sub}')
@@ -87,6 +86,7 @@ class FeatLidClass:
                 INCL_CORE_CDRS=self.INCL_CORE_CDRS,
             )
             self.FT_LABELS[sub] = ecog_related_cdrs
+
             # select features and clinical scores to include
             if (isinstance(ecog_related_cdrs, tuple) and
                 len(ecog_related_cdrs) == 2):
@@ -103,7 +103,7 @@ class FeatLidClass:
                     cutoff_mildModerate=self.cutMild,
                     cutoff_moderateSevere=self.cutSevere,
                 )
-            
+
 
             if self.INCL_ACC_RMS:
                 self.ACC_RMS[sub] = self.load_matching_acc_rms(
@@ -119,7 +119,7 @@ class FeatLidClass:
         # get correlations
         corrs, stat_df = ftLidCorr.get_ft_lid_corrs(
             feat_dict=self.FEATS, label_dict=self.FT_LABELS,
-            # feats_incl=feats_incl,
+            acc_dict=self.ACC_RMS,
             TARGET=self.CORR_TARGET,
             RETURN_STAT_DF=True, 
         )
@@ -385,15 +385,15 @@ def find_select_nearest_CDRS_for_ephys(
             if side == 'lfp_right': side = 'left'
             elif side == 'lfp_left': side = 'right'
 
-            if 'ecog' in side:
-                ecogside = get_ecog_side(sub)
+        if 'ecog' in side:
+            ecogside = get_ecog_side(sub)
 
-                if 'nonmatch' in side or 'ipsilat' in side:
-                    if ecogside == 'right': side = 'right'
-                    if ecogside == 'left': side = 'left'
-                elif side == 'ecog match' or 'contralat' in side:
-                    if ecogside == 'right': side = 'left'
-                    if ecogside == 'left': side = 'right'
+            if 'nonmatch' in side or 'ipsilat' in side:
+                if ecogside == 'right': side = 'right'
+                if ecogside == 'left': side = 'left'
+            elif side == 'ecog match' or 'contralat' in side:
+                if ecogside == 'right': side = 'left'
+                if ecogside == 'left': side = 'right'
                 
         # lid_t_ecog, lid_y_ecog = get_cdrs_specific(
         #     sub=sub, rater=cdrs_rater, side='contralat ecog',)
@@ -413,7 +413,7 @@ def find_select_nearest_CDRS_for_ephys(
         if EXCL_UNILAT_OTHER_SIDE_LID:
             if side == 'left': otherside = 'right'
             elif side == 'right': otherside = 'left'
-            
+
             (contra_cdrs_times,
              contra_cdrs_scores) = get_cdrs_specific(sub=sub,
                                                     rater=cdrs_rater,

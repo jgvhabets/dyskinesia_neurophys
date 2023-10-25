@@ -45,17 +45,21 @@ def replace_gammas_for_maxGamma(df):
     return df
 
 
-def normalize_feats_scores(df, NORM_CDRS=False,):
+def normalize_feats_scores(df, NORM_CDRS=False,
+                           NORM_METH='norm'):
 
-    skip_norm_cols = ['sub', 'LID']
+    skip_norm_cols = ['sub', 'LID', 'ACC']
     if not NORM_CDRS: skip_norm_cols.append('CDRS')
     
     for ft in list(df.keys()):
         
         if ft in skip_norm_cols: continue
 
-        df[ft] = df[ft] / np.max(df[ft])  #  normalize for R
-    
+        if NORM_METH == 'norm':
+            df[ft] = df[ft] / np.max(df[ft])  #  normalize for R
+        elif NORM_METH == 'std':
+            df[ft] = (df[ft]) / np.nanstd(df[ft]) #  standardize for R
+        
     return df
 
 
@@ -73,12 +77,14 @@ def get_R_smResults(result, X, y, ft=None,):
         
     # print(f'R (cov): {R1}, R (coef): {R2}')
 
-    return R, R2, p
+    return R, p
 
 
-def get_ft_lid_corrs(feat_dict, label_dict, feats_incl=False,
+def get_ft_lid_corrs(feat_dict, label_dict, acc_dict=False,
                      TARGET='CDRS', STAT_METH='lmm',
-                     RETURN_STAT_DF=False,):
+                     NORM_CDRS=False,
+                     RETURN_STAT_DF=False, feats_incl=False,
+                     EXCL_NO_DYSK=False,):
     
     if STAT_METH == 'pearson' and isinstance(feats_incl, list):
         corrs = {f: [] for f in feats_incl}
@@ -86,19 +92,23 @@ def get_ft_lid_corrs(feat_dict, label_dict, feats_incl=False,
     if STAT_METH == 'lmm':
         # lm_df = pd.DataFrame(columns=)  #  + feats_incl
         noFtCols = ['sub', 'CDRS', 'LID']
+        if len(acc_dict) == len(feat_dict):
+            noFtCols.append('ACC')
         ftCols = []
         # lm_nan_row = [np.nan] * lm_df.shape[1]
 
     for i_s, sub in enumerate(list(feat_dict.keys())):
         # check for non-dysk
         if (label_dict[sub] == 0).all():
-                print(f'no dyskinesia for sub-{sub}')
-                continue
-        
-        i_f = 0  # create own counter due to 
+                if EXCL_NO_DYSK:
+                    print(f'no dyskinesia for sub-{sub}')
+                    continue
+                else:
+                    print(f'included sub-{sub} without dyskinesia')
+        # loop over feature to include every feature in correct matter
+        i_f = 0  # create own counter due to none-feat-cols
         for f_sel in feat_dict[sub].keys():
-            if f_sel in ['sub', 'CDRS', 'LID']: continue
-            
+            if f_sel in ['sub', 'CDRS', 'LID', 'ACC']: continue
             # define ft-values (merge/handle bilaterality of ft-names)
             if np.logical_and('psd' in  f_sel or 'variation' in f_sel,
                               'lfp' in f_sel):
@@ -122,6 +132,8 @@ def get_ft_lid_corrs(feat_dict, label_dict, feats_incl=False,
 
             # define rated cdrs-scores
             temp_labels = label_dict[sub].copy()
+            # define acc rms
+            if 'ACC' in noFtCols: temp_rms = acc_dict[sub].copy()
 
             # calculate and add corr for subject and feature
             if STAT_METH == 'pearson':
@@ -156,10 +168,12 @@ def get_ft_lid_corrs(feat_dict, label_dict, feats_incl=False,
                     #         f', sub-rows: {sub_row0} : {sub_rowX}; n: {len(temp_labels)}//{len(temp_values)}')
                 # add sub- and label-rows at first feature
                 if i_f == 0:
+                    # in order of ['sub', 'CDRS', 'LID'] noFtCol
                     lm_arr[sub_row0:sub_rowX, 0] = [sub] * len(temp_labels)
                     lm_arr[sub_row0:sub_rowX, 1] = temp_labels
                     lm_arr[sub_row0:sub_rowX, 2] = (temp_labels > 0).astype(int)
-                
+                    if 'ACC' in noFtCols: lm_arr[sub_row0:sub_rowX, 3] = temp_rms
+
                 # add feature values
                 lm_arr[sub_row0:sub_rowX, len(noFtCols) + i_f] = temp_values
                 # increase counter
@@ -182,22 +196,29 @@ def get_ft_lid_corrs(feat_dict, label_dict, feats_incl=False,
         lm_df = replace_gammas_for_maxGamma(lm_df)
 
         # normalize values
-        if TARGET == 'CDRS': NORM_CDRS = True
-        else: NORM_CDRS = False
+        # if TARGET == 'CDRS': NORM_CDRS = True
+        # else: NORM_CDRS = False
 
-        lm_df = normalize_feats_scores(lm_df, NORM_CDRS=NORM_CDRS)
+        lm_df = normalize_feats_scores(lm_df, NORM_CDRS=NORM_CDRS,
+                                       NORM_METH='std')
         
-        
+        if TARGET == 'CDRS' and np.max(lm_df['CDRS']) > 10:
+            print('\n\nCDRS ZSCORED')
+            lm_df['CDRS'] = lm_df['CDRS'] / np.std(lm_df['CDRS'])
+
+
         for ft in list(lm_df.keys()):
-            if ft in ['sub', 'CDRS', 'LID']: continue
+            
+            if ft in ['sub', 'CDRS', 'LID', 'ACC']: continue
+
             # statsmodels
             model = mixedlm(f"{TARGET} ~ {ft}", lm_df,
                             groups=lm_df["sub"])
             result = model.fit(method='lbfgs')
 
-            R, R2, p = get_R_smResults(result=result, X=lm_df[ft],
+            R, p = get_R_smResults(result=result, X=lm_df[ft],
                                        y=lm_df[TARGET], ft=ft)
-            corrs[ft] = (R, p, R2)
+            corrs[ft] = (R, p)
         
         if RETURN_STAT_DF: return corrs, lm_df
         else: return corrs

@@ -5,7 +5,8 @@ Plot timefrequencies on group level
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from os.path import join
+from os.path import join, exists
+from os import makedirs
 
 import utils.utils_fileManagement as utilsFiles
 import lfpecog_analysis.get_SSD_timefreqs as ssd_TimeFreq
@@ -146,24 +147,15 @@ def plot_group_timeFreq(data_arr, freqs, times,
                         DATA_VERSION=None,
                         FT_VERSION=None,
                         save_figname=False,
-                        fig_title=None,):
+                        source=False,):
 
-    # if SHOW_PRES_SUBS:
-    #     N_ROWS = 2
-    #     h_ratio=[1, 5]
-    # else:
-    #     N_ROWS = 1
-    #     h_ratio=[1]
+    
 
     fig, ax = plt.subplots(1, 1, figsize=(16, 8),
                         #    gridspec_kw={'height_ratios': h_ratio}
     )
     tf_ax = ax
-    # if SHOW_PRES_SUBS:
-    #     tf_ax = ax[1]
-    #     sub_ax = ax[0]
-    # else: tf_ax = ax
-
+    
 
     mean_arr = np.nanmean(data_arr, axis=2)
     # if LOG_POWER:
@@ -179,9 +171,13 @@ def plot_group_timeFreq(data_arr, freqs, times,
     if TARGET == 'LDOPA':
         xlab = 'Time after L-Dopa intake (minutes)'
         xlabels = [-5, 0, 5, 10, 15, 20, 25]
+        fig_title = 'Group level spectral data around L-Dopa intake'
     else:
         xlab = 'Time after Dyskinesia-onset (minutes)'
         xlabels = [-10, 0, 10, 20, 30, 40]
+        fig_title = 'Group level spectral data around dyskinesia-onset'
+    if source: fig_title += f' ({source})'
+
     tf_ax.set_xlabel(xlab, size=FS,)    
     xticks = [np.argmin(abs(t - times / 60)) for t in xlabels]
     tf_ax.set_xticks(xticks)
@@ -211,11 +207,13 @@ def plot_group_timeFreq(data_arr, freqs, times,
     plt.tight_layout()
 
     if save_figname:
-        plt.savefig(join(utilsFiles.get_project_path('figures'),
+        save_dir = join(utilsFiles.get_project_path('figures'),
                          'ft_exploration',
                          f'data_{DATA_VERSION}_ft_{FT_VERSION}',
-                         'group_timeFreqs',
-                         save_figname),
+                         'group_timeFreqs')
+        if not exists(save_dir): makedirs(save_dir)
+
+        plt.savefig(join(save_dir, save_figname),
                     dpi=300, facecolor='w',)
         plt.close()
     else:

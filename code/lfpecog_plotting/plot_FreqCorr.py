@@ -26,6 +26,10 @@ def plot_heatmap_ftSettings_vs_Dyskinesia(
     settingsDict, fig_name,
 ):
     """
+    If CDRS scores are Z-scored (with centering around
+    0 in this case), and features are z scored, the LMM
+    coefficient is convreted into a correlatio Rho.
+
     Input:
         - settingsDict: dict with different settings
             of feature settings and dyskinesia-label
@@ -38,10 +42,14 @@ def plot_heatmap_ftSettings_vs_Dyskinesia(
     for setting in settingsDict:
         label = f'ft-{setting["FT_VERSION"]}'
         if setting["CORR_TARGET"] == 'LID': label += '_bin'
+        if setting["CORR_TARGET"] == 'ACC': label += '_acc'
         elif (setting["CORR_TARGET"] == 'CDRS' and
               setting["CATEG_CDRS"]): label += '_cat'
         else: label += '_lin'
                 
+        # define to include acc rms
+        if setting["CORR_TARGET"] == 'ACC': INCL_ACC = True
+        else: INCL_ACC = False
         # create feat label class
         classDict[label] = FeatLidClass(
             FT_VERSION=setting["FT_VERSION"],
@@ -49,6 +57,7 @@ def plot_heatmap_ftSettings_vs_Dyskinesia(
             CATEGORICAL_CDRS=setting["CATEG_CDRS"],
             INCL_ECOG=setting["INCL_ECOG"],
             INCL_STN=setting["INCL_STN"],
+            INCL_ACC_RMS=INCL_ACC,
             TO_CALC_CORR=True,)
     
     # plot STN-only and ECoG-required features separately
@@ -87,6 +96,7 @@ def plot_heatmap_ftSettings_vs_Dyskinesia(
                         sett_labels=list(classDict.keys()),
                         fig_name=fig_name,)
 
+
 def plot_ftCorr_heatMap(R_grid, p_grid, fig_name,
                         grid_feats, sett_labels,
                         FS = 24,):
@@ -104,17 +114,21 @@ def plot_ftCorr_heatMap(R_grid, p_grid, fig_name,
 
     fig, ax = plt.subplots(1, 1, figsize=(20, 12), )
     # full colored for sign Rs
-    sig_map = ax.pcolormesh(sig_R_grid, vmin=-1, vmax=1,
+    vmin, vmax = -.4, .4
+    sig_map = ax.pcolormesh(sig_R_grid, vmin=vmin, vmax=vmax,
                             cmap='RdBu_r', edgecolors='w',)
     # color with hatch stripes
-    nonsig_map = ax.pcolormesh(nonsig_R_grid, vmin=-1, vmax=1,
+    nonsig_map = ax.pcolormesh(nonsig_R_grid, vmin=vmin, vmax=vmax,
                                cmap='RdBu_r', edgecolors='w',)
-    hatch = plt.pcolor(nonsig_R_grid, vmin=-1, vmax=1,
+    hatch = plt.pcolor(nonsig_R_grid, vmin=vmin, vmax=vmax,
                        hatch='//', cmap=none_map,
                        edgecolor='w', )
     # show colorbar
     cbar = fig.colorbar(sig_map, pad=.01)
-    cbar.set_label('LMM - Coefficient (a.u.)', size=FS, weight='bold')
+    # ONLY IF dependent and independent values are all ZSCORED
+    # cbar.set_label('LMM - Coefficient (a.u.)', size=FS, weight='bold')
+    cbar.set_label('LMM - Corr. Coeff. (a.u.)', size=FS, weight='bold')
+
     cbar.ax.tick_params(size=FS, labelsize=FS-2,)
 
     ax.set_yticks(np.arange(.5, R_grid.shape[0] + .5, 1))
@@ -133,6 +147,7 @@ def plot_ftCorr_heatMap(R_grid, p_grid, fig_name,
                      'feat_dysk_corrs', fig_name),
                 dpi=300, facecolor='w',)
     plt.close()
+
 
 def calculate_Rs_FreqCorr(
     FreqCorr_dict, mean_per_score = True,
