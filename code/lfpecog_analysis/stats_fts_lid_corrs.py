@@ -20,7 +20,10 @@ from utils.utils_fileManagement import (get_project_path,
 
 def replace_gammas_for_maxGamma(df):
 
-    gamma_keys = [k for k in list(df.keys()) if 'gamma' in k]
+    gamma_keys = [k for k in list(df.keys()) if any(
+        ['gamma1' in k, 'gamma2' in k, 'gamma3' in k]
+    )]
+    if len(gamma_keys) == 0: return df
 
     # check local spectral features
     for source, var in product(['lfp', 'ecog'],

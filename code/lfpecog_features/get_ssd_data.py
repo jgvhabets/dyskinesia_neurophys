@@ -300,13 +300,18 @@ class get_subject_SSDs:
     sub: str
     settings: dict = None
     ft_setting_fname: str = None
+    ft_setting_path: str = False
     incl_ecog: bool = True
     incl_stn: bool = True
 
     def __post_init__(self,):
         if not self.settings:
             # load settings dict
-            self.settings = load_ft_ext_cfg(self.ft_setting_fname)
+            if isinstance(self.ft_setting_fname, str):
+                self.settings = load_ft_ext_cfg(self.ft_setting_fname,
+                                                self.ft_setting_path)    
+            else:
+                self.settings = load_ft_ext_cfg(self.ft_setting_fname)
         # define ephys data sources
         self.ephys_sources = []
         if self.incl_ecog:

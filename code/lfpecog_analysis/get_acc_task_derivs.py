@@ -468,9 +468,9 @@ def select_tf_on_movement(feat10sClass, sub,
         tf_i1 = np.argmin(abs((tf_times_arr * 60) - rms_t))  # convert to seconds for rounding accuracy
         move_mask[tf_i1:tf_i1 + feat10sClass.WIN_LEN_sec] = rms_bool
     
-    print(f'Movement selection ({SELECT_ON_ACC_RMS}) for sub-{sub}:\n'
-          f'rms-shape: {rms.shape}, mask-shape: {move_mask.shape}, '
-          f'nr of movement-moments: {sum(move_mask)}, tf-arr-shape: {tf_values_arr.shape}')
+    # print(f'Movement selection ({SELECT_ON_ACC_RMS}) for sub-{sub}:\n'
+    #       f'rms-shape: {rms.shape}, mask-shape: {move_mask.shape}, '
+    #       f'nr of movement-moments: {sum(move_mask)}, tf-arr-shape: {tf_values_arr.shape}')
     
     # select based on found windows
     if SELECT_ON_ACC_RMS == 'INCL_MOVE':

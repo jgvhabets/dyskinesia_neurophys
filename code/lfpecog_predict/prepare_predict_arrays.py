@@ -10,13 +10,18 @@ from pandas import DataFrame, concat
 from itertools import compress
 
 # import own custom functions
-from lfpecog_plotting.plot_pred_preparation import boxplot_zscored_LID_features
-
+from lfpecog_plotting.plot_pred_preparation import (
+    boxplot_zscored_LID_features
+)
+from lfpecog_analysis.ft_processing_helpers import (
+    categorical_CDRS
+)
 
 def get_group_arrays_for_prediction(
-    feat_dict, label_dict, CDRS_THRESHOLD: .1,
-    CDRS_CODING='categorical', TO_PLOT = False,
-    EXCL_CODE = 99
+    feat_dict, label_dict, CDRS_THRESHOLD=.1,
+    CDRS_CODING='binary', CATEG_CDRS=False,
+    MILD_CDRS=5, SEV_CDRS=10,
+    TO_PLOT = False, EXCL_CODE = 99
 ):
     """
     Gets list of lists-per-subject with arrays
@@ -31,7 +36,7 @@ def get_group_arrays_for_prediction(
         - ft_names
     """
     assert CDRS_CODING in ['binary', 'categorical'], (
-        'CDRS_CODING should be categorical or binary'
+        'CDRS_CODING should be categorical, linear, or binary'
     )
     # create empty list to store individual values for next process part
     X_total = []
@@ -45,6 +50,14 @@ def get_group_arrays_for_prediction(
         ft_names = []
         # add full scaled y-labels
         sub_y_scale = label_dict[sub]
+        if CATEG_CDRS:
+            sub_y_scale = categorical_CDRS(
+                sub_y_scale, preLID_separate=False,
+                preLID_minutes=0,
+                cutoff_mildModerate=MILD_CDRS,
+                cutoff_moderateSevere=SEV_CDRS
+            )
+
         # append sub-codes to sub-id list (for later identifying subjects)
         sub_ids_total.append([sub] * feat_dict[sub].shape[0])  # add subject code, as many times as there are feature rows
         # add subjects ft-times to list (for later plotting)
@@ -68,18 +81,7 @@ def get_group_arrays_for_prediction(
             for noLID, LID in zip(no_LID_sel, LID_sel):
                 if noLID: sub_y_coded.append(0)
                 elif LID: sub_y_coded.append(1)
-                else: sub_y_coded.append(EXCL_CODE)
-        
-        elif CDRS_CODING == 'categorical':
-            no_LID_sel = np.array(label_dict[sub]) == 0
-            sub_y_coded = label_dict[sub]
-            # prevent empty no_LID_sel in case all feature are at least preLID
-            if sum(no_LID_sel) == 0:
-                if sub == '012': no_LID_sel = feat_dict[sub].index.values < 0
-                elif sub == '102': no_LID_sel = feat_dict[sub].index.values < 0
-                elif sub == '008': no_LID_sel = feat_dict[sub].index.values < 3
-                else: raise ValueError(f'for subject {sub}, no NONE-LID moments'
-                                       ' found for feature z-scoring')
+                else: sub_y_coded.append(EXCL_CODE)    
                     
 
         for n_col, ft in enumerate(feat_dict[sub].keys()):

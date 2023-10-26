@@ -36,6 +36,9 @@ def get_COHs_to_plot(COH_type='imag_coh',
                      COH_source='STN_ECOG',
                      SELECT_ON_ACC_RMS = 'EXCL_MOVE',
                      EXCL_UNILAT_IPSI = True,
+                     CUT_MILD_MOD: int = 5,
+                     CUT_MOD_SEV: int = 10,
+                     INCL_CORE_CDRS: bool = True,
                      BASELINE_CORRECT=True,
                      DATA_VERSION='v4.0',
                      FT_VERSION='v6',
@@ -94,28 +97,30 @@ def get_COHs_to_plot(COH_type='imag_coh',
             # coh_values = coh_values[sel_move, :]
             # coh_times = coh_times[sel_move]
 
-        # get CDRS (non-categroized) (contralat, to getipsilat-excl bool)
-        ipsilat_excl_sel, contra_cdrs = find_select_nearest_CDRS_for_ephys(
-            sub=sub, ft_times=coh_times / 60,
-            side='contralat ecog',  #'contralat ecog'
-            cdrs_rater='Jeroen',
-            EXCL_UNILAT_OTHER_SIDE_LID=EXCL_UNILAT_IPSI,
-        )
         # get CDRS bilat for actual scoring
-        bilat_cdrs = find_select_nearest_CDRS_for_ephys(
+        coh_cdrs = find_select_nearest_CDRS_for_ephys(
             sub=sub, ft_times=coh_times / 60,
-            side='bilat',  INCL_CORE_CDRS=True,
+            side='bilat',  INCL_CORE_CDRS=INCL_CORE_CDRS,
             cdrs_rater='Jeroen',
         )
-        coh_values = coh_values[ipsilat_excl_sel, :]
-        coh_times = coh_times[ipsilat_excl_sel]
-        coh_cdrs = bilat_cdrs[ipsilat_excl_sel]
+
+        if COH_source == 'STN_ECOG':
+            # get CDRS (non-categroized) (contralat, to getipsilat-excl bool)
+            ipsilat_excl_sel, contra_cdrs = find_select_nearest_CDRS_for_ephys(
+                sub=sub, ft_times=coh_times / 60,
+                side='contralat ecog',  #'contralat ecog'
+                cdrs_rater='Jeroen',
+                EXCL_UNILAT_OTHER_SIDE_LID=EXCL_UNILAT_IPSI,
+            )
+            coh_values = coh_values[ipsilat_excl_sel, :]
+            coh_times = coh_times[ipsilat_excl_sel]
+            coh_cdrs = coh_cdrs[ipsilat_excl_sel]
 
         coh_cdrs = categorical_CDRS(
             coh_cdrs, preLID_separate=False,
             preLID_minutes=0,
-            cutoff_mildModerate=4,
-            cutoff_moderateSevere=8
+            cutoff_mildModerate=CUT_MILD_MOD,
+            cutoff_moderateSevere=CUT_MOD_SEV
         )
 
         # store values in categories dict
@@ -145,6 +150,9 @@ def plot_COH_spectra(COH_source, COH_type,
                      SELECT_ON_ACC_RMS=False,
                      DATA_VERSION='v4.0',
                      FT_VERSION='v6',
+                     CUT_MILD_MOD: int = 4,
+                     CUT_MOD_SEV: int = 8,
+                     INCL_CORE_CDRS: bool = True,
                      PLOT_STD_ERR = True,
                      SMOOTH_PLOT_FREQS = 8,
                      BREAK_X_AX = True,
@@ -157,10 +165,13 @@ def plot_COH_spectra(COH_source, COH_type,
         cohs_to_plot, coh_freqs = get_COHs_to_plot(
             COH_type=COH_type, COH_source=COH_source,
             SELECT_ON_ACC_RMS=SELECT_ON_ACC_RMS,
+            CUT_MILD_MOD=CUT_MILD_MOD,
+            CUT_MOD_SEV=CUT_MOD_SEV,
+            INCL_CORE_CDRS=INCL_CORE_CDRS,
         )
     
     fig_name = f'00{COH_source}_{COH_type}_Scaling_bilat_LID'
-    ax_title = f'{COH_source}_{COH_type.upper()} during dyskinesia'
+    ax_title = f'{COH_source} {COH_type.upper()} during dyskinesia'
 
     if SELECT_ON_ACC_RMS:
         fig_name += f'_{SELECT_ON_ACC_RMS}'
@@ -239,7 +250,7 @@ def plot_COH_spectra(COH_source, COH_type,
     leg_info = ax.get_legend_handles_labels()
     hands, labs = remove_duplicate_legend(leg_info)
     ax.legend(hands, labs, frameon=False,
-            fontsize=fsize, loc='upper left')
+              fontsize=fsize, loc='upper left')
 
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)

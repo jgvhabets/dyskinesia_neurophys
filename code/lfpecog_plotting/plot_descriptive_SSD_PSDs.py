@@ -14,7 +14,8 @@ from itertools import compress
 # import own functions
 from lfpecog_analysis.ft_processing_helpers import (
     find_select_nearest_CDRS_for_ephys,
-    categorical_CDRS, FeatLidClass
+    categorical_CDRS, FeatLidClass,
+    split_lid_subs
 )
 from lfpecog_plotting.plotHelpers import get_colors
 from lfpecog_preproc.preproc_import_scores_annotations import (
@@ -307,11 +308,8 @@ def plot_STN_PSD_vs_LID(
     ft_cdrs = {'LID': [], 'noLID': []}
     if RETURN_FREQ_CORR: FREQ_CORRs = {}
 
-    if sel_subs:
-        subs = [sub for sub in all_timefreqs.keys()
-                if sub in sel_subs]
-    else:
-        subs = all_timefreqs.keys()
+    subs, none_lid_subs = split_lid_subs(DATA_VERSION=DATA_VERSION,
+                                             FT_VERSION=FT_VERSION)
 
     n_uni_subs = 0
     subs_incl = {k: {} for k in psds_to_plot.keys()}  # keep track of indiv subs per cat
@@ -865,7 +863,7 @@ def plot_scaling_LID(
         elif side == 'all_match': ax_title = f'{datatype} versus all contralateral dyskinesia'
         elif side == 'all_nonmatch': ax_title = f'{datatype} versus all ipsilateral dyskinesia'
         
-        # if PLOT_ONLY_MATCH: ax_title = f'{datatype} versus all contralateral dyskinesia'
+        if PLOT_ONLY_MATCH: ax_title = f'{datatype} versus all contralateral dyskinesia'
 
         for i_cat, cat in enumerate(psds_to_plot[side].keys()):
 
@@ -1262,14 +1260,14 @@ def plot_ECOG_PSD_vs_LID(
     subs_incl = {k: {} for k in psds_to_plot.keys()}  # keep track of indiv subs per cat
 
     # if movement selection on RMS is defined, load pickled class for all subjects
-    if SELECT_ON_ACC_RMS:
-        featLabPath = join(get_project_path('data'),
-                           'prediction_data',
-                           'featLabelClasses',
-                           f'featLabels_ft{FT_VERSION}_Cdrs_StnOnly.P')
-        feat10sClass = load_class_pickle(featLabPath,
-                                         convert_float_np64=True)
-        print(f'10s-feature class loaded for RMS-ACC selection ({featLabPath})')
+    # if SELECT_ON_ACC_RMS:
+    featLabPath = join(get_project_path('data'),
+                        'prediction_data',
+                        'featLabelClasses',
+                        f'featLabels_ft{FT_VERSION}_Cdrs_StnOnly.P')
+    feat10sClass = load_class_pickle(featLabPath,
+                                        convert_float_np64=True)
+    print(f'10s-feature class loaded for RMS-ACC selection ({featLabPath})')
 
     # gets per hemisphere the subject ID and the mean-psd-array (no LID and LID)
     # CDRS contains the scores corresponding to LID
@@ -1292,7 +1290,7 @@ def plot_ECOG_PSD_vs_LID(
             
             # check for presence unilateral LID
             (LID_side, noLID_side, LFP_match_side,
-            LFP_nonmatch_side) = find_unilateral_LID_sides(sub, CDRS_RATER=CDRS_RATER)
+             LFP_nonmatch_side) = find_unilateral_LID_sides(sub, CDRS_RATER=CDRS_RATER)
             ecog_side = get_ecog_side(sub)
 
             if LAT_or_SCALE == 'LAT_UNI':
@@ -1318,7 +1316,7 @@ def plot_ECOG_PSD_vs_LID(
                     LID_side, LFP_nonmatch_side = 'right', 'right'
                 elif ecog_side == 'right':
                     LID_side, LFP_nonmatch_side = 'left', 'left'            
-
+            
             # get PSD values and process them
             tf_values = all_timefreqs[sub][f'ecog_{ecog_side}'].values
             if LOG_POWER: tf_values = np.log(tf_values)
@@ -1330,6 +1328,26 @@ def plot_ECOG_PSD_vs_LID(
             tf_times = all_timefreqs[sub][f'ecog_{ecog_side}'].times / 60
             tf_freqs = all_timefreqs[sub][f'ecog_{ecog_side}'].freqs
 
+
+            ### CREATE BASELINE WIHTOUT MOVEMENT ###
+            if BASELINE_CORRECT:
+                bl_sel = tf_times < 10  # baseline not after ten minutes
+                bl_times = tf_times[bl_sel]
+                bl_values = tf_values[:, bl_sel]
+                bl_values, bl_times = select_tf_on_movement(
+                    feat10sClass=feat10sClass, sub=sub,
+                    tf_values_arr=bl_values, tf_times_arr=bl_times,
+                    SELECT_ON_ACC_RMS='EXCL_MOVE',
+                )
+                bl_cdrs = find_select_nearest_CDRS_for_ephys(
+                    sub=sub, cdrs_rater=CDRS_RATER,
+                    side='both', ft_times=bl_times,
+                )
+                bl_sel = bl_cdrs == 0
+                bl_times = bl_times[bl_sel]
+                bl_values = bl_values[:, bl_sel]
+                bl_psd = np.mean(bl_values, axis=1)
+                
 
             ### SELECT OUT ON ACC RMS IF DEFINED HERE ###
             if SELECT_ON_ACC_RMS:
@@ -1356,15 +1374,15 @@ def plot_ECOG_PSD_vs_LID(
                     cdrs_rater=CDRS_RATER,
                 ) 
 
-            # extract BASELINE and BILAT selections from tf_values, before
-            # tf_values itself is adjusted due to the unilat selection
-            if BASELINE_CORRECT:
-                bl_sel = np.logical_and(ft_cdrs['LID'] == 0, ft_cdrs['noLID'] == 0)
-                tf_values_BL = tf_values[:, bl_sel]
-                bl_psd = np.mean(tf_values_BL, axis=1)
+            # # extract BASELINE and BILAT selections from tf_values, before
+            # # tf_values itself is adjusted due to the unilat selection
+            # if BASELINE_CORRECT:
+            #     bl_sel = np.logical_and(ft_cdrs['LID'] == 0, ft_cdrs['noLID'] == 0)
+            #     tf_values_BL = tf_values[:, bl_sel]
+            #     bl_psd = np.mean(tf_values_BL, axis=1)
 
-                if i_rep == 0:  # add tuple 
-                    mean_stats['noLID'].append((f'{sub}_match', tf_values[:, bl_sel]))
+            #     if i_rep == 0:  # add tuple 
+            #         mean_stats['noLID'].append((f'{sub}_match', tf_values[:, bl_sel]))
 
             # select moments with BILATERAL present dyskinesia 
             if LAT_or_SCALE in ['SCALE', 'LAT_BILAT']:
@@ -1405,7 +1423,7 @@ def plot_ECOG_PSD_vs_LID(
                 uni_lid_sel = np.logical_and(ft_cdrs['LID'] > 0, ft_cdrs['noLID'] == 0)
                 tf_values_dict[match_label_uni] = tf_values[:, uni_lid_sel]
             
-            else:            
+            elif add_uni:  # change from else            
                 if match_label_uni == 'match':
                     uni_lid_sel = np.logical_and(ft_cdrs['LID'] > 0, ft_cdrs['noLID'] == 0)       
                 elif match_label_uni == 'nonmatch':
