@@ -20,7 +20,7 @@ from itertools import compress
 from pandas import DataFrame, isna
 from scipy.signal import welch
 
-import meet.meet as meet  # https://github.com/neurophysics/meet
+# import meet.meet as meet  # https://github.com/neurophysics/meet
 
 from utils.utils_windowing import get_windows
 from lfpecog_preproc.preproc_import_scores_annotations import get_ecog_side
@@ -303,10 +303,14 @@ class get_subject_SSDs:
     ft_setting_path: str = False
     incl_ecog: bool = True
     incl_stn: bool = True
+    USER: str = 'jeroen'
 
     def __post_init__(self,):
         if not self.settings:
             # load settings dict
+            if self.USER == 'timon':
+                self.ft_setting_path = r'D:\dyskinesia_project\data\meta_info'
+            
             if isinstance(self.ft_setting_fname, str):
                 self.settings = load_ft_ext_cfg(self.ft_setting_fname,
                                                 self.ft_setting_path)    
@@ -352,6 +356,7 @@ class create_SSDs():
     check_matrix: bool = False
     MATRIX_REGULARIZATION: bool = False
     READ_EXT_HD: int = False
+    USER: str = 'jeroen'
     
     def __post_init__(self,):
         ### load settings from json
@@ -376,7 +381,7 @@ class create_SSDs():
         if SETTINGS['DATA_VERSION'] == 'v4.2': self.READ_EXT_HD = True
 
         ### Define paths
-        mergedData_path = join(get_project_path('data'),
+        mergedData_path = join(get_project_path('data', USER=self.USER),
                                'merged_sub_data',
                                 SETTINGS['DATA_VERSION'],
                                 f'sub-{self.sub}')
@@ -386,7 +391,8 @@ class create_SSDs():
                                    'merged_sub_data',
                                    'v4.0',
                                    f'sub-{self.sub}')
-        windows_path = join(get_project_path('data', extern_HD=self.READ_EXT_HD),
+        windows_path = join(get_project_path('data', extern_HD=self.READ_EXT_HD,
+                                             USER=self.USER),
                             'windowed_data_classes_'
                             f'{SETTINGS["WIN_LEN_sec"]}s_'
                             f'{SETTINGS["WIN_OVERLAP_part"]}overlap',
@@ -442,6 +448,7 @@ class create_SSDs():
                     dat_fname = f'{self.sub}_mergedData_v4.0_{dType}.P'
 
                 # # check existence of file in folder
+                # TODO: prevent jump into EXT_HD
                 if dat_fname not in listdir(mergedData_path):
                     print(f'!!! {dat_fname} NOT AVAILABLE')
                     continue

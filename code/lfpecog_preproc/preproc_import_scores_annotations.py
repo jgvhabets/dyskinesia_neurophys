@@ -14,7 +14,7 @@ import json
 import traces
 
 # Import own functions
-from utils.utils_fileManagement import get_onedrive_path
+from utils.utils_fileManagement import get_onedrive_path, get_project_path
 
 def run_import_clinInfo(
     sub: str,
@@ -99,13 +99,18 @@ def read_annotations(
 
 
 def read_clinical_scores(
-    sub, rater='Patricia', data_path=get_onedrive_path('data'),
+    sub, rater='Patricia', data_path=False, USER='jeroen',
 ):
     assert rater.capitalize() in ['Mean', 'Patricia', 'Jeroen'], (
         'insert correct '
     )
     if sub in ['019']: rater = 'Jeroen'
     scores_fname = f'Dyskinesia_Ratings_{rater}.xlsx'
+    
+    if USER == 'jeroen': get_onedrive_path('data')
+    else: 
+        os.path.join(get_project_path('data', USER=USER),
+                    'meta_info')
     scores = read_excel(
         os.path.join(data_path, 'clinical scores', scores_fname),
         sheet_name=f'sub-{sub}',
@@ -256,6 +261,9 @@ class lid_timing:
 def get_ecog_side(sub):
 
     data_path = get_onedrive_path('data')
+    if data_path == False:
+        data_path = os.path.join(get_project_path('data', USER='timon'),
+                                 'meta_info')
     f = 'recording_mainfile.xlsx'
 
     xldat = read_excel(os.path.join(data_path, f),

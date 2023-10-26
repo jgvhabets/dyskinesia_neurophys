@@ -18,6 +18,7 @@ import json
 def get_project_path(
     subfolder: str = '',
     extern_HD=False,
+    USER=False,
 ):
     """
     Finds path of projectfolder, and
@@ -39,6 +40,10 @@ def get_project_path(
         path = join('D:\Research_EXT', 'dyskinesia_neurophys')
     
     if subfolder in ['data', 'code', 'figures', 'results']:
+        if subfolder == 'data' and USER == 'timon':
+            return r'D:\dyskinesia_project\data'
+        elif subfolder == 'results' and USER == 'timon':
+            return r'D:\dyskinesia_project\results'
 
         return join(path, subfolder)
     
@@ -50,9 +55,7 @@ def get_project_path(
         return path
 
 
-def get_onedrive_path(
-    folder: str
-):
+def get_onedrive_path(folder: str, USER='jeroen',):
     """
     Device and OS independent function to find
     the synced-OneDrive folder where data is stored
@@ -69,8 +72,12 @@ def get_onedrive_path(
 
     path = getcwd()
 
+    while_count = 0
     while dirname(path)[-5:].lower() != 'users':
         path = dirname(path)
+        while_count += 1
+
+        if while_count > 20: return False
     # path is now Users/username
     onedrive_f = [
         f for f in listdir(path) if logical_and(
@@ -130,12 +137,14 @@ def get_beta_project_path(
         return join(betapath, folder)
     
 
-def load_ft_ext_cfg(cfg_fname: str, cfg_folder=None):
+def load_ft_ext_cfg(cfg_fname: str, cfg_folder=None,
+                    USER='jeroen',):
     # define folder to use, either default or
     # given if cfg_folder is defined
     if isinstance(cfg_folder, str):
         json_path = join(cfg_folder, cfg_fname)
     else:
+        print('loop loop')
         json_path = join(get_onedrive_path('data'),
                          'featureExtraction_jsons',
                          cfg_fname)
@@ -448,7 +457,8 @@ def get_avail_ssd_subs(
     IGNORE_PTS=[],
     INCL_STN_ONLY_PTS=True,
     WIN_LEN=10, WIN_OVERLAP=.5,
-    SSD_BROAD=True, 
+    SSD_BROAD=True,
+    USER: str = 'jeroen',
 ):
 # get all available subs with features
 
@@ -456,6 +466,11 @@ def get_avail_ssd_subs(
     if SSD_BROAD: ssd_folder += '_broad'
     ssd_folder += f'_{FT_VERSION}'
     ssd_path = join(get_project_path('results'), 'features',
+                            ssd_folder, DATA_VERSION,
+                            f'windows_{WIN_LEN}s_'
+                            f'{WIN_OVERLAP}overlap')
+    if USER == 'timon':
+        ssd_path = join(get_project_path('results', USER=USER), 'features',
                             ssd_folder, DATA_VERSION,
                             f'windows_{WIN_LEN}s_'
                             f'{WIN_OVERLAP}overlap')
