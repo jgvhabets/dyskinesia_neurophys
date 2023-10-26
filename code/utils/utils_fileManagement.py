@@ -15,11 +15,9 @@ from dataclasses import dataclass
 import json
 
 
-def get_project_path(
-    subfolder: str = '',
-    extern_HD=False,
-    USER=False,
-):
+def get_project_path(subfolder: str = '',
+                     extern_HD=False,
+                     USER='jeroen',):
     """
     Finds path of projectfolder, and
     subfolder if defined, on current machine
@@ -32,9 +30,11 @@ def get_project_path(
     if not extern_HD:
         path = getcwd()
 
-        while path[-20:] != 'dyskinesia_neurophys':
-
+        while_count = 0
+        while not path.endswith('dyskinesia_neurophys'):
             path = dirname(path)
+            while_count += 1
+            if while_count > 20: return 'repo folder "dyskinesia_neurophys" not found'
      
     elif extern_HD:
         path = join('D:\Research_EXT', 'dyskinesia_neurophys')
@@ -62,9 +62,9 @@ def get_onedrive_path(folder: str, USER='jeroen',):
 
     Folder has to be in ['onedrive', 'figures', 'bids_rawdata']
     """
-    folder_options = [
-        'onedrive', 'figures', 'bids_rawdata', 'data'
-    ]
+    folder_options = ['onedrive', 'figures',
+                      'bids_rawdata', 'data']
+    
     if folder.lower() not in folder_options:
         raise ValueError(
             f'given folder: {folder} is incorrect, '
@@ -76,15 +76,12 @@ def get_onedrive_path(folder: str, USER='jeroen',):
     while dirname(path)[-5:].lower() != 'users':
         path = dirname(path)
         while_count += 1
-
         if while_count > 20: return False
+
     # path is now Users/username
-    onedrive_f = [
-        f for f in listdir(path) if logical_and(
-            'onedrive' in f.lower(),
-            'charit' in f.lower()
-        ) 
-    ]
+    onedrive_f = [f for f in listdir(path) if logical_and(
+        'onedrive' in f.lower(), 'charit' in f.lower()
+    )]
     path = join(path, onedrive_f[0])
     bidspath = join(path, 'BIDS_Berlin_ECOG_LFP')
 
@@ -137,17 +134,28 @@ def get_beta_project_path(
         return join(betapath, folder)
     
 
-def load_ft_ext_cfg(cfg_fname: str, cfg_folder=None,
+def load_ft_ext_cfg(cfg_fname: str = 'default',
+                    FT_VERSION: str = 'default',
+                    cfg_folder=None,
                     USER='jeroen',):
+    # craete name based on ft version
+    if cfg_fname == 'default' and FT_VERSION != 'default':
+        cfg_fname = f'ftExtr_spectral_{FT_VERSION}.json'
+
     # define folder to use, either default or
     # given if cfg_folder is defined
     if isinstance(cfg_folder, str):
         json_path = join(cfg_folder, cfg_fname)
     else:
-        print('loop loop')
-        json_path = join(get_onedrive_path('data'),
-                         'featureExtraction_jsons',
-                         cfg_fname)
+        if USER == 'jeroen':
+            json_path = join(get_onedrive_path('data'),
+                             'featureExtraction_jsons',
+                             cfg_fname)
+        elif USER == 'Timon':
+            # if while loop unsuccesful
+            json_path = join(get_project_path('data', USER=USER),
+                             'meta_info',
+                             cfg_fname)
     
     # open json
     with open(json_path, 'r') as json_data:
@@ -155,11 +163,7 @@ def load_ft_ext_cfg(cfg_fname: str, cfg_folder=None,
 
     return ft_settings
 
-def save_dfs(
-    df,
-    folder_path: str,
-    filename_base: str
-):
+def save_dfs(df, folder_path: str, filename_base: str):
     """
     Save a dataframe in separate files for
     data, column names, and indices as resp.
