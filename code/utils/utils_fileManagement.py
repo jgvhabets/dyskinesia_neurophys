@@ -16,7 +16,7 @@ import json
 
 
 def get_project_path(
-    subfolder: str = '',
+    subfolder: str = '', USER=False,
 ):
     """
     Finds path of projectfolder, and
@@ -35,6 +35,9 @@ def get_project_path(
         path = dirname(path)
     
     if subfolder in ['data', 'code', 'figures', 'results']:
+
+        if subfolder == 'data' and USER.lower() == 'timon':
+            return r'D:\dyskinesia_project\data'
 
         return join(path, subfolder)
     
