@@ -14,7 +14,8 @@ from prof. Neumann.
   - `conda install mne_connectivity` (NOT FOR MULTIVARIATE CONN ANALYSES)
   - `pip install traces` (for regularization of CDRS scores from different raters)
   - `pip install gpboost`  (for generalized linear mixed effect models)
-  - `pip install tensorpac`  (for PAC calculation)
+  - `pip install pyxl` (pandas read excel issue)
+  - install neurophysics-meet toolbox in code repo-folder (https://github.com/neurophysics/meet)
 
   for the mne mvc analyses:
   - use an env: without general installed mne_connectivity
