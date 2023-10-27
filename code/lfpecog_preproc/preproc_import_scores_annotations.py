@@ -107,14 +107,13 @@ def read_clinical_scores(
     if sub in ['019']: rater = 'Jeroen'
     scores_fname = f'Dyskinesia_Ratings_{rater}.xlsx'
     
-    if USER == 'jeroen': get_onedrive_path('data')
+    if USER == 'jeroen':
+        data_path = get_onedrive_path('data')
     else: 
-        os.path.join(get_project_path('data', USER=USER),
-                    'meta_info')
-    scores = read_excel(
-        os.path.join(data_path, 'clinical scores', scores_fname),
-        sheet_name=f'sub-{sub}',
-    )
+        data_path = os.path.join(get_project_path('data', USER=USER),
+                                 'meta_info')
+    scores = read_excel(os.path.join(data_path, 'clinical scores', scores_fname),
+                        sheet_name=f'sub-{sub}',)
 
     # delete redundant rows with text-explanation
     row = 0
@@ -316,6 +315,7 @@ def get_cdrs_specific(
                             'ecog' in side.lower()):
             # take CORRESPONDING BODY SIDE to ECOG
             ecogside = get_ecog_side(sub)
+            print(sub, ecogside)
             if ecogside == 'left': side = 'right'
             elif ecogside == 'right': side = 'left'
             scores = scores[f'CDRS_total_{side}']

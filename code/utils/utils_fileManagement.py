@@ -40,9 +40,9 @@ def get_project_path(subfolder: str = '',
         path = join('D:\Research_EXT', 'dyskinesia_neurophys')
     
     if subfolder in ['data', 'code', 'figures', 'results']:
-        if subfolder == 'data' and USER == 'timon':
+        if subfolder == 'data' and USER.lower() == 'timon':
             return r'D:\dyskinesia_project\data'
-        elif subfolder == 'results' and USER == 'timon':
+        elif subfolder == 'results' and USER.lower() == 'timon':
             return r'D:\dyskinesia_project\results'
 
         return join(path, subfolder)
@@ -151,7 +151,7 @@ def load_ft_ext_cfg(cfg_fname: str = 'default',
             json_path = join(get_onedrive_path('data'),
                              'featureExtraction_jsons',
                              cfg_fname)
-        elif USER == 'Timon':
+        elif USER.lower() == 'timon':
             # if while loop unsuccesful
             json_path = join(get_project_path('data', USER=USER),
                              'meta_info',
@@ -180,19 +180,14 @@ def save_dfs(df, folder_path: str, filename_base: str):
     if not exists(folder_path): makedirs(folder_path)
 
     # save data as npy array with numpy's save function
-    save(
-        join(folder_path, f'{filename_base}_data'),
-        df.values,
-    )
+    save(join(folder_path, f'{filename_base}_data'),
+         df.values,)
     # save index as npy array
-    save(
-        join(folder_path, f'{filename_base}_timeIndex'),
-        df.index.values
-    )
+    save(join(folder_path, f'{filename_base}_timeIndex'),
+         df.index.values)
     # save column-names as csv
-    with open(
-        join(folder_path, f'{filename_base}_columnNames.csv'), 'w'
-    ) as csvfile:
+    with open(join(folder_path, f'{filename_base}'
+                   '_columnNames.csv'), 'w') as csvfile:
 
         write = writer(csvfile)
         write.writerow(
@@ -200,10 +195,8 @@ def save_dfs(df, folder_path: str, filename_base: str):
         )
         csvfile.close()
     
-    print(
-        f'\n\tDataFrame ({filename_base}) '
-        f' is stored to {folder_path}\n'
-    )
+    print(f'\n\tDataFrame ({filename_base}) '
+          f' is stored to {folder_path}\n')
 
 
 
