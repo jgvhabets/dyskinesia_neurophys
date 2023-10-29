@@ -4,9 +4,11 @@ import numpy as np
 from mne_connectivity import spectral_connectivity_time
 
 from _connectivity_helpers import (
+    add_missing_cons_from_indices,
     add_missing_patterns_from_indices,
     remove_bads_from_indices,
     remove_nan_data,
+    remove_smalls_from_indices,
 )
 
 
@@ -33,20 +35,6 @@ def compute_connectivity(
             f"{accepted_ch_info}"
         )
 
-    if method == "trgc":
-        mne_method = ["gc", "gc_tr"]
-        n_cons = len(indices[0])
-        indices = (
-            np.concatenate(indices[0], indices[1]),
-            np.concatenate(indices[1], indices[0]),
-        )
-        rank = (
-            np.concatenate(rank[0], rank[1]),
-            np.concatenate(rank[1], rank[0]),
-        )
-    else:
-        mne_method = method
-
     connectivity = {
         method: [],
         f"{method}_patterns_seeds": [],
@@ -56,79 +44,179 @@ def compute_connectivity(
         "sfreq": sfreq,
     }
 
-    for window_data in data.transpose(1, 0, 2):
+    n_cons = len(indices[0])
+    if method == "trgc":
+        mne_method = ["gc", "gc_tr"]
+        indices = (
+            np.array(
+                [*indices[0].tolist(), *indices[1].tolist()], dtype=object
+            ),
+            np.array(
+                [*indices[1].tolist(), *indices[0].tolist()], dtype=object
+            ),
+        )
+        if rank is not None:
+            rank = (
+                np.concatenate(rank[0], rank[1]),
+                np.concatenate(rank[1], rank[0]),
+            )
+        connectivity[f"{method}_patterns_seeds"] = None
+        connectivity[f"{method}_patterns_targets"] = None
+    else:
+        mne_method = method
+
+    bad_windows = []
+    for window_idx, window_data in enumerate(data.transpose(1, 0, 2)):
+        print(
+            f"\n--- Processing window {window_idx + 1} of {data.shape[1]} ---"
+        )
         # trim NaN endings
         window_data, empty_chs = remove_nan_data(window_data)
         # remove bad channels from indices
-        window_indices = remove_bads_from_indices(indices, empty_chs)
-
-        window_results = spectral_connectivity_time(
-            data=window_data[np.newaxis, :, :],
-            freqs=np.arange(3, 101),
-            method=mne_method,
-            indices=window_indices,
-            sfreq=sfreq,
-            mode="multitaper",
-            mt_bandwidth=5.0,
-            gc_n_lags=20,
-            rank=rank,
-            n_jobs=n_jobs,
+        window_indices, window_rank, empty_cons = remove_bads_from_indices(
+            indices=indices, rank=rank, bads=empty_chs
         )
-        if not isinstance(window_results, list):
-            window_results = [window_results]
+        # remove connections with too few channels from indices
+        window_indices, window_rank, small_cons = remove_smalls_from_indices(
+            indices=window_indices,
+            rank=window_rank,
+            min_n_seeds=rank[0][0],
+            min_n_targets=rank[1][0],
+        )
+        bad_cons = np.unique(empty_cons + small_cons)
 
-        if method == "trgc":
-            gc_st = window_results[0].get_data()[:n_cons]
-            gc_ts = window_results[0].get_data()[n_cons:]
-            gc_st_tr = window_results[1].get_data()[:n_cons]
-            gc_ts_tr = window_results[1].get_data()[n_cons:]
-            results = (gc_st - gc_ts) - (gc_st_tr - gc_ts_tr)
-            patterns = None
-        else:
-            results = window_results[0].get_data()[0]
-            patterns = np.array(window_results[0].attrs["patterns"])[:, 0]
-            patterns = add_missing_patterns_from_indices(
-                patterns=patterns,
-                current_indices=window_indices,
-                new_indices=indices,
+        if len(bad_cons) < n_cons:
+            window_results = spectral_connectivity_time(
+                data=window_data[np.newaxis, :, :],
+                freqs=np.arange(3, 101),
+                method=mne_method,
+                indices=window_indices,
+                sfreq=sfreq,
+                mode="multitaper",
+                mt_bandwidth=5.0,
+                gc_n_lags=20,
+                rank=rank,
+                n_jobs=n_jobs,
+            )
+            if not isinstance(window_results, list):
+                window_results = [window_results]
+
+            results, patterns = _handle_missing_cons(
+                window_results=window_results,
+                empty_cons=bad_cons,
+                n_cons=n_cons,
             )
 
-        for con_idx in range(results.shape[0]):
-            connectivity[method].append(results[con_idx])
+            if method == "trgc":
+                gc_st = np.array(results[0][:n_cons])
+                gc_ts = np.array(results[0][n_cons:])
+                gc_st_tr = np.array(results[1][:n_cons])
+                gc_ts_tr = np.array(results[1][n_cons:])
+                results = (gc_st - gc_ts) - (gc_st_tr - gc_ts_tr)
+                patterns = None
+            else:
+                results = np.abs(results)[0]
+                patterns = patterns[0]
+                patterns = add_missing_patterns_from_indices(
+                    patterns=patterns,
+                    current_indices=window_indices,
+                    new_indices=indices,
+                )
+
+            connectivity[method].append(results)
             if patterns is not None:
-                connectivity[f"{method}_patterns_seeds"].append(
-                    patterns[0][con_idx]
-                )
-                connectivity[f"{method}_patterns_targets"].append(
-                    patterns[1][con_idx]
-                )
+                connectivity[f"{method}_patterns_seeds"].append(patterns[0])
+                connectivity[f"{method}_patterns_targets"].append(patterns[1])
 
-        if connectivity["freqs"] is not None:
-            connectivity["freqs"] = window_results[0].freqs
+            if connectivity["freqs"] is not None:
+                connectivity["freqs"] = window_results[0].freqs
+            else:
+                if np.array_equal(
+                    connectivity["freqs"], window_results[0].freqs
+                ):
+                    raise ValueError(
+                        "Frequencies of results for data windows do not match."
+                    )
         else:
-            if np.array_equal(connectivity["freqs"], window_results[0].freqs):
-                raise ValueError(
-                    "Frequencies of results for data windows do not match."
-                )
+            bad_windows.append(window_idx)
 
-    connectivity[method] = np.array(connectivity[method])
-    if connectivity[f"{method}_patterns_seeds"] != []:
+    connectivity[method] = np.array(connectivity[method]).transpose(1, 0, 2)
+    if connectivity[f"{method}_patterns_seeds"] is not None:
         connectivity[f"{method}_patterns_seeds"] = np.array(
             connectivity[f"{method}_patterns_seeds"]
-        )
+        ).transpose(1, 0, 2, 3)
         connectivity[f"{method}_patterns_targets"] = np.array(
             connectivity[f"{method}_patterns_targets"]
-        )
+        ).transpose(1, 0, 2, 3)
     else:
         del connectivity[f"{method}_patterns_seeds"]
         del connectivity[f"{method}_patterns_targets"]
 
-    connectivity = add_connectivity_info(
+    connectivity = _add_connectivity_info(
         connectivity=connectivity, indices=indices, ch_info=ch_info
     )
 
+    connectivity["window_times"] = [
+        time for idx, time in enumerate(window_times) if idx not in bad_windows
+    ]
 
-def add_connectivity_info(
+    return connectivity
+
+
+def _handle_missing_cons(
+    window_results: list, empty_cons: list[int], n_cons: int
+) -> tuple[list[np.ndarray], list[np.ndarray]]:
+    """Add entries for missing connections for a given window.
+
+    Parameters
+    ----------
+    window_results : list
+        List of MNE-Connectivity results objects for a given window.
+
+    empty_cons : list of int
+        Lists of empty connections for this window.
+
+    n_cons : int
+        Total number of connections there should be.
+
+    Returns
+    -------
+    results : list of np.ndarray
+        List of connectivity results as arrays.
+
+    patterns : list of np.ndarray
+        List of connectivity patterns as arrays.
+    """
+    results = []
+    patterns = []
+    for method_results in window_results:
+        results_array = method_results.get_data()[0]
+        if empty_cons:
+            results_array = add_missing_cons_from_indices(
+                results=results_array, empty_cons=empty_cons, n_cons=n_cons
+            )
+        results.append(results_array)
+
+        if method_results.attrs["patterns"] is not None:
+            patterns_array = np.array(method_results.attrs["patterns"])[:, 0]
+            if empty_cons:
+                filled_seeds = add_missing_cons_from_indices(
+                    results=patterns_array[0],
+                    empty_cons=empty_cons,
+                    n_cons=n_cons,
+                )
+                filled_targets = add_missing_cons_from_indices(
+                    results=patterns_array[1],
+                    empty_cons=empty_cons,
+                    n_cons=n_cons,
+                )
+                patterns_array = np.concatenate(filled_seeds, filled_targets)
+            patterns.append(patterns_array)
+
+    return results, patterns
+
+
+def _add_connectivity_info(
     connectivity: dict, indices: tuple[np.ndarray], ch_info: dict
 ) -> dict:
     """Add optional information to the connectivity results."""
@@ -168,18 +256,21 @@ def add_connectivity_info(
                 ).tolist()
                 for ch_idcs in indices[1]
             ]
+            connectivity["seed_target_lateralisation"] = []
             for seed_hemisphere, target_hemisphere in zip(
                 connectivity["seed_hemispheres"],
                 connectivity["target_hemispheres"],
             ):
                 if len(seed_hemisphere) == 1 and len(target_hemisphere) == 1:
                     if seed_hemisphere[0] == target_hemisphere[0]:
-                        connectivity["seed_target_hemisphere"] = "ipsilateral"
+                        connectivity["seed_target_lateralisation"].append(
+                            "ipsilateral"
+                        )
                     else:
-                        connectivity[
-                            "seed_target_hemisphere"
-                        ] = "contralateral"
+                        connectivity["seed_target_lateralisation"].append(
+                            "contralateral"
+                        )
                 else:
-                    connectivity["seed_target_hemisphere"] = "mixed"
+                    connectivity["seed_target_lateralisation"].append("mixed")
 
     return connectivity

@@ -3,17 +3,28 @@
 import json
 import os
 
+import numpy as np
+
 from _compute_connectivity import compute_connectivity
 from _connectivity_helpers import (
     load_data,
     get_indices_from_features,
     resample_data,
+    save_results,
 )
+
 
 # define project path
 project_path = (
     "C:\\Users\\tsbin\\OneDrive - Charité - Universitätsmedizin Berlin\\"
     "PROJECT ECOG-LFP Coherence\\Jeroen_Dyskinesia"
+)
+results_path = os.path.join(
+    project_path,
+    "results",
+    "features",
+    "connectivity",
+    "windows_10s_0.5overlap",
 )
 
 # get available subjects
@@ -25,10 +36,12 @@ with open(info_fpath, encoding="utf8") as file:
 # take only subjects with ECoG & LFP data
 subjects = [sub for sub in subjects if sub.startswith("0")]
 
-for sub in subjects[1:]:
+METHOD = "mic"
+
+for sub in subjects:
     # load windowed data
     data = load_data(project_path, sub)
-    data = resample_data(data, sfreq=data["sfreq"], resample_freq=250)
+    data = resample_data(data, resample_freq=250)
     ch_info = {
         "ch_name": data["ch_name"],
         "ch_type": data["ch_type"],
@@ -43,18 +56,22 @@ for sub in subjects[1:]:
         split_groups={"ch_hemisphere": data["ch_hemisphere"]},
     )
 
-    # compute MIC
-    mic = compute_connectivity(
-        method="mic",
+    # get ranks to project to
+    rank = (np.array([3, 3]), np.array([6, 6]))
+
+    # compute connectivity
+    connectivity = compute_connectivity(
+        method=METHOD,
         data=data["data"],
         sfreq=data["sfreq"],
         indices=indices,
-        rank=None,
+        rank=rank,
         window_times=data["window_times"],
         ch_info=ch_info,
         n_jobs=1,
     )
-
-    print("jeff")
-
-    # compute GC
+    save_results(
+        os.path.join(results_path, f"sub-{sub}_{METHOD}_ctx-stn.pkl"),
+        connectivity,
+        {"subject": sub},
+    )
