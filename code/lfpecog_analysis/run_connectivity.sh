@@ -9,4 +9,4 @@
 #SBATCH -t 2-00:00:00
 
 module load python
-python get_connectivity_hpc.py $SLURM_ARRAY_TASK_ID $1 $2 $3
+python get_connectivity_hpc.py $SLURM_ARRAY_TASK_ID $1 $2
