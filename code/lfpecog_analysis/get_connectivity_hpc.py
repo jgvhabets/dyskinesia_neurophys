@@ -34,14 +34,9 @@ with open(info_fpath, encoding="utf8") as file:
 # take only subjects with ECoG & LFP data
 subjects = [sub for sub in subjects if sub.startswith("0")]
 
-print(sys.argv[0])
-print(sys.argv[1])
-print(sys.argv[2])
-print(sys.argv[3])
-
-SUBJECT = subjects[sys.argv[1]]
+SUBJECT = subjects[int(sys.argv[1])]
 METHOD = sys.argv[2]
-N_JOBS = sys.argv[3]
+N_JOBS = int(sys.argv[3])
 
 # load windowed data
 data = load_data(project_path, SUBJECT)
