@@ -245,7 +245,7 @@ def remove_bads_from_indices(
         return indices, rank, empty_cons
 
     new_indices = [[], []]
-    new_rank = deepcopy(rank)
+    new_rank = list(deepcopy(rank))
     for group_idx, group in enumerate(indices):
         for con_idx, con_chs in enumerate(group):
             good_entries = [ch for ch in con_chs if ch not in bads]
@@ -267,6 +267,7 @@ def remove_bads_from_indices(
                     if con_idx not in empty_cons
                 ]
             )
+        new_rank = tuple(new_rank)
 
     new_indices = (
         np.array(new_indices[0], dtype=object),
