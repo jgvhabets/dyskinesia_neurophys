@@ -214,17 +214,14 @@ def remove_nan_data(data: np.ndarray) -> tuple[np.ndarray, list[int]]:
 
 
 def remove_bads_from_indices(
-    indices: tuple[np.ndarray], rank: tuple[np.ndarray], bads: list[int]
-) -> tuple[tuple[np.ndarray], tuple[np.ndarray], list[int]]:
+    indices: tuple[np.ndarray], bads: list[int]
+) -> tuple[tuple[np.ndarray], list[int]]:
     """Remove bad channels from indices.
 
     Parameters
     ----------
     indices : tuple[np.ndarray]
-        Indices of connectivity connections in the MNE-Connectivity format.
-
-    rank : tuple[np.ndarray]
-        Ranks of connectivity connections in the MNE-Connectivity format.
+        Indices of connections in the MNE-Connectivity format.
 
     bads : list[int]
         Indices of bad channels to be removed.
@@ -234,18 +231,14 @@ def remove_bads_from_indices(
     new_indices : tuple[np.ndarray]
         Indices in the MNE-Connectivity format with bad channels removed.
 
-    new_rank : tuple[np.ndarray]
-        Ranks in the MNE-Connectivity format with empty connections removed.
-
     empty_cons : list[int]
         Indices of connections that are empty after removing bad channels.
     """
     empty_cons = []
     if bads == []:
-        return indices, rank, empty_cons
+        return indices, empty_cons
 
     new_indices = [[], []]
-    new_rank = list(deepcopy(rank))
     for group_idx, group in enumerate(indices):
         for con_idx, con_chs in enumerate(group):
             good_entries = [ch for ch in con_chs if ch not in bads]
@@ -253,13 +246,52 @@ def remove_bads_from_indices(
                 empty_cons.append(con_idx)
             new_indices[group_idx].append(good_entries)
 
+    new_indices = (
+        np.array(new_indices[0], dtype=object),
+        np.array(new_indices[1], dtype=object),
+    )
+
+    return new_indices, empty_cons
+
+
+def remove_empty_connections(
+    indices: tuple[np.ndarray], rank: tuple[np.ndarray], empty_cons: list[int]
+) -> tuple[tuple[np.ndarray], tuple[np.ndarray], list[int]]:
+    """Remove bad channels from indices.
+
+    Parameters
+    ----------
+    indices : tuple[np.ndarray]
+        Indices of connections in the MNE-Connectivity format.
+
+    rank : tuple[np.ndarray]
+        Ranks of connections in the MNE-Connectivity format.
+
+    empty_cons : list[int]
+        Indices of empty connections.
+
+    Returns
+    -------
+    new_indices : tuple[np.ndarray]
+        Indices in the MNE-Connectivity format with empty connections removed.
+
+    new_rank : tuple[np.ndarray]
+        Ranks in the MNE-Connectivity format with empty connections removed.
+    """
+    if empty_cons == []:
+        return indices, rank
+
+    new_indices = [[], []]
+    new_rank = [[], []]
     if empty_cons != []:
-        for group_idx in range(2):
-            new_indices[group_idx] = [
-                new_indices[group_idx][con_idx]
-                for con_idx in range(len(new_indices[group_idx]))
-                if con_idx not in empty_cons
-            ]
+        for group_idx, group in enumerate(indices):
+            new_indices[group_idx] = np.array(
+                [
+                    con
+                    for con_idx, con in enumerate(group)
+                    if con_idx not in empty_cons
+                ]
+            )
             new_rank[group_idx] = np.array(
                 [
                     rank[group_idx][con_idx]
@@ -267,14 +299,10 @@ def remove_bads_from_indices(
                     if con_idx not in empty_cons
                 ]
             )
+        new_indices = tuple(new_indices)
         new_rank = tuple(new_rank)
 
-    new_indices = (
-        np.array(new_indices[0], dtype=object),
-        np.array(new_indices[1], dtype=object),
-    )
-
-    return new_indices, new_rank, empty_cons
+    return new_indices, new_rank
 
 
 def remove_smalls_from_indices(

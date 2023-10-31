@@ -9,6 +9,7 @@ from _connectivity_helpers import (
     add_missing_cons_from_indices,
     add_missing_patterns_from_indices,
     remove_bads_from_indices,
+    remove_empty_connections,
     remove_nan_data,
     remove_smalls_from_indices,
 )
@@ -75,10 +76,14 @@ def compute_connectivity(
         # trim NaN endings
         window_data, empty_chs = remove_nan_data(window_data)
         # remove bad channels from indices
-        window_indices, window_rank, empty_cons = remove_bads_from_indices(
-            indices=indices, rank=rank, bads=empty_chs
+        window_indices, empty_cons = remove_bads_from_indices(
+            indices=indices, bads=empty_chs
         )
-        pad_patterns_indices = deepcopy(window_indices)
+        pad_patterns_indices = deepcopy(window_indices)  # to re-add empty chs
+        # remove empty connections from indices & rank
+        window_indices, window_rank = remove_empty_connections(
+            indices=window_indices, rank=rank, empty_cons=empty_cons
+        )
         # remove connections with too few channels from indices
         window_indices, window_rank, small_cons = remove_smalls_from_indices(
             indices=window_indices,
