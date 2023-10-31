@@ -34,7 +34,7 @@ with open(info_fpath, encoding="utf8") as file:
 # take only subjects with ECoG & LFP data
 subjects = [sub for sub in subjects if sub.startswith("0")]
 
-SUBJECT = sys.argv[1]
+SUBJECT = subjects[sys.argv[1]]
 METHOD = sys.argv[2]
 N_JOBS = sys.argv[3]
 
