@@ -364,7 +364,7 @@ def add_missing_cons_from_indices(
     filled_results : np.ndarray, shape (n_cons, ...)
         Connectivity results with empty connections filled by np.nan.
     """
-    filled_results = np.full((n_cons, results.shape[1:]), fill_value=np.nan)
+    filled_results = np.full((n_cons, *results.shape[1:]), fill_value=np.nan)
     for con_idx in range(n_cons):
         present_con_idx = 0
         if con_idx not in empty_cons:

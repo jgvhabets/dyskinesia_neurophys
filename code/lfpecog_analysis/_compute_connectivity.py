@@ -1,5 +1,7 @@
 """Functions for computing multivariate connectivity"""
 
+from copy import deepcopy
+
 import numpy as np
 from mne_connectivity import spectral_connectivity_time
 
@@ -76,6 +78,7 @@ def compute_connectivity(
         window_indices, window_rank, empty_cons = remove_bads_from_indices(
             indices=indices, rank=rank, bads=empty_chs
         )
+        pad_patterns_indices = deepcopy(window_indices)
         # remove connections with too few channels from indices
         window_indices, window_rank, small_cons = remove_smalls_from_indices(
             indices=window_indices,
@@ -83,7 +86,7 @@ def compute_connectivity(
             min_n_seeds=rank[0][0],
             min_n_targets=rank[1][0],
         )
-        bad_cons = np.unique(empty_cons + small_cons)
+        bad_cons = np.unique(empty_cons + small_cons).tolist()
 
         if len(bad_cons) < n_cons:
             window_results = spectral_connectivity_time(
@@ -119,7 +122,7 @@ def compute_connectivity(
                 patterns = patterns[0]
                 patterns = add_missing_patterns_from_indices(
                     patterns=patterns,
-                    current_indices=window_indices,
+                    current_indices=pad_patterns_indices,
                     new_indices=indices,
                 )
 
@@ -210,7 +213,9 @@ def _handle_missing_cons(
                     empty_cons=empty_cons,
                     n_cons=n_cons,
                 )
-                patterns_array = np.concatenate(filled_seeds, filled_targets)
+                patterns_array = np.concatenate(
+                    (filled_seeds[np.newaxis], filled_targets[np.newaxis])
+                )
             patterns.append(patterns_array)
 
     return results, patterns
