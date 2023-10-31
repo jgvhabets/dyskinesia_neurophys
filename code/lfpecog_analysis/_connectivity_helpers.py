@@ -280,8 +280,7 @@ def remove_bads_from_indices(
 def remove_smalls_from_indices(
     indices: tuple[np.ndarray],
     rank: tuple[np.ndarray],
-    min_n_seeds: int,
-    min_n_targets: int,
+    min_n_chans: tuple[np.ndarray],
 ) -> tuple[tuple[np.ndarray], tuple[np.ndarray], list[int]]:
     """Remove connections with too few channels from indices.
 
@@ -293,11 +292,9 @@ def remove_smalls_from_indices(
     rank : tuple[np.ndarray]
         Ranks of connectivity connections in the MNE-Connectivity format.
 
-    min_n_seeds : int
-        Minimum number of seeds for a connection to be valid.
-
-    min_n_targets : int
-        Minimum number of targets for a connection to be valid.
+    min_n_chans : tuple[np.ndarray]
+        Minimum number of channels in the seeds and targets for each
+        connection in the format of ranks in MNE-Connectivity.
 
     Returns
     -------
@@ -313,11 +310,10 @@ def remove_smalls_from_indices(
     new_indices = list(deepcopy(indices))
     new_rank = list(deepcopy(rank))
     small_cons = []
-    for con_idx in range(len(indices[0])):
-        if len(indices[0][con_idx]) < min_n_seeds:
-            small_cons.append(con_idx)
-        if len(indices[1][con_idx]) < min_n_targets:
-            small_cons.append(con_idx)
+    for group_idx, group in enumerate(indices):
+        for con_idx, con in enumerate(group):
+            if len(con) < min_n_chans[group_idx][con_idx]:
+                small_cons.append(con_idx)
     small_cons = np.unique(small_cons).tolist()
 
     if small_cons != []:

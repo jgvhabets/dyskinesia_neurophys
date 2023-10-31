@@ -83,8 +83,7 @@ def compute_connectivity(
         window_indices, window_rank, small_cons = remove_smalls_from_indices(
             indices=window_indices,
             rank=window_rank,
-            min_n_seeds=rank[0][0],
-            min_n_targets=rank[1][0],
+            min_n_chans=window_rank,
         )
         bad_cons = np.unique(empty_cons + small_cons).tolist()
 
