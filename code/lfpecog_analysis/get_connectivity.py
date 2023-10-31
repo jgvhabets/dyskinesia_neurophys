@@ -57,7 +57,7 @@ for sub in subjects:
     )
 
     # get ranks to project to
-    rank = (np.array([3, 3]), np.array([6, 6]))
+    rank = (np.array([4, 4]), np.array([6, 6]))
 
     # compute connectivity
     connectivity = compute_connectivity(
