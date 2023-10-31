@@ -59,8 +59,8 @@ def compute_connectivity(
         )
         if rank is not None:
             rank = (
-                np.concatenate(rank[0], rank[1]),
-                np.concatenate(rank[1], rank[0]),
+                np.concatenate((rank[0], rank[1])),
+                np.concatenate((rank[1], rank[0])),
             )
         connectivity[f"{method}_patterns_seeds"] = None
         connectivity[f"{method}_patterns_targets"] = None
