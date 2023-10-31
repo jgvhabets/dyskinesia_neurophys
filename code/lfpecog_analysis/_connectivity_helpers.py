@@ -290,7 +290,8 @@ def remove_empty_connections(
                     con
                     for con_idx, con in enumerate(group)
                     if con_idx not in empty_cons
-                ]
+                ],
+                dtype=object,
             )
             new_rank[group_idx] = np.array(
                 [
