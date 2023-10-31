@@ -242,7 +242,7 @@ def remove_bads_from_indices(
     """
     empty_cons = []
     if bads == []:
-        return indices, empty_cons
+        return indices, rank, empty_cons
 
     new_indices = [[], []]
     new_rank = deepcopy(rank)
