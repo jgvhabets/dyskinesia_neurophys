@@ -90,8 +90,13 @@ def compute_connectivity(
             rank=window_rank,
             min_n_chans=window_rank,
         )
-        if small_cons != []:
-            small_cons = [con_idx + len(empty_cons) for con_idx in small_cons]
+
+        # find which connections were bad (empty or too few channels)
+        bad_cons = []
+        for small_con_i, small_con in enumerate(small_cons):
+            small_cons[small_con_i] += np.count_nonzero(
+                small_con >= np.array(empty_cons)
+            )
         bad_cons = np.unique(empty_cons + small_cons).tolist()
 
         if len(bad_cons) < n_cons:
