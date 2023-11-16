@@ -581,4 +581,115 @@ def results_dict_to_dataframe(
     for key in discard_keys:
         del results[key]
 
+    for key, value in results.items():
+        if isinstance(value, np.ndarray):
+            results[key] = list(value)
+
     return pd.DataFrame.from_dict(results)
+
+
+def add_missing_windows(
+    results: pd.DataFrame,
+    window_times: list[int | float],
+    window_intervals: int | float,
+    result_keys: list[str],
+    start_time: int | float | None = None,
+    end_time: int | float | None = None,
+) -> tuple[pd.DataFrame, list[int | float]]:
+    """Add NaN entries between non-consecutive windows.
+
+    Parameters
+    ----------
+    results : pandas.DataFrame
+        Connectivity results.
+
+    window_times : list of int | float
+        Times of each window in the connectivity results.
+
+    window_intervals : int | float
+        Expected time interval (in units of `window_times`) between each
+        window.
+
+    result_keys : list of str
+        Keys for the columns in `results` where windows should be added.
+
+    start_time : int | float | None (default None)
+        Desired start time of the added windows (in units of `window_times`).
+        If < `window_times[0]`, new windows will be added to the start of the
+        results. Must be a multiple of `window_intervals`.
+
+    end_time : int | float | None (default None)
+        Desired end time of the added windows (in units of `window_times`). If
+        > `window_times[-1]`, new windows will be added to the end of the
+        results. Must be a multiple of `window_intervals`.
+
+    Returns
+    -------
+    results : pandas.DataFrame
+        Connectivity results with missing windows added.
+
+    window_times : list of int | float
+        Times of each window in the new connectivity results.
+
+    Notes
+    -----
+    If `window_times` has entries [5, 10, 20] and `window_intervals` is 5,
+    the missing window at time=15 would be added to the entries of `results`
+    given in `result_keys`.
+    """
+    if len(window_times) == 1:
+        return results
+
+    window_time_steps = np.diff(window_times)
+    if np.all(window_time_steps == window_intervals):
+        return results
+
+    if np.count_nonzero(np.array(window_times) % window_intervals) > 0:
+        raise ValueError(
+            "`window_times` are expected to be in multiples of "
+            "`window_intervals`."
+        )
+
+    if start_time is None:
+        start_time = window_times[0]
+    else:
+        if start_time % window_intervals != 0:
+            raise ValueError(
+                "`start_time` must be a multiple of `window_intervals`."
+            )
+
+    if end_time is None:
+        end_time = window_times[-1]
+    else:
+        if end_time % window_intervals != 0:
+            raise ValueError(
+                "`end_time` must be a multiple of `window_intervals`."
+            )
+
+    n_cons = len(results)
+    n_windows = int(
+        (end_time - start_time + window_intervals) / window_intervals
+    )
+    new_window_times = np.arange(
+        start_time, end_time + window_intervals, window_intervals
+    ).tolist()
+
+    for key in result_keys:
+        array_to_fill = np.full(
+            (n_cons, n_windows, *results[key][0].shape[1:]), fill_value=np.nan
+        )
+        for con_idx in range(n_cons):
+            real_window_idx = 0
+            padded_window_idx = 0
+            for new_window_time in new_window_times:
+                if new_window_time in window_times:
+                    array_to_fill[con_idx, padded_window_idx] = results[key][
+                        con_idx
+                    ][real_window_idx]
+                    real_window_idx += 1
+                    padded_window_idx += 1
+                else:
+                    padded_window_idx += 1
+        results[key] = list(array_to_fill)
+
+    return results, new_window_times
