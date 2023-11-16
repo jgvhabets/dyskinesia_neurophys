@@ -47,6 +47,7 @@ def compute_connectivity(
         "sfreq": sfreq,
     }
 
+    original_indices = deepcopy(indices)
     n_cons = len(indices[0])
     if method == "trgc":
         mne_method = ["gc", "gc_tr"]
@@ -115,6 +116,15 @@ def compute_connectivity(
             if not isinstance(window_results, list):
                 window_results = [window_results]
 
+            if window_idx == 0:
+                freqs = window_results[0].freqs
+                if len(window_results) > 1:
+                    for window_result in window_results[1:]:
+                        assert np.array_equal(freqs, window_result)
+            else:
+                for window_result in window_results:
+                    assert np.array_equal(freqs, window_result)
+
             results, patterns = _handle_missing_cons(
                 window_results=window_results,
                 empty_cons=bad_cons,
@@ -167,12 +177,13 @@ def compute_connectivity(
         del connectivity[f"{method}_patterns_targets"]
 
     connectivity = _add_connectivity_info(
-        connectivity=connectivity, indices=indices, ch_info=ch_info
+        connectivity=connectivity, indices=original_indices, ch_info=ch_info
     )
 
     connectivity["window_times"] = [
         time for idx, time in enumerate(window_times) if idx not in bad_windows
     ]
+    connectivity["freqs"] = freqs
 
     return connectivity
 
