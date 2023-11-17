@@ -5,9 +5,16 @@ import pickle
 from copy import deepcopy
 
 import numpy as np
+import mne
 from mne.filter import resample
 from mne_connectivity import seed_target_multivariate_indices
 import pandas as pd
+import matplotlib
+from matplotlib import pyplot as plt
+import scipy as sp
+import trimesh
+from matplotlib import cm, colormaps, colors
+from matplotlib.colors import LinearSegmentedColormap
 
 
 def load_data(project_fpath: str, subject: str) -> dict:
@@ -102,6 +109,22 @@ def load_data(project_fpath: str, subject: str) -> dict:
     data["sfreq"] = sfreq
 
     return data
+
+
+def load_coordinates(fpath: str) -> pd.DataFrame:
+    """Load channel coordinates.
+
+    Parameters
+    ----------
+    fpath : str
+        Filepath of the coordinates.
+
+    Returns
+    -------
+    coordinates : pandas.DataFrame
+        Channel coordinates as a DataFrame.
+    """
+    return pd.read_csv(fpath)
 
 
 def get_indices_from_features(
@@ -693,3 +716,623 @@ def add_missing_windows(
         results[key] = list(array_to_fill)
 
     return results, new_window_times
+
+
+def process_results(
+    method: str, subjects: str | list[str], results_path: str
+) -> tuple[pd.DataFrame, list[int | float], list[int | float]]:
+    """Process connectivity results.
+
+    Parameters
+    ----------
+    method : str
+        Connectivity method to process results for. Accepts: "mic"; "trgc".
+
+    subjects : str | list of str
+        Subjects to process results for. Can be a str for a single subject, or
+        a list of str for multiple subjects.
+
+    results_path : str
+        Filepath to the folder where results are stored.
+
+    Returns
+    -------
+    results : pandas.DataFrame
+        Connectivity results for all subjects.
+
+    window_times : list of int or float
+        Start time of each window in the results.
+
+    freqs : list of int or float
+        Frequencies in the results.
+
+    Notes
+    -----
+    For each subject, the results will be padded with NaN values for
+    non-consecutive windows. E.g. if the window times were [5, 10, 20], NaN
+    values would be added to the results between the second and third windows
+    to mimic a window at time=15.
+
+    If multiple subjects are being processed, the results will be additionally
+    padded with NaN values according to the earliest and latest window times
+    across all subjects.
+    """
+    accepted_methods = ["mic", "trgc"]
+    if method not in accepted_methods:
+        raise ValueError(f"`method` must be one of {accepted_methods}.")
+
+    if method == "mic":
+        result_keys = [
+            method,
+            f"{method}_patterns_seeds",
+            f"{method}_patterns_targets",
+        ]
+    else:
+        result_keys = [method]
+
+    if isinstance(subjects, str):
+        subjects = [subjects]
+
+    subject_results = []
+    subject_window_times = []
+    min_window_time = np.inf
+    max_window_time = -np.inf
+    for subject_idx, subject in enumerate(subjects):
+        subject_result = load_results(
+            os.path.join(results_path, f"sub-{subject}_{method}_ctx-stn.pkl")
+        )
+
+        if subject_idx == 0:
+            freqs = subject_result["freqs"]
+        else:
+            assert np.array_equal(freqs, subject_result["freqs"])
+
+        subject_window_times.append(subject_result["window_times"])
+        if subject_window_times[subject_idx][0] < min_window_time:
+            min_window_time = subject_window_times[subject_idx][0]
+        if subject_window_times[subject_idx][-1] > max_window_time:
+            max_window_time = subject_window_times[subject_idx][-1]
+
+        subject_results.append(
+            results_dict_to_dataframe(
+                results=subject_result,
+                method_key=method,
+                repeat_keys=["subject"],
+                discard_keys=["freqs", "window_times", "sfreq"],
+            )
+        )
+
+    for subject_idx, subject_result in enumerate(subject_results):
+        subject_result, window_times = add_missing_windows(
+            results=subject_result,
+            window_times=subject_window_times[subject_idx],
+            window_intervals=5,
+            result_keys=result_keys,
+            start_time=min_window_time,
+            end_time=max_window_time,
+        )
+
+        subject_results[subject_idx] = subject_result
+
+    if len(subject_results) > 1:
+        results = pd.concat(subject_results, ignore_index=True)
+    else:
+        results = subject_results[0]
+
+    return results, window_times, freqs
+
+
+def _get_eligible_indices(
+    results: pd.DataFrame, eligible_entries: dict | None
+) -> np.ndarray:
+    """Finds indices where a set of conditions are met in a DataFrame.
+
+    Parameters
+    ----------
+    results : pandas.DataFrame
+        DataFrame to find the eligible entries in.
+
+    eligible_entries : dict | None
+        Entries of `results` to plot, where the keys correspond to columns in
+        `results`, and the values to the entries of `results[key]` which
+        should be plotted. If `None`, all entries are eligible.
+
+    Returns
+    -------
+    eligible_idcs : numpy.ndarray
+        Boolean array of indices (DataFrame rows) where the conditions are met.
+    """
+    eligible_idcs = np.ones(len(results), dtype=int)
+
+    if eligible_entries is None:
+        return eligible_idcs
+
+    for key, value in eligible_entries.items():
+        eligible_idcs -= ~(results[key] == value).to_numpy()
+
+    return np.clip(eligible_idcs, 0, 1).astype(bool)
+
+
+def plot_results_timefreqs(
+    results: pd.DataFrame,
+    method: str,
+    times: list[int | float],
+    freqs: list[int | float],
+    eligible_entries: dict | None = None,
+    show: bool = True,
+) -> tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]:
+    """Plot connectivity results in a time-frequency format.
+
+    Parameters
+    ----------
+    results : pandas.DataFrame
+        Results to plot, like that returned from `process_results`.
+
+    method : str
+        Connectivity method to plot. Accepts: "mic"; "trgc".
+
+    times : list of int or float
+        Times of the results being plotted (in seconds).
+
+    freqs : list of int or float
+        Frequencies of the results being plotted (in Hz).
+
+    eligible_entries : dict | None (default None)
+        Entries of `results` to plot, where the keys correspond to columns in
+        `results`, and the values to the entries of `results[key]` which
+        should be plotted. If `None`, all results are plotted.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Results figure.
+
+    axis : matplotlib.axes.Axes
+        Results axis.
+
+    Notes
+    -----
+    Whatever results remain after accounting for `eligible_entries` are
+    averaged across, leaving a (time x frequency) matrix to be plotted.
+    """
+    method_mapping = {"mic": "MIC", "trgc": "TRGC"}
+    if method not in method_mapping.keys():
+        raise ValueError(f"`method` must be one of {method_mapping.keys()}.")
+
+    eligible_idcs = _get_eligible_indices(
+        results=results, eligible_entries=eligible_entries
+    )
+    results_array = np.nanmean(results[method][eligible_idcs].tolist(), axis=0)
+
+    fig, axis = plt.subplots(1, 1)
+    image = axis.imshow(
+        results_array.T,
+        origin="lower",
+        extent=(
+            times[0] / 60,
+            times[-1] / 60,
+            freqs[0],
+            freqs[-1],
+        ),
+        aspect="auto",
+        cmap="viridis",
+    )
+    axis.set_xlabel("Time (minutes)")
+    axis.set_ylabel("Frequency (Hz)")
+    fig.subplots_adjust(right=0.85)
+    cbar_axis = fig.add_axes([0.88, 0.15, 0.02, 0.7])
+    fig.colorbar(image, cax=cbar_axis, label="Connectivity (A.U.)")
+
+    title = f"Method: {method_mapping[method]}"
+    if eligible_entries is not None:
+        title = f"{title}\n"
+        for key, value in eligible_entries.items():
+            title += f"{key} = {value} | "
+        title = title[:-3]
+    axis.set_title(title)
+
+    if show:
+        plt.show()
+
+    return fig, axis
+
+
+def _gaussianise_data(data: np.ndarray) -> np.ndarray:
+    """Gaussianise data to have mean=0 and standard deviation=1.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        The data to Gaussianise. Must be a vector.
+
+    Returns
+    -------
+    data : numpy.ndarray
+        The Gaussianised data.
+
+    Notes
+    -----
+    Follows the approach presented in Van Albada & Robinson (2007). Journal of
+    Neuroscience Methods. DOI: 10.1016/j.jneumeth.2006.11.004.
+    """
+    assert len(data.shape) == 1
+
+    n = np.unique(data, return_inverse=True)[1]
+    sorted_n = np.sort(n)
+    new_sorted = sorted_n.copy()
+    indices = np.argsort(np.argsort(n))
+
+    ties = 0
+    for idx, val in enumerate(sorted_n[:-1]):
+        if val == sorted_n[idx + 1]:
+            ties += 1
+        else:
+            new_sorted[idx + 1 :] = new_sorted[idx + 1 :] + ties
+
+    rank = new_sorted[indices] + 1
+
+    cdf = rank / len(data) - 1 / (2 * len(data))
+
+    return np.sqrt(2) * sp.special.erfinv(2 * cdf - 1)
+
+
+def _zscore_data(data: np.ndarray, axis: int = 0) -> np.ndarray:
+    """Z-score data.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        The data to Z-score.
+
+    axis : int (default 0)
+        Axis of `data` to Z-score.
+
+    Returns
+    -------
+    data : numpy.ndarray
+        The Z-scored data.
+    """
+    return (data - np.nanmean(data, axis=axis)) / np.nanstd(data, axis=axis)
+
+
+def _plot_patterns_ecog(
+    data: np.ndarray,
+    coordinates: np.ndarray,
+    label: str = "",
+    colourmap: str | matplotlib.colors.Colormap = "viridis",
+    vmin: float | None = None,
+    vmax: float | None = None,
+    template: str = "mni_icbm152_nlin_asym_09b",
+    views: dict | list[dict] | None = None,
+    figsize: tuple[float, float] | None = None,
+    brain_kwargs: dict | None = None,
+    show: bool = True,
+) -> tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]:
+    """Plot ECoG connectivity patterns.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        Results to plot with shape (channels).
+
+    coordinates : numpy.ndarray
+        Coordinates of each channel with shape (channels x 3), where 3
+        corresponds to the x-, y-, and z-coordinates, respectively.
+
+    label : str (default "")
+        Colourbar label.
+
+    colourmap : str | matplotlib.colors.Colormap (default "viridis")
+        Colourmap for the plot.
+
+    vmin : float | None (default None)
+        Minimum colourbar value.
+
+    vmax : float | None (default None)
+        Maximum colourbar value.
+
+    template : str
+        MNE subjects template to use for the plot.
+
+    views : dict | list[dict] | None (default None)
+        Viewing parameters for the MNE Brain plot.
+
+    figsize : tuple of float | None (default None)
+        Figure size.
+
+    brain_kwargs : dict | None (default None)
+        Keyword arguments to pass to the MNE Brain plot.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Results figure.
+
+    axes : matplotlib.axes.Axes
+        Results axes.
+    """
+    sample_path = mne.datasets.sample.data_path()
+    subjects_dir = sample_path / "subjects"
+    hemi = "both"
+
+    keys = (str(i) for i in range(coordinates.shape[0]))
+
+    mri_mni_trans = mne.read_talxfm(template, subjects_dir)
+    mri_mni_inv = np.linalg.inv(mri_mni_trans["trans"])
+    xyz_mri = mne.transforms.apply_trans(mri_mni_inv, coordinates)
+
+    path_mesh = subjects_dir / template / "surf" / f"{template}.glb"
+    with open(path_mesh, "rb") as f:
+        scene = trimesh.exchange.gltf.load_glb(f)
+    mesh: trimesh.Trimesh = trimesh.Trimesh(**scene["geometry"]["geometry_0"])
+    xyz_mri = mesh.nearest.on_surface(xyz_mri)[0] * 1.03
+
+    montage = mne.channels.make_dig_montage(
+        ch_pos=dict(zip(keys, xyz_mri, strict=True)), coord_frame="mri"
+    )
+    info = mne.create_info(
+        ch_names=montage.ch_names,
+        sfreq=1000,
+        ch_types="ecog",
+        verbose=None,
+    )
+    info.set_montage(montage, verbose=False)
+    identity = mne.transforms.Transform(fro="head", to="mri", trans=np.eye(4))
+    if isinstance(colourmap, str):
+        cmap = colormaps[colourmap]
+    else:
+        cmap = colourmap
+    if vmin is None:
+        vmin = data.min()
+    if vmax is None:
+        vmax = data.max()
+    norm = colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
+    mapper = cm.ScalarMappable(norm=norm, cmap=cmap)
+    sensor_colors = mapper.to_rgba(data)
+    if brain_kwargs is None:
+        brain_kwargs = {
+            "surf": "pial",
+            "cortex": "low_contrast",
+            "alpha": 1.0,
+            "background": "white",
+        }
+    brain = mne.viz.Brain(
+        subjects_dir=subjects_dir,
+        subject=template,
+        hemi=hemi,
+        show=False,
+        block=False,
+        **brain_kwargs,
+    )
+    brain.add_sensors(
+        info,
+        trans=identity,
+        ecog=True,
+        sensor_colors=sensor_colors,
+    )
+
+    view_picks = [views]
+    view_params = []
+    for view in view_picks:
+        view_params.append(view)
+    if views is None:
+        if figsize is None:
+            figsize = (6.4, 4.8)
+        fig = plt.figure(layout="constrained", figsize=figsize)
+        left, right = fig.subfigures(nrows=1, ncols=2, width_ratios=[1, 1])
+        ax_left = left.add_subplot(111)
+        axs_right = right.subplot_mosaic(
+            """
+            BD
+            CD
+            """,
+            width_ratios=[5, 1],
+        )
+        axes = [ax_left] + [axs_right[item] for item in ("B", "C")]
+        cax = axs_right["D"]
+        cbar_kwargs = {
+            "ax": cax,
+            "fraction": 0.5,
+            "shrink": 0.8,
+        }
+    else:
+        if figsize is None:
+            figsize = (6.2 * len(view_params) + 0.2, 4.8)
+        width_ratios = [1] * len(view_params) + [0.03]
+        fig, axes = plt.subplots(
+            1,
+            len(view_params) + 1,
+            width_ratios=width_ratios,
+            squeeze=True,
+            figsize=figsize,
+        )
+        axes = (
+            [axes] if isinstance(axes, matplotlib.axes.Axes) else axes.tolist()
+        )
+        cax = axes.pop(-1)
+        cbar_kwargs = {"cax": cax}
+    for ax, params in zip(axes, view_params, strict=True):
+        brain.show_view(**params)
+        brain.show()
+        im = brain.screenshot(mode="rgb")
+        nonwhite_pix = (im != 255).any(-1)
+        nonwhite_row = nonwhite_pix.any(1)
+        nonwhite_col = nonwhite_pix.any(0)
+        im_cropped = im[nonwhite_row][:, nonwhite_col]
+        ax.imshow(im_cropped)
+        ax.set_axis_off()
+    cbar = fig.colorbar(
+        mapper,
+        location="right",
+        **cbar_kwargs,
+    )
+    cbar.ax.set_ylabel(label)
+    cbar.set_ticks((vmin, vmax))
+    cbar.set_ticklabels(["Low", "High"])
+
+    if show:
+        plt.show(block=True)
+
+    return fig, axes
+
+
+def plot_results_patterns(
+    results: pd.DataFrame,
+    coordinates: pd.DataFrame,
+    method: str,
+    times: list[int | float],
+    freqs: list[int | float],
+    time_range: tuple | None = None,
+    freq_range: tuple | None = None,
+    eligible_entries: dict | None = None,
+    show: bool = True,
+) -> tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]:
+    """Plot connectivity patterns.
+
+    Parameters
+    ----------
+    results : pandas.DataFrame
+        Results to plot, like that returned from `process_results`.
+
+    coordinates : pandas.DataFrame
+        Coordinates of the channels to plot, like that returned from
+        `load_coordinates`.
+
+    method : str
+        Connectivity method to plot.
+
+    times : list of int or float
+        Times of the results being plotted (in seconds).
+
+    freqs : list of int or float
+        Frequencies of the results being plotted (in Hz).
+
+    time_range : tuple | None (default None)
+        Time range to average and plot patterns across (in seconds).
+
+    freq_range : tuple | None (default None)
+        Frequency range to average and plot patterns across (in Hz).
+
+    eligible_entries : dict | None (default None)
+        Entries of `results` to plot, where the keys correspond to columns in
+        `results`, and the values to the entries of `results[key]` which
+        should be plotted. If `None`, all results are plotted.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Results figure.
+
+    axis : matplotlib.axes.Axes
+        Results axis.
+
+    Notes
+    -----
+    Currently only plots ECoG seed patterns.
+    """
+    eligible_idcs = _get_eligible_indices(
+        results=results, eligible_entries=eligible_entries
+    )
+    results = results.loc[eligible_idcs].reset_index(drop=True)
+
+    seed_types = np.unique(results["seed_types"])
+    if len(seed_types) != 1:
+        raise ValueError(
+            "Currently, only plotting ECoG patterns as seeds is supported."
+        )
+
+    if time_range is None:
+        time_range = (times[0], times[-1])
+    if freq_range is None:
+        freq_range = (freqs[0], freqs[-1])
+
+    coordinates[["x", "y", "z"]] /= 1000  # mm to m
+
+    seed_coordinates = []
+    seed_patterns = results[f"{method}_patterns_seeds"].tolist()
+    missing_patterns = []
+    for row_idx, seed_pattern in enumerate(seed_patterns):
+        time_start_idx = times.index(time_range[0])
+        time_end_idx = times.index(time_range[-1])
+        freq_start_idx = freqs.index(freq_range[0])
+        freq_end_idx = freqs.index(freq_range[-1])
+
+        seed_pattern = _zscore_data(data=seed_pattern, axis=0)
+        seed_pattern = np.nanmean(
+            np.abs(
+                seed_pattern[
+                    time_start_idx : time_end_idx + 1,
+                    :,
+                    freq_start_idx : freq_end_idx + 1,
+                ],
+            ),
+            axis=(0, 2),
+        )
+
+        if np.all(np.isnan(seed_pattern)):
+            missing_patterns.append(row_idx)
+        else:
+            seed_patterns[row_idx] = _gaussianise_data(
+                data=seed_pattern[~np.isnan(seed_pattern)]
+            )
+
+            subject_coordinate_idcs = coordinates["subject"] == int(
+                results["subject"][row_idx]
+            )
+            subject_coordinates = []
+            for seed_name in results["seed_names"][row_idx]:
+                subject_coordinates.append(
+                    coordinates[["x", "y", "z"]][
+                        subject_coordinate_idcs
+                        & (coordinates["ch_name"] == seed_name)
+                    ].to_numpy()[0]
+                )
+
+            n_channels = np.count_nonzero(~np.isnan(seed_patterns[row_idx]))
+            assert n_channels == len(subject_coordinates)
+
+            seed_coordinates.append(np.array(subject_coordinates))
+
+    seed_patterns = [
+        seed_pattern
+        for row_idx, seed_pattern in enumerate(seed_patterns)
+        if row_idx not in missing_patterns
+    ]
+    seed_patterns = np.concatenate(seed_patterns, axis=0)
+    seed_coordinates = np.concatenate(seed_coordinates, axis=0)
+
+    colours = plt.get_cmap("Reds")(range(256))
+    red_alpha_cmap = LinearSegmentedColormap.from_list(
+        name="red_alpha", colors=colours
+    )
+    height = 4.5 / 2.5
+    fig, axis = _plot_patterns_ecog(
+        data=seed_patterns,
+        coordinates=seed_coordinates,
+        label="Connectivity strength (A.U.)",
+        colourmap=red_alpha_cmap,
+        views={"azimuth": 185.0, "elevation": -50.0},
+        figsize=(height * 4 / 3, height),
+        brain_kwargs={
+            "surf": "pial",
+            "cortex": "low_contrast",
+            "alpha": 1.0,
+            "background": "white",
+        },
+        show=False,
+    )
+    title = (
+        f"Times: {time_range[0] / 60}-{time_range[1] / 60} minutes | "
+        f"Frequencies: {freq_range[0]}-{freq_range[1]} Hz"
+    )
+    if eligible_entries is not None:
+        title = f"{title}\n"
+        for key, value in eligible_entries.items():
+            title += f"{key} = {value} | "
+        title = title[:-3]
+    axis[0].set_title(title)
+
+    if show:
+        plt.show()
+
+    return fig, axis
