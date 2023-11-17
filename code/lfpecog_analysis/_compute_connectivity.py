@@ -120,10 +120,10 @@ def compute_connectivity(
                 freqs = window_results[0].freqs
                 if len(window_results) > 1:
                     for window_result in window_results[1:]:
-                        assert np.array_equal(freqs, window_result)
+                        assert np.array_equal(freqs, window_result.freqs)
             else:
                 for window_result in window_results:
-                    assert np.array_equal(freqs, window_result)
+                    assert np.array_equal(freqs, window_result.freqs)
 
             results, patterns = _handle_missing_cons(
                 window_results=window_results,
