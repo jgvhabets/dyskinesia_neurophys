@@ -94,17 +94,19 @@ def resample(
             data.shape[0],
             int(data.shape[1] / down),
         ))
-        newtime = np.zeros((n_timeRows, newdata.shape[-1]))
+        if n_timeRows > 0: newtime = np.zeros((n_timeRows, newdata.shape[-1]))
 
-        time = data[:n_timeRows, :]
-        newtime[0] = np.arange(
-            start=0, stop=time[0, -1], step=(1 / Fs_new)
-        )[:newdata.shape[-1]]
-        newtime[1] = np.arange(
-            start=time[1, 0], stop=time[1, -1], step=(1 / Fs_new)
-        )[:newdata.shape[-1]]
+        if n_timeRows > 0: time = data[:n_timeRows, :]
+        if n_timeRows > 0: 
+            newtime[0] = np.arange(
+                start=0, stop=time[0, -1], step=(1 / Fs_new)
+            )[:newdata.shape[-1]]
+        if n_timeRows > 0: 
+            newtime[1] = np.arange(
+                start=time[1, 0], stop=time[1, -1], step=(1 / Fs_new)
+            )[:newdata.shape[-1]]
 
-        newdata[:n_timeRows, :] = newtime
+        if n_timeRows > 0: newdata[:n_timeRows, :] = newtime
         
         newdata[n_timeRows:, :] = mne.filter.resample(
             data[n_timeRows:, :], up=1, down=down, axis=1
