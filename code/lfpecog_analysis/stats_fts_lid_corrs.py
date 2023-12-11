@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import json
 import os
-from statsmodels.formula.api import mixedlm
+# from statsmodels.formula.api import mixedlm
 import gpboost as gpb
 from scipy.stats import norm, pearsonr
 from itertools import product

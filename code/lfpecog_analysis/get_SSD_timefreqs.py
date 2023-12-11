@@ -14,36 +14,70 @@ from utils.utils_fileManagement import (
     get_project_path, make_object_jsonable
 )
 from lfpecog_features.get_ssd_data import get_subject_SSDs
+from lfpecog_analysis.process_connectivity import (
+    get_conn_values_sub_side
+)
 
 
 def get_all_ssd_timeFreqs(
     SUBS, DATA_VERSION='v4.0', FT_VERSION='v4',
     WIN_LEN=10, WIN_OVERLAP=0.5, SSD_BROAD=True,
-    FORCE_PSD_CREATION=False, 
+    FORCE_PSD_CREATION=False,
+    GET_CONNECTIVITY=False,
 ):
     TFs = {}
 
     for sub in SUBS:
-        psd_sub = get_SSD_timeFreq(
-            sub=sub, DATA_VERSION=DATA_VERSION,
-            FT_VERSION=FT_VERSION,
-            WIN_LEN=WIN_LEN, WIN_OVERLAP=WIN_OVERLAP,
-            SSD_BROAD=SSD_BROAD,
-            FORCE_PSD_CREATION=FORCE_PSD_CREATION,  
-        )
+        TFs[sub] = {}
 
-        tf_sub = {}
-        
-        for src in psd_sub.keys():
-            tf_sub[src] = TimeFreqTuple(
-                np.array(psd_sub[src]['values']),
-                np.array(psd_sub[src]['freqs']),
-                np.array(psd_sub[src]['times'])
+        if not GET_CONNECTIVITY:
+            # get all timefreq SSD data per sub
+            psd_sub = get_SSD_timeFreq(
+                sub=sub, DATA_VERSION=DATA_VERSION,
+                FT_VERSION=FT_VERSION,
+                WIN_LEN=WIN_LEN, WIN_OVERLAP=WIN_OVERLAP,
+                SSD_BROAD=SSD_BROAD,
+                FORCE_PSD_CREATION=FORCE_PSD_CREATION,  
             )
+            # create data tuple per source            
+            for src in psd_sub.keys():
+                TFs[sub][src] = TimeFreqTuple(
+                    np.array(psd_sub[src]['values']),
+                    np.array(psd_sub[src]['freqs']),
+                    np.array(psd_sub[src]['times'])
+                )
 
-        TFs[sub] = tf_sub
-        print(f'...loaded subject-{sub} Time-Frequency data')
+            print(f'...loaded subject-{sub} Time-Frequency data')
         
+        
+        elif isinstance(GET_CONNECTIVITY, str):
+            if sub.startswith('1'): continue
+
+            assert GET_CONNECTIVITY in ['mic', 'trgc'], (
+                f'GET_CONNECTIVITY ({GET_CONNECTIVITY}) '
+                f'should be "mic" OR "trgc"'
+            )
+            
+            CONN_FT_PATH = join(
+                get_project_path('results'),
+                'features',
+                'connectivity',
+                f'windows_{WIN_LEN}s_{WIN_OVERLAP}overlap'
+            )
+            for src in ['ipsilateral', 'contralateral']:
+                # get connectivity values, times, freqs
+                (values,
+                 times,
+                 freqs) = get_conn_values_sub_side(sub=sub,
+                                                   stn_side=src,
+                                                   CONN_FT_PATH=CONN_FT_PATH,
+                                                   conn_method=GET_CONNECTIVITY)
+                TFs[sub][src] = TimeFreqTuple(np.array(values),
+                                              np.array(freqs),
+                                              np.array(times))
+                
+            print(f'...loaded subject-{sub} Connectivity Time-Frequency data')
+ 
     return TFs
 
 

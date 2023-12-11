@@ -7,7 +7,7 @@ from copy import deepcopy
 import numpy as np
 import mne
 from mne.filter import resample
-from mne_connectivity import seed_target_multivariate_indices
+# from mne_connectivity import seed_target_multivariate_indices  # wrong mne_conn version
 import pandas as pd
 import matplotlib
 from matplotlib import pyplot as plt
