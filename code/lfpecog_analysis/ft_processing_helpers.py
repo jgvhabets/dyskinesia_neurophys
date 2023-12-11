@@ -576,10 +576,13 @@ def select_coh_feats(
 
 
 def split_lid_subs(DATA_VERSION, FT_VERSION,
+                   CDRS_RATER='Jeroen',
                    IGNORE_PTS=['011', '104', '106']):
 
-    SUBS = get_avail_ssd_subs(DATA_VERSION, FT_VERSION,
-                       IGNORE_PTS=IGNORE_PTS)
+    SUBS = get_avail_ssd_subs(
+        DATA_VERSION, FT_VERSION,
+        IGNORE_PTS=IGNORE_PTS
+    )
     subs_LID = []
     subs_noLID = []
 
@@ -589,8 +592,8 @@ def split_lid_subs(DATA_VERSION, FT_VERSION,
             continue
         try:
             max_score = max(get_cdrs_specific(sub=sub,
-                                                    rater='Jeroen',
-                                                    side='both')[1])
+                                              rater=CDRS_RATER,
+                                              side='both')[1])
             if max_score > 0: subs_LID.append(sub)
             else: subs_noLID.append(sub)
         except ValueError:

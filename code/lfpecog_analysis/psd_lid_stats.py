@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import json
 import os
-from statsmodels.formula.api import mixedlm
+# from statsmodels.formula.api import mixedlm
 
 # import own functions
 from utils.utils_fileManagement import (get_project_path,

@@ -33,7 +33,8 @@ from lfpecog_analysis.get_acc_task_derivs import(
 
 def plot_PSD_vs_DopaTime(all_timefreqs,
                          sel_subs=None,
-                         STN_or_ECOG='STN',
+                         SOURCE='STN',
+                         CONN_METRIC=False,
                          LOG_POWER=True,
                          ZSCORE_FREQS=True,
                          SMOOTH_PLOT_FREQS=0,
@@ -49,6 +50,7 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
         - all_timefreqs: (results from ssd_TimeFreq.get_all_ssd_timeFreqs)
             contains tf_values (shape n-freq x n-times), times, freqs.
         - sel_subs: if given, selection of subjects to include
+        - SOURCE: ECOG, STN, CONN
         - LOG_POWER: plot powers logarithmic
         - ZSCORE_FREQS: plot PSDs as z-Scores per freq-bin
         - SMOOTH_PLOT_FREQS: if > 0, window (n freqs) to
@@ -61,7 +63,10 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
             give the defined axis here
         - fsize: fontsize, defaults to 12
     """
-    assert STN_or_ECOG.upper() in ['STN', 'ECOG'], 'STN_or_ECOG should STN / ECOG'
+    allowed_sources = ['STN', 'ECOG', 'CONN_IPSI', 'CONN_CONTRA']
+    assert SOURCE.upper() in allowed_sources, (
+        f'SOURCE should be in {allowed_sources}'
+    )
     timings = np.arange(0, 76, 15)  # create timings between 0 and 61/76 with 10/15 min steps
     psds_to_plot = {t: [] for t in timings}
 
@@ -71,19 +76,25 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
     else: subs = all_timefreqs.keys()
     subs_incl = []
 
+    if 'CONN' in SOURCE: YLAB = CONN_METRIC
+    else: YLAB = 'Power'
+
     for sub in subs:
 
         for src in all_timefreqs[sub].keys():
 
-            if STN_or_ECOG.upper() == 'STN':
-                if 'ecog' in src: continue
-            elif STN_or_ECOG.upper() == 'ECOG':
-                if not 'ecog' in src: continue
+            if SOURCE.upper() == 'STN' and not 'lfp' in src: continue
+            elif SOURCE.upper() == 'ECOG' and not 'ecog' in src: continue
+            elif SOURCE.upper() == 'CONN_CONTRA' and src != 'contralateral': continue
+            elif SOURCE.upper() == 'CONN_IPSI' and src != 'ipsilateral': continue
+            # print(f'continue with {sub}, {src} (in {SOURCE})')
 
             subs_incl.append(sub)  # add subject to count
 
             # get data for this sub and ephys-source
             tf_values = all_timefreqs[sub][src].values.copy()
+            if tf_values.shape[0] > tf_values.shape[1]: tf_values = tf_values.T
+
             if LOG_POWER: tf_values = np.log(tf_values)
             if ZSCORE_FREQS:
                 for f in np.arange(tf_values.shape[0]):
@@ -107,10 +118,10 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
                     sel = tf_times > timing
                 else:
                     sel = np.logical_and(tf_times > timing - 10,
-                                        tf_times < timing)
+                                         tf_times < timing)
                 if sum(sel) == 0: continue
 
-                mean_psd = np.mean(tf_values[:, sel], axis=1)
+                mean_psd = np.nanmean(tf_values[:, sel], axis=1)
 
                 if BASELINE_CORRECT and timing == 0:
                     BL = mean_psd
@@ -138,11 +149,14 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
         if BASELINE_CORRECT and timing == 0: continue
 
         psds = np.array(psds_to_plot[timing])
-        print(f'{STN_or_ECOG}, t={timing} ({i}) is n={psds.shape[0]}')
+        # print(f'{SOURCE}, t={timing} ({i}) is n={psds.shape[0]}')
         if not len(psds.shape) == 2: continue
-        psd_mean = np.mean(psds, axis=0)
+        psd_mean = np.nanmean(psds, axis=0)
+        if np.isnan(psd_mean).all():
+            print(f'timing {timing} skipped, only NaNs')
+            continue
         # blank freqs irrelevant after SSD
-        blank_sel = np.logical_and(tf_freqs > 35, tf_freqs < 60)
+        # blank_sel = np.logical_and(tf_freqs > 35, tf_freqs < 60)
         # psd_mean[blank_sel] = np.nan
         # tf_freqs[blank_sel] = np.nan
 
@@ -171,13 +185,13 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
                 lw=5, alpha=.5,)
 
     if BREAK_X_AX:
-        ax.set_xticks(xticks[::8], size=fsize)
-        ax.set_xticklabels(xlabels[::8], fontsize=fsize)
+        ax.set_xticks(xticks[::8],)
+        ax.set_xticklabels(xlabels[::8])
+
         if SMOOTH_PLOT_FREQS <= 0: yfill = [.4, -.6]
         elif SMOOTH_PLOT_FREQS <= 8: yfill = [.15, -.3]
         elif SMOOTH_PLOT_FREQS <= 10: yfill = [.1, -.25]
-        # ax.fill_betweenx(y=yfill, x1=i_sel, x2=i_sel+nan_pad,
-        #                  facecolor='gray', edgecolor='gray', alpha=.3,)
+        
     else:
         ax.set_xticks(np.linspace(x_axis[0], x_axis[-1], 5))
         ax.set_xticklabels(np.linspace(x_axis[0], x_axis[-1], 5))
@@ -186,16 +200,17 @@ def plot_PSD_vs_DopaTime(all_timefreqs,
               color='gray', lw=1, alpha=.5,)
     
     ax.set_xlabel('Frequency (Hz)', size=fsize,)
-    ylabel = 'Power (a.u.)'
-    if BASELINE_CORRECT: ylabel = 'Power %-change vs pre - L-DOPA' + ylabel[5:]
+    ylabel = f'{YLAB} (a.u.)'
+    if BASELINE_CORRECT: ylabel = f'{YLAB} %-change vs pre - L-DOPA {ylabel[len(YLAB):]}'
     ax.set_ylabel(ylabel, size=fsize,)
 
-    ax.legend(frameon=False, fontsize=fsize-3, ncol=1,
-              loc='lower right')
+    if 'CONN' in SOURCE: leg_loc = 'upper left'
+    else: leg_loc = 'lower right'
+    ax.legend(frameon=False, fontsize=fsize-3, ncol=1, loc=leg_loc)
 
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-
+    ax.tick_params(axis='both', size=fsize, labelsize=fsize)
     
     ax.set_title(f"{ax_title} (n={n_subs_incl} pt's)",
                         size=fsize, weight='bold',)
@@ -1155,6 +1170,7 @@ def break_x_axis_psds_ticks(tf_freqs, PSD, PSD_sd=False,
 
     elif isinstance(PSD, np.ndarray):    
         del_sel = np.logical_or(del_sel, np.isnan(PSD))
+
         PSD = np.delete(PSD, del_sel,)
         
         if isinstance(PSD_sd, np.ndarray):
@@ -1173,8 +1189,10 @@ def break_x_axis_psds_ticks(tf_freqs, PSD, PSD_sd=False,
         
     xlabels = [''] * len(xticks)
     low_ticks = plt_freqs[plt_freqs < x_break[0]]
+    low_ticks = [round(t) for t in low_ticks]
     xlabels[:len(low_ticks)] = low_ticks
     high_ticks = plt_freqs[plt_freqs > x_break[1]]
+    high_ticks = [round(t) for t in high_ticks]
     xlabels[len(xlabels) - len(high_ticks):] = high_ticks
 
 
