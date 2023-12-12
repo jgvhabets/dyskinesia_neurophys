@@ -370,8 +370,8 @@ def find_select_nearest_CDRS_for_ephys(
         else: bilat_code = 'both'
         # get timestamps and values of clinical CDRS LID assessment
         cdrs_times, cdrs_scores = get_cdrs_specific(
-            sub=sub, rater=cdrs_rater, side=bilat_code,)
-        
+            sub=sub, rater=cdrs_rater, side=bilat_code,
+        )
         # find closest CDRS value for ft-values based on timestamps
         cdrs_idx_fts = [np.argmin(abs(t - cdrs_times)) for t in ft_times]
         cdrs_for_fts = cdrs_scores[cdrs_idx_fts]
@@ -438,8 +438,8 @@ def find_select_nearest_CDRS_for_ephys(
 def categorical_CDRS(
     y_full_scale,
     time_minutes=None,
-    preLID_minutes=10,
-    preLID_separate=True,
+    preLID_minutes=0,
+    preLID_separate=False,
     cutoff_mildModerate=2.5,
     cutoff_moderateSevere=4.5,
     convert_inBetween_zeros=False,
@@ -489,10 +489,6 @@ def categorical_CDRS(
             t_start = time_minutes[i_start]
             sel_pre_min = np.logical_and(
                 time_minutes > (t_start - preLID_minutes),
-            #     time_minutes < t_start
-            # )
-            # sel_pre_min = np.logical_and(
-            #     sel_pre_min,
                 y_full_scale == 0
             )
             sel_mild += sel_pre_min

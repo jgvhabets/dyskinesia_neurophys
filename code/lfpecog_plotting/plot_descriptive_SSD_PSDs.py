@@ -826,6 +826,7 @@ import json
 def plot_scaling_LID(
     psds_to_plot, tf_freqs,
     cdrs_cat_coding, datatype,
+    cdrs_origin=None,
     plt_ax_to_return=False,
     BASELINE_CORRECT=True, LOG_POWER=False,
     SMOOTH_PLOT_FREQS=0, STD_ERR=True,
@@ -840,8 +841,13 @@ def plot_scaling_LID(
     p_SAVED_DATE='0000',
     DATA_VERSION = 'v4.0', FT_VERSION='v4',
 ):
-    assert datatype.upper() in ['STN', 'ECOG'], (
-        f'datatype ({datatype}) should be STN or ECOG'
+    """
+    Input:
+        - psds_to_plot: contains first side-keys, then cat-keys
+    """
+    allowed_dtypes = ['STN', 'ECOG', 'MIC', 'TRGC']
+    assert datatype.upper() in allowed_dtypes, (
+        f'datatype ({datatype}) should be in {allowed_dtypes}'
     )
 
     if SHOW_SIGN:
@@ -877,6 +883,8 @@ def plot_scaling_LID(
         elif side == 'bi_nonmatch': ax_title = f'Ipsilateral {datatype} during bilateral dyskinesia'
         elif side == 'all_match': ax_title = f'{datatype} versus all contralateral dyskinesia'
         elif side == 'all_nonmatch': ax_title = f'{datatype} versus all ipsilateral dyskinesia'
+        elif side == 'ipsilateral': ax_title = f'{datatype.upper()} (ipsilateral STN) versus {cdrs_origin} dyskinesia'
+        elif side == 'contralateral': ax_title = f'{datatype.upper()} (contralateral STN) versus {cdrs_origin} dyskinesia'
         
         if PLOT_ONLY_MATCH: ax_title = f'{datatype} versus all contralateral dyskinesia'
 
@@ -884,11 +892,16 @@ def plot_scaling_LID(
 
             cat_sel = [v == cat for v in cdrs_cat_coding.values()]
             cat_name = list(cdrs_cat_coding.keys())[np.where(cat_sel)[0][0]]
-            n_subs = n_subs_incl[side][cat]
+            try: n_subs = n_subs_incl[side][cat]
+            except: n_subs = len(psds_to_plot[side][cat])
 
             PSD = {}
             psds = np.array(psds_to_plot[side][cat])
             PSD['mean'] = np.nanmean(psds, axis=0)
+            # if nanmean only contains NaN, skip this category
+            if np.isnan(PSD['mean']).all():
+                print(f'skip CAT {cat} (n={n_subs}) bcs of only-NaNs')
+                continue
             PSD['sd'] = np.nanstd(psds, axis=0)
             if STD_ERR: PSD['sd'] = PSD['sd'] / np.sqrt(psds.shape[0])
             
@@ -914,6 +927,9 @@ def plot_scaling_LID(
                     
             # BREAK X AXIS and adjust xticks and labels
             if BREAK_X_AX:
+                assert sum(np.isnan(PSD['mean'])) != len(PSD['mean']), (
+                    'only NaNs in PSD["mean"]'
+                )
                 PSD, xticks, xlabels = break_x_axis_psds_ticks(tf_freqs, PSD)
                 if SHOW_SIGN: ps, _, _ = break_x_axis_psds_ticks(p_freqs, ps)
                 x_axis = xticks
@@ -972,7 +988,7 @@ def plot_scaling_LID(
         
         # SET AXTICKS
         if BREAK_X_AX:
-            loop_ax.set_xticks(xticks[::8], size=fsize)
+            loop_ax.set_xticks(xticks[::8],)
             loop_ax.set_xticklabels(xlabels[::8], fontsize=fsize)
             
         else:
@@ -984,9 +1000,12 @@ def plot_scaling_LID(
         # set LABELS, LEGEND, AXES
         loop_ax.set_title(ax_title, size=fsize, weight='bold',)
         loop_ax.set_xlabel('Frequency (Hz)', size=fsize,)
-        ylabel = 'Power (a.u.)'
+        if datatype.upper() == 'MIC': ylabel = 'Max. Imag. Coh. (a.u.)'
+        elif datatype.upper() == 'TRGC': ylabel = 'time-res. Granger Caus. (a.u.)'
+        else: ylabel = 'Power (a.u.)'
         if LOG_POWER: ylabel = f'Log. {ylabel}'
-        if BASELINE_CORRECT: ylabel = f'{ylabel[:-6]} %-change vs bilat-no-LID (a.u.)'
+        if BASELINE_CORRECT:
+            ylabel = ylabel.replace('(a.u.)', '%-change vs bilat-no-LID (a.u.)')
         loop_ax.set_ylabel(ylabel, size=fsize,)
         # plot legend without duplicates
         leg_info = loop_ax.get_legend_handles_labels()
@@ -1016,10 +1035,12 @@ def plot_scaling_LID(
         plt.tight_layout()
 
         if SAVE_PLOT:
+            if datatype.upper() in ['STN', 'ECOG']: folder = 'descr_PSDs'
+            elif datatype.upper() in ['MIC', 'TRGC']: folder = 'connectivity'
             path = join(get_project_path('figures'),
                         'ft_exploration',
                         f'data_{DATA_VERSION}_ft_{FT_VERSION}',
-                        'descr_PSDs')
+                        folder)
             if not exists(path): makedirs(path)
             plt.savefig(join(path, fig_name),
                         facecolor='w', dpi=300,)
@@ -1155,6 +1176,9 @@ def break_x_axis_psds_ticks(tf_freqs, PSD, PSD_sd=False,
 
     if isinstance(PSD, dict):
         del_sel = np.logical_or(del_sel, np.isnan(PSD['mean']))
+        
+        assert not np.isnan(del_sel).all(), 'all PSDs removed, probably only NaNs in PSD["mean"]'
+        
         PSD['mean'] = np.delete(PSD['mean'], del_sel,)
         PSD['sd'] = np.delete(PSD['sd'], del_sel,)
         plt_freqs = np.delete(tf_freqs.copy(), del_sel,).astype(float)
@@ -1409,9 +1433,9 @@ def plot_ECOG_PSD_vs_LID(
                 if LAT_or_SCALE == 'SCALE':
                     tf_values_dict['bi'] = tf_values[:, bi_lid_sel]
                     cdrs_cats = categorical_CDRS(y_full_scale=ft_cdrs['bi'],
-                                                preLID_minutes=0,
-                                                preLID_separate=False,
-                                                convert_inBetween_zeros=False)
+                                                 preLID_minutes=0,
+                                                 preLID_separate=False,
+                                                 convert_inBetween_zeros=False)
                     cdrs_categs['bi'] = cdrs_cats[bi_lid_sel]
                     # add match STN during bilateral LID for STATS
                     stats_lid_pow['match'].append(tf_values[:, bi_lid_sel]) 
@@ -1423,22 +1447,23 @@ def plot_ECOG_PSD_vs_LID(
                 elif LAT_or_SCALE == 'LAT_BILAT':
                     tf_values_dict['bi_match'] = tf_values[:, bi_lid_sel]
                     cdrs_cats = categorical_CDRS(y_full_scale=ft_cdrs['LID'],
-                                                preLID_minutes=0,
-                                                preLID_separate=False,
-                                                convert_inBetween_zeros=False)
+                                                 preLID_minutes=0,
+                                                 preLID_separate=False,
+                                                 convert_inBetween_zeros=False)
                     cdrs_categs['bi_match'] = cdrs_cats[bi_lid_sel]
                     
                     tf_values_dict['bi_nonmatch'] = tf_values[:, bi_lid_sel]
                     cdrs_cats = categorical_CDRS(y_full_scale=ft_cdrs['noLID'],
-                                                preLID_minutes=0,
-                                                preLID_separate=False,
-                                                convert_inBetween_zeros=False)
+                                                 preLID_minutes=0,
+                                                 preLID_separate=False,
+                                                 convert_inBetween_zeros=False)
                     cdrs_categs['bi_nonmatch'] = cdrs_cats[bi_lid_sel]
 
             
             # select unilat LID itself
             if LAT_or_SCALE == 'LAT_UNI':
-                uni_lid_sel = np.logical_and(ft_cdrs['LID'] > 0, ft_cdrs['noLID'] == 0)
+                uni_lid_sel = np.logical_and(ft_cdrs['LID'] > 0,
+                                             ft_cdrs['noLID'] == 0)
                 tf_values_dict[match_label_uni] = tf_values[:, uni_lid_sel]
             
             elif add_uni:  # change from else            

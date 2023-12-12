@@ -280,6 +280,7 @@ def get_ecog_side(sub):
 
 def get_cdrs_specific(
     sub, side='both', rater='Patricia',
+    INCL_CORE_CDRS=False,
     regularize=False,
     subs_PK_todo=['101', '102', '103', '105', '107', '108', '109',
                   '019', '020', '021', '022', '023'],
@@ -290,9 +291,9 @@ def get_cdrs_specific(
 
     Input:
         - sub
-        - side: should be left, right, both,
-            or 'contra ecog'; 'total', 'full' to incl
-            core categories (face, neck, trunk)
+        - side: should be left, right, both, bilat,
+            or 'contra ecog';
+            TO INCL CORE: 'total', 'full' (face, neck, trunk)
         - rater: should be Patricia, Jeroen or Mean
     
     Returns:
@@ -304,45 +305,42 @@ def get_cdrs_specific(
         if sub in subs_PK_todo:
             rater = 'Jeroen'
 
-        scores = read_clinical_scores(sub, rater=rater)
-        times = scores['dopa_time']
+        scores_df = read_clinical_scores(sub, rater=rater)
+        times = scores_df['dopa_time']
 
-        if side == 'both':
+        if side in ['both', 'bilat', 'total', 'full']:
             # take total (EXCL AXIAL SCORES)
-            scores = scores['CDRS_total']
+            scores = scores_df['CDRS_total_left'] + scores_df['CDRS_total_right']
         
         elif np.logical_and('contra' in side.lower(),
                             'ecog' in side.lower()):
             # take CORRESPONDING BODY SIDE to ECOG
             ecogside = get_ecog_side(sub)
-            print(sub, ecogside)
             if ecogside == 'left': side = 'right'
             elif ecogside == 'right': side = 'left'
-            scores = scores[f'CDRS_total_{side}']
+            scores = scores_df[f'CDRS_total_{side}']
         
         elif np.logical_and('ipsi' in side.lower(),
                             'ecog' in side.lower()):
             # take NONE-CORRESPONDING BODY SIDE to ECOG
             side = get_ecog_side(sub)
-            scores = scores[f'CDRS_total_{side}']
+            scores = scores_df[f'CDRS_total_{side}']
         
         elif np.logical_or(side.lower() == 'left',
                            side.lower() == 'right',):
             side = side.lower()
-            scores = scores[f'CDRS_total_{side}']
-        
-        elif side.lower() in ['total', 'full']:
-            side = side.lower()
-            tempscores = scores[f'CDRS_total']
-            tempscores += scores[f'CDRS_trunk']
-            tempscores += scores[f'CDRS_neck']
-            tempscores += scores[f'CDRS_face']
-            scores = tempscores
+            scores = scores_df[f'CDRS_total_{side}']
         
         else:
             raise ValueError('side should be "left", '
                     '"right", "both", "contra", "ipsi",'
                     ' "ecog", or "full"')
+        
+        # ADD CORE IF REQUESTED
+        if side.lower() in ['total', 'full'] or INCL_CORE_CDRS:
+            scores += scores_df[f'CDRS_trunk']
+            scores += scores_df[f'CDRS_neck']
+            scores += scores_df[f'CDRS_face']
 
         if regularize:
             og_scores = traces.TimeSeries()

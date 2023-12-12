@@ -24,6 +24,7 @@ def get_all_ssd_timeFreqs(
     WIN_LEN=10, WIN_OVERLAP=0.5, SSD_BROAD=True,
     FORCE_PSD_CREATION=False,
     GET_CONNECTIVITY=False,
+    verbose: bool = True,
 ):
     TFs = {}
 
@@ -47,7 +48,7 @@ def get_all_ssd_timeFreqs(
                     np.array(psd_sub[src]['times'])
                 )
 
-            print(f'...loaded subject-{sub} Time-Frequency data')
+            if verbose: print(f'...loaded subject-{sub} Time-Frequency data')
         
         
         elif isinstance(GET_CONNECTIVITY, str):
@@ -76,7 +77,7 @@ def get_all_ssd_timeFreqs(
                                               np.array(freqs),
                                               np.array(times))
                 
-            print(f'...loaded subject-{sub} Connectivity Time-Frequency data')
+            if verbose: print(f'...loaded subject-{sub} Connectivity Time-Frequency data')
  
     return TFs
 

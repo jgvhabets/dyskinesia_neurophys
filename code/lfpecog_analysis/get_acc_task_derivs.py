@@ -424,7 +424,8 @@ def get_acc_rms_for_windows(sub, acc_side, featClass,
 def select_tf_on_movement(feat10sClass, sub,
                           tf_values_arr, tf_times_arr,
                           SELECT_ON_ACC_RMS,
-                          RMS_Z_THRESH=-0.5,):
+                          RMS_Z_THRESH=-0.5,
+                          RETURN_MOVE_SEL_BOOL=False,):
     """
     Function used within plot_descriptive_SSD_PSDs
     to select time-frequency values and times
@@ -450,7 +451,10 @@ def select_tf_on_movement(feat10sClass, sub,
         - tf_values_arr: corrected
         - tf_times_arr: corrected
     """
-    
+    allowed_selections = ['INCL_MOVE', 'EXCL_MOVE']
+    assert SELECT_ON_ACC_RMS in allowed_selections, (
+        F'SELECT_ON_ACC_RMS NOT IN {allowed_selections}'
+    )
     # print(f'extract RMS for sub {sub}, {match_key}')
     # # calculate rms per feat-window (second resolution)
     # epoch_rms = get_any_resolution_acc_rms(
@@ -468,9 +472,9 @@ def select_tf_on_movement(feat10sClass, sub,
         tf_i1 = np.argmin(abs((tf_times_arr * 60) - rms_t))  # convert to seconds for rounding accuracy
         move_mask[tf_i1:tf_i1 + feat10sClass.WIN_LEN_sec] = rms_bool
     
-    # print(f'Movement selection ({SELECT_ON_ACC_RMS}) for sub-{sub}:\n'
-    #       f'rms-shape: {rms.shape}, mask-shape: {move_mask.shape}, '
-    #       f'nr of movement-moments: {sum(move_mask)}, tf-arr-shape: {tf_values_arr.shape}')
+    print(f'Movement selection ({SELECT_ON_ACC_RMS}) for sub-{sub}:\n'
+          f'rms-shape: {rms.shape}, mask-shape: {move_mask.shape}, '
+          f'nr of movement-moments: {sum(move_mask)}, tf-arr-shape: {tf_values_arr.shape}')
     
     # select based on found windows
     if SELECT_ON_ACC_RMS == 'INCL_MOVE':
@@ -479,15 +483,23 @@ def select_tf_on_movement(feat10sClass, sub,
         move_sel = ~move_mask.astype(bool)
     
     tf_times_arr = tf_times_arr[move_sel]
-    tf_values_arr = tf_values_arr[:, move_sel]
+    if tf_values_arr.shape[0] > tf_values_arr.shape[1]:
+        tf_values_arr = tf_values_arr[move_sel, :]
+    else:
+        tf_values_arr = tf_values_arr[:, move_sel]
 
-    return tf_values_arr, tf_times_arr
+    # return corrected values and times, if required 
+    # return bool for adhoc movement selection 
+    if RETURN_MOVE_SEL_BOOL: return tf_values_arr, tf_times_arr, move_sel
+
+    else: return tf_values_arr, tf_times_arr
 
 
 def select_tf_on_movement_10s(feat10sClass, sub,
                               tf_values_arr, tf_times_arr,
                               SELECT_ON_ACC_RMS,
-                              RMS_Z_THRESH=-0.5,):
+                              RMS_Z_THRESH=-0.5,
+                              RETURN_MOVE_SEL_BOOL=False,):
     """
     Function used within plot_COHs_spectra
     to select time-frequency values and times
@@ -510,6 +522,10 @@ def select_tf_on_movement_10s(feat10sClass, sub,
         - tf_values_arr: corrected
         - tf_times_arr: corrected
     """
+    allowed_selections = ['INCL_MOVE', 'EXCL_MOVE']
+    assert SELECT_ON_ACC_RMS in allowed_selections, (
+        f'SELECT_ON_ACC_RMS NOT IN {allowed_selections}'
+    )
     rms = feat10sClass.ACC_RMS[sub]  # std zscored mean-rms
     rms_move = (rms > RMS_Z_THRESH).astype(int)
     rms_time = feat10sClass.FEATS[sub].index.values * 60  # in minutes, convert to seconds
@@ -519,9 +535,18 @@ def select_tf_on_movement_10s(feat10sClass, sub,
         try: i_rms = np.where(rms_time == coh_t)[0][0]
         except: i_rms = np.argmin(abs(rms_time - coh_t))
         move_mask[i_t] = rms_move[i_rms]
-    if 'INCL' in SELECT_ON_ACC_RMS: sel_move = move_mask.astype(bool)
-    elif 'EXCL' in SELECT_ON_ACC_RMS: sel_move = ~move_mask.astype(bool)
-    tf_values_arr = tf_values_arr[sel_move, :]
-    tf_times_arr = tf_times_arr[sel_move]
+    
+    if 'INCL' in SELECT_ON_ACC_RMS: move_sel = move_mask.astype(bool)
+    elif 'EXCL' in SELECT_ON_ACC_RMS: move_sel = ~move_mask.astype(bool)
+    
+    tf_times_arr = tf_times_arr[move_sel]
+    if tf_values_arr.shape[0] > tf_values_arr.shape[1]:
+        tf_values_arr = tf_values_arr[move_sel, :]
+    else:
+        tf_values_arr = tf_values_arr[:, move_sel]
 
-    return tf_values_arr, tf_times_arr
+    # return corrected values and times, if required 
+    # return bool for adhoc movement selection 
+    if RETURN_MOVE_SEL_BOOL: return tf_values_arr, tf_times_arr, move_sel
+
+    else: return tf_values_arr, tf_times_arr
