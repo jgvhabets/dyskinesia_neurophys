@@ -42,11 +42,23 @@ def get_conn_values_to_plot(
     CDRS_SEV_THR = {'unilat': 4.5, 'bilat': 7.5},
     incl_conn_sides = ['ipsilateral'],  #, 'contralteral']
     SELECT_MOVEMENT: bool = False,
-    class_w_acc = None,
     verbose: bool = True,
 ):
     assert CDRS_SIDE in ['unilat', 'bilat'], 'incorrect CDRS_SIDE'
 
+    # get class with acc data if selection is defined (not False)
+    if SELECT_MOVEMENT:
+        ### get class containing ACC data if movement selection
+        if isinstance(SELECT_MOVEMENT, str):
+            featLabPath = os.path.join(get_project_path('data'),
+                                       'prediction_data',
+                                       'featLabelClasses',
+                                       f'featLabels_ftv6_Cdrs_StnOnly.P')
+            class_w_acc = load_class_pickle(featLabPath,
+                                            convert_float_np64=True)
+            print(f'extracted acc data class for {SELECT_MOVEMENT}')
+
+    # create dict to store generated values
     plot_values = {s: {} for s in incl_conn_sides}
     if CATEG_CDRS:
         for cat, s in product([1, 2, 3], incl_conn_sides):
@@ -55,12 +67,12 @@ def get_conn_values_to_plot(
             for s in incl_conn_sides: plot_values[s][0] = []  #  add no LID only w/o baseline correction
 
 
-    for sub, side in product(TFs.keys(), incl_conn_sides):
+    for sub, side in product(TF_dict.keys(), incl_conn_sides):
         # print(f'\n\tSTART sub-{sub}, {side}')
         # get values for subject and side
-        values = TFs[sub][side].values
-        times = TFs[sub][side].times
-        freqs = TFs[sub][side].freqs
+        values = TF_dict[sub][side].values
+        times = TF_dict[sub][side].times
+        freqs = TF_dict[sub][side].freqs
         # remove empty rows
         nan_sel = np.array([all(np.isnan(values[i, :]))
                             for i in np.arange(len(times))])
@@ -102,6 +114,7 @@ def get_conn_values_to_plot(
                 SELECT_ON_ACC_RMS=SELECT_MOVEMENT,
                 RETURN_MOVE_SEL_BOOL=True,
                 # RMS_Z_THRESH=0,  # defaults to -0.5
+                plot_figure=True,
             )
             cdrs = cdrs[move_sel]
             if verbose: print(f'after move-selection ({SELECT_MOVEMENT}): {values.shape}')
@@ -138,21 +151,23 @@ def get_conn_values_to_plot(
         
         if verbose: print()
 
-    return plot_values
+    return plot_values, freqs
 
 
 if __name__ == '__main__':
     # DEFINE SETTINGS AND VARIABLES FOR DATA PREP AND PLOTTING
-    FT_VERSION = 'v6'
-    CDRS_ORIGIN = 'unilat'
+    DATE = '1212'
+    CDRS_ORIGIN = 'unilat'  # use unilateral (contra lat ecog) or bilater ecog scores
+    INCL_CORE_CDRS = False  # include core/axial CDRS scores (neck-trunk-face)
     DATA_TYPE = 'trgc'  # Connect metric mic / trgc
     INCL_CONN_SIDES = ['ipsilateral',]  # 'contralateral']
     SELECT_MOVEMENT = 'INCL_MOVE'  # should be False, INCL_MOVE, EXCL_MOVE
     BASELINE_CORRECT = True
-    DATE = '1212'
+    FT_VERSION = 'v6'
     VERBOSE = False
 
     # PM: check baseline without movement (plot_descr_SSD_PSDs, lines ~1375)
+
 
     # settings autom. extracted based on defined variables    
     SETTINGS = load_ft_ext_cfg(FT_VERSION=FT_VERSION)
@@ -162,56 +177,46 @@ if __name__ == '__main__':
                 if sub.startswith("0")]
     if DATA_TYPE == 'trgc': BASELINE_CORRECT = False
 
+    # generate figure name
+    if len(INCL_CONN_SIDES) == 2: mic_type = 'both'
+    else: mic_type = INCL_CONN_SIDES[0].split('lat')[0]
+    FIG_NAME=f'{DATE}_{DATA_TYPE.upper()}{mic_type}_{CDRS_ORIGIN}LID'
+    if SELECT_MOVEMENT: FIG_NAME += f' {SELECT_MOVEMENT}'
 
-    # get values
+
+
+    ### get values
     TFs = get_all_ssd_timeFreqs(
         SUBS=SUBJECTS, FT_VERSION=FT_VERSION,
         DATA_VERSION=DATA_VERSION,
         GET_CONNECTIVITY=DATA_TYPE,
         verbose=VERBOSE,
     )
-    freqs = TFs[SUBJECTS[0]][INCL_CONN_SIDES[0]].freqs
     print('got tf values')
 
-    # get class containing ACC data if movement selection
-    if isinstance(SELECT_MOVEMENT, str):
-        featLabPath = os.path.join(
-            get_project_path('data'),
-            'prediction_data', 'featLabelClasses',
-            f'featLabels_ft{FT_VERSION}_Cdrs_StnOnly.P'
-        )
-        ftClass10sec = load_class_pickle(featLabPath,
-                                         convert_float_np64=True)
-        print('extracted acc data class')
-    else: ftClass10sec=None
-
-    # sort and average values into categories 
-    plot_values = get_conn_values_to_plot(
+    ### sort and average values into categories 
+    plot_values, freqs = get_conn_values_to_plot(
         TFs,
         BASELINE_CORRECT=BASELINE_CORRECT,
         CDRS_SIDE=CDRS_ORIGIN,
+        INCL_CORE_CDRS=INCL_CORE_CDRS,
         incl_conn_sides=INCL_CONN_SIDES,
         SELECT_MOVEMENT=SELECT_MOVEMENT,
-        class_w_acc=ftClass10sec,
         verbose=VERBOSE,
     )
     print('got plot values')
 
-    if len(INCL_CONN_SIDES) == 2: mic_type = 'both'
-    else: mic_type = INCL_CONN_SIDES[0].split('lat')[0]
-    FIG_NAME=f'{DATE}_{DATA_TYPE.upper()}{mic_type}_{CDRS_ORIGIN}LID'
-    if SELECT_MOVEMENT: FIG_NAME += f' {SELECT_MOVEMENT}'
-
-    plot_scaling_LID(
-        psds_to_plot=plot_values,
-        tf_freqs=freqs,
-        cdrs_origin=CDRS_ORIGIN,
-        cdrs_cat_coding={'no': 0, 'mild': 1,
-                         'moderate':2 , 'severe': 3},
-        datatype=DATA_TYPE,
-        BASELINE_CORRECT=BASELINE_CORRECT,
-        fig_name=FIG_NAME,
-        FT_VERSION=FT_VERSION,
-        DATA_VERSION=DATA_VERSION,
-    )
-    print(f'plotted {FIG_NAME}')
+    # ### plot metric-freq (PSD style)
+    # plot_scaling_LID(
+    #     psds_to_plot=plot_values,
+    #     tf_freqs=freqs,
+    #     cdrs_origin=CDRS_ORIGIN,
+    #     cdrs_cat_coding={'no': 0, 'mild': 1,
+    #                      'moderate':2 , 'severe': 3},
+    #     datatype=DATA_TYPE,
+    #     BASELINE_CORRECT=BASELINE_CORRECT,
+    #     fig_name=FIG_NAME,
+    #     FT_VERSION=FT_VERSION,
+    #     DATA_VERSION=DATA_VERSION,
+    # )
+    # print(f'plotted {FIG_NAME}')

@@ -11,6 +11,8 @@ from collections import namedtuple
 from scipy.signal import resample_poly
 import json
 
+import matplotlib.pyplot as plt
+
 from utils.utils_fileManagement import (
     load_class_pickle, get_project_path,
     make_object_jsonable
@@ -499,7 +501,8 @@ def select_tf_on_movement_10s(feat10sClass, sub,
                               tf_values_arr, tf_times_arr,
                               SELECT_ON_ACC_RMS,
                               RMS_Z_THRESH=-0.5,
-                              RETURN_MOVE_SEL_BOOL=False,):
+                              RETURN_MOVE_SEL_BOOL=False,
+                              plot_figure=False,):
     """
     Function used within plot_COHs_spectra
     to select time-frequency values and times
@@ -527,17 +530,28 @@ def select_tf_on_movement_10s(feat10sClass, sub,
         f'SELECT_ON_ACC_RMS NOT IN {allowed_selections}'
     )
     rms = feat10sClass.ACC_RMS[sub]  # std zscored mean-rms
+    
+    # individual threshold adjustment (based on visualisations)
+    if sub=='010': RMS_Z_THRESH = -.3
+    
     rms_move = (rms > RMS_Z_THRESH).astype(int)
     rms_time = feat10sClass.FEATS[sub].index.values * 60  # in minutes, convert to seconds
     move_mask = np.zeros_like(tf_times_arr)
 
-    for i_t, coh_t in enumerate(tf_times_arr):
-        try: i_rms = np.where(rms_time == coh_t)[0][0]
-        except: i_rms = np.argmin(abs(rms_time - coh_t))
+    for i_t, t in enumerate(tf_times_arr):
+        try: i_rms = np.where(rms_time == t)[0][0]
+        except: i_rms = np.argmin(abs(rms_time - t))
         move_mask[i_t] = rms_move[i_rms]
     
     if 'INCL' in SELECT_ON_ACC_RMS: move_sel = move_mask.astype(bool)
     elif 'EXCL' in SELECT_ON_ACC_RMS: move_sel = ~move_mask.astype(bool)
+
+    # plot individual selection overview (before data is selected out)
+    if plot_figure:
+        plot_move_selection(tf_times_arr, move_sel,
+                            rms_time, rms, sub,
+                            RMS_Z_THRESH=RMS_Z_THRESH,
+                            IN_EX_CLUDE=SELECT_ON_ACC_RMS)
     
     tf_times_arr = tf_times_arr[move_sel]
     if tf_values_arr.shape[0] > tf_values_arr.shape[1]:
@@ -550,3 +564,52 @@ def select_tf_on_movement_10s(feat10sClass, sub,
     if RETURN_MOVE_SEL_BOOL: return tf_values_arr, tf_times_arr, move_sel
 
     else: return tf_values_arr, tf_times_arr
+
+
+def plot_move_selection(tf_times_arr, move_sel,
+                        rms_time, rms, sub,
+                        IN_EX_CLUDE, RMS_Z_THRESH):
+    
+    # fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+    # ax.hist(rms)
+    # plt.savefig(join(get_project_path('figures'),
+    #                  'ft_exploration', 'movement',
+    #                  'rms_move_selection',
+    #                  f'hist_rms{sub}'),
+    #             dpi=150, facecolor='w',)
+    # plt.close()
+
+
+    fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+
+    # plot ACC
+    ax.plot(rms_time / 60, rms, color='gray', alpha=.5,
+            label='ACC RMS (mean)',)
+    
+    # plot movement selection
+    y1, y2 = ax.get_ylim()
+    ax.fill_between(tf_times_arr / 60, y1=y1, y2=y2,
+                    where=move_sel, label='Movement',
+                    color='indigo', alpha=.3,)
+    ax.fill_between(tf_times_arr / 60, y1=y1, y2=y2,
+                    where=~move_sel, label='No movement',
+                    color='gold', alpha=.3,)
+    
+    ax.set_xlabel('Time after LDopa (min)', size=14,)
+    ax.set_ylabel('z-scored ACC RMS (a.u.)', size=14,)
+    ax.legend(frameon=False, fontsize=14,)
+    ax.set_title(f'movement selection sub-{sub}\n'
+                 f'(z-RMS cutoff: {RMS_Z_THRESH}: '
+                 f'n-ft samples: {len(move_sel)} ({sum(move_sel)}%),'
+                 f' n-rms samples in plot: {len(rms)})')
+
+    ax.tick_params(size=14, labelsize=14,)
+
+    plt.tight_layout()
+    plt.savefig(join(get_project_path('figures'),
+                     'ft_exploration', 'movement',
+                     'rms_move_selection',
+                     f'rms_moveSel_{sub}'),
+                dpi=150, facecolor='w',)
+    plt.close()
+
