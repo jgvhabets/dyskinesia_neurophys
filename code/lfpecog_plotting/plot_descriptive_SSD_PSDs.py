@@ -829,6 +829,7 @@ def plot_scaling_LID(
     cdrs_origin=None,
     plt_ax_to_return=False,
     BASELINE_CORRECT=True, LOG_POWER=False,
+    SELECT_MOVEMENT=False,
     SMOOTH_PLOT_FREQS=0, STD_ERR=True,
     BREAK_X_AX=True, fsize=14,
     SAVE_PLOT=True, SHOW_PLOT=False,
@@ -887,6 +888,9 @@ def plot_scaling_LID(
         elif side == 'contralateral': ax_title = f'{datatype.upper()} (contralateral STN) versus {cdrs_origin} dyskinesia'
         
         if PLOT_ONLY_MATCH: ax_title = f'{datatype} versus all contralateral dyskinesia'
+        if SELECT_MOVEMENT: ax_title += f'\n({SELECT_MOVEMENT})'
+
+
 
         for i_cat, cat in enumerate(psds_to_plot[side].keys()):
 
@@ -914,14 +918,14 @@ def plot_scaling_LID(
                 p_freqs = np.array(p_dict['freqs'].copy())
                 ps = np.array(p_dict['p_values'].copy())
             
-            # smoothen signal for plot (both mean and stddev)
+            # smoothen signal for plot (both mean and stddev) without cutting length
             if SMOOTH_PLOT_FREQS > 0:
                 for k in PSD:
                     idx = np.arange(len(PSD[k]))
                     s_win = SMOOTH_PLOT_FREQS // 2
-                    PSD[k] = [np.nanmean(PSD[k][np.logical_and(idx > (i_v - s_win),
-                                                            idx < (i_v + s_win))])
-                                                for i_v in idx]
+                    PSD[k] = [np.nanmean(
+                        PSD[k][np.logical_and(idx > (i_v - s_win), idx < (i_v + s_win))]
+                    ) for i_v in idx]
             # n-subjects to add to legend-label
             n_subs_cat = psds.shape[0]
                     
@@ -980,11 +984,12 @@ def plot_scaling_LID(
 
                 # one significance shade for all severities
                 if SHOW_SIGN:
+                    print(f'SHOW SIGN part in plotting, ps: {ps}')
+                    print(f'length ps = {len(ps)}, 68 freqs?' ({[(p, type(p)) for p in ps]}))
                     sig_mask = np.array(ps) < (.05 / 68)  # 68 freqs compared
                     loop_ax.fill_between(x=x_axis, y1=-50, y2=100,
-                                        alpha=.05,
-                                        where=sig_mask,
-                                        color=colors[-1],)
+                                         alpha=.05, color=colors[-1],
+                                         where=sig_mask,)
         
         # SET AXTICKS
         if BREAK_X_AX:

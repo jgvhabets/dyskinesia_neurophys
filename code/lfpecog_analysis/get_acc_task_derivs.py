@@ -552,12 +552,12 @@ def select_tf_on_movement_10s(feat10sClass, sub,
                             rms_time, rms, sub,
                             RMS_Z_THRESH=RMS_Z_THRESH,
                             IN_EX_CLUDE=SELECT_ON_ACC_RMS)
-    
-    tf_times_arr = tf_times_arr[move_sel]
-    if tf_values_arr.shape[0] > tf_values_arr.shape[1]:
+    # invert if necessary (check with value and time shapes)    
+    if tf_values_arr.shape[0] == len(tf_times_arr):
         tf_values_arr = tf_values_arr[move_sel, :]
-    else:
+    elif tf_values_arr.shape[1] == len(tf_times_arr):
         tf_values_arr = tf_values_arr[:, move_sel]
+    tf_times_arr = tf_times_arr[move_sel]
 
     # return corrected values and times, if required 
     # return bool for adhoc movement selection 
@@ -579,6 +579,10 @@ def plot_move_selection(tf_times_arr, move_sel,
     #             dpi=150, facecolor='w',)
     # plt.close()
 
+    if IN_EX_CLUDE == 'INCL_MOVE':
+        lab_true, lab_false = ('Movement', 'No Movement')
+    elif IN_EX_CLUDE == 'EXCL_MOVE':
+        lab_true, lab_false = ('No Movement', 'Movement')
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 4))
 
@@ -589,10 +593,10 @@ def plot_move_selection(tf_times_arr, move_sel,
     # plot movement selection
     y1, y2 = ax.get_ylim()
     ax.fill_between(tf_times_arr / 60, y1=y1, y2=y2,
-                    where=move_sel, label='Movement',
+                    where=move_sel, label=lab_true,
                     color='indigo', alpha=.3,)
     ax.fill_between(tf_times_arr / 60, y1=y1, y2=y2,
-                    where=~move_sel, label='No movement',
+                    where=~move_sel, label=lab_false,
                     color='gold', alpha=.3,)
     
     ax.set_xlabel('Time after LDopa (min)', size=14,)
