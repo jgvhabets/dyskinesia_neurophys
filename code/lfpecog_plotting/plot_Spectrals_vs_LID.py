@@ -3,7 +3,7 @@ Plot Connectivity metrics against Dyskinesia
 scores (CDRS)
 
 run on WIN as:
-xxx\dyskinesia_neurophys\code> python -m lfpecog_plotting.plot_connectivity_vs_LID
+xxx\dyskinesia_neurophys\code> python -m lfpecog_plotting.plot_Spectrals_vs_LID
 """
 # import public packages
 from dataclasses import dataclass, field
