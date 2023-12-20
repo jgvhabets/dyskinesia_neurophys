@@ -194,8 +194,8 @@ def get_windows(
     i_start = None
 
     # LOOP OVER POSSIBLE WINDOWS IN TIME RANGE
-    for win0_sec in np.arange(tStart, times[-1], sec_hop
-                              ):
+    for win0_sec in np.arange(tStart, times[-1], sec_hop):
+
         # separate flow for DataFrames
         if isinstance(data, DataFrame):
             wintemp = data.loc[win0_sec:win0_sec + winLen_sec]
@@ -243,15 +243,6 @@ def get_windows(
                 continue
 
             if verbose: print(f'\tINCLUDED shape is {wintemp.shape}')
-
-
-        # ### INCLUDE ACCELEROMETER ACTIVITY FILTERING  (currently only works for DataFrame data)
-        # if movement_part_acceptance < 1:  # 1 is default and means no filtering
-        #     move_part = 1 - (sum(wintemp['no_move']) / wintemp.shape[0])
-        #     # skip window if it contains too many movement samples
-        #     if move_part > movement_part_acceptance:
-        #         print(f'\t window skipped due to MOVEMENT ({win0_sec} s)')
-        #         continue
         
         ### EXCLUDE TAP-epochs for clean-PSDs (data v4.2)
         if EXCL_TAPS:
