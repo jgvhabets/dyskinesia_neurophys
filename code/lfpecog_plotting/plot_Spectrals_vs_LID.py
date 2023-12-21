@@ -24,7 +24,7 @@ from lfpecog_plotting.plot_descriptive_SSD_PSDs import (
 
 
 @dataclass(init=True, repr=True,)
-class plot_Conn_PSDs:
+class plot_Spectrals_vs_LID:
     """
     Class to plot spectral features in PSDs style
     """
@@ -131,7 +131,7 @@ if __name__ == '__main__':
         [False, 'INCL_MOVE', 'EXCL_MOVE']
     ):
         print(f'start {type(DATA_TYPE)} x {type(SELECT_MOVEMENT)}')
-        plot_Conn_PSDs(
+        plot_Spectrals_vs_LID(
             DATA_TYPE=DATA_TYPE,
             SELECT_MOVEMENT=SELECT_MOVEMENT,
             PLOT_DATE='DECv1',

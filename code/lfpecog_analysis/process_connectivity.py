@@ -71,6 +71,8 @@ def get_conn_values_to_plot(
         values = TF_dict[sub][side].values
         times = TF_dict[sub][side].times
         freqs = TF_dict[sub][side].freqs
+        if values.shape[0] != len(times): values = values.T
+        print(values.shape, times.shape, freqs.shape)
         # remove empty rows
         nan_sel = np.array([all(np.isnan(values[i, :]))
                             for i in np.arange(len(times))])

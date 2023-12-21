@@ -15,13 +15,14 @@ from lfpecog_plotting.plot_descriptive_SSD_PSDs import break_x_axis_psds_ticks
 from lfpecog_analysis.prep_movement_psd_analysis import custom_tap_finding
 
 
-def load_movement_psds(data_version='v4.0', ft_version='v4',):
+def load_movement_psds(ft_version='v4', data_version='v4.0',):
 
     # load ft settings
     SETTINGS = load_ft_ext_cfg(f'ftExtr_spectral_{ft_version}.json')
     freqs = SETTINGS['SPECTRAL_BANDS']
     winlen = SETTINGS['WIN_LEN_sec']
     winoverlap = SETTINGS['WIN_OVERLAP_part']
+    data_version = SETTINGS['DATA_VERSION']
     # define main directory with stored merged data
     results_path = os.path.join(get_project_path('results'), 'features',
                                   f'SSD_feats_broad_{ft_version}',

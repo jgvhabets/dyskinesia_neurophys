@@ -12,8 +12,10 @@ from scipy.signal import find_peaks, welch
 # import lfpecog_analysis.load_SSD_features as load_ssd_fts
 from utils.utils_fileManagement import (get_project_path,
                                         load_class_pickle,
-                                        correct_acc_class)
-
+                                        correct_acc_class,
+                                        load_ft_ext_cfg,
+                                        get_avail_ssd_subs)
+from lfpecog_features.get_ssd_data import get_subject_SSDs
 
 
 
@@ -21,6 +23,13 @@ def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
                              states_to_save=['tap', 'rest_no_move',
                                              'free_no_move', 'free_move'],
                              custom_tappers=['105', '010', '017'],):
+    """
+    saved numpy files witih movement vs no movement per tasks
+    (only STN processed?)
+
+    20.12 updated to create continuous raw-ssd-timeseries
+    with parallel cdrs, movement, tap, and task data 
+    """
 
     import lfpecog_features.get_ssd_data as ssd
     import lfpecog_analysis.get_SSD_timefreqs as ssd_TimeFreq
@@ -221,6 +230,9 @@ def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
 
 def excl_specific_task(data_arr, data_times,
                        task_arr, task_times, task_to_excl):
+    """
+    returns data and times after excluding specific tasks
+    """
     # convert to arrays
     if isinstance(data_times, list): data_times = np.array(data_times)
     if isinstance(task_times, list): task_times = np.array(task_times)
@@ -333,7 +345,8 @@ def select_taps_in_data(
 
 def get_sub_tapTimings(sub,
                        custom_tappers=['105', '017', '010'],
-                       DATA_VERSION='v4.0'):
+                       DATA_VERSION='v4.0',
+                       ONLY_KEEP_TAP_TAPS: bool = True,):
     # use merged-data v4.0 for creation of v4.2
     if DATA_VERSION == 'v4.2': DATA_VERSION = 'v4.0'
     
@@ -347,12 +360,13 @@ def get_sub_tapTimings(sub,
     acc = load_class_pickle(os.path.join(sub_data_path, fname))
     acc = correct_acc_class(acc)
 
-    temp = {}
-    temp['times_min'] = acc.times / 60
+    # create dict with times, task, and taps
+    temp = {'dopa_time': acc.times,
+            'times_min': acc.times / 60}
     for col in ['left_tap', 'right_tap', 'task']:
         idx = np.where([c == col for c in acc.colnames])[0][0]
         temp[col] = acc.data[:, idx]
-    
+    # correct tap bools for custom tappers
     if sub in custom_tappers:
         for side in ['left', 'right']:
             # load sided timeseries
@@ -373,8 +387,9 @@ def get_sub_tapTimings(sub,
         temp['task'][sel] = 'free'
 
     # delete all non tap-task taps from tap-boolean
-    sel = temp['task'] != 'tap'
-    for s in ['left_tap', 'right_tap']: temp[s][sel] = 0
+    if ONLY_KEEP_TAP_TAPS:
+        sel = temp['task'] != 'tap'
+        for s in ['left_tap', 'right_tap']: temp[s][sel] = 0
 
     # create sum bool for tap in one of the sides
     temp['tap_all'] = np.logical_or(temp['right_tap'],
@@ -386,6 +401,8 @@ def get_sub_tapTimings(sub,
 def get_tap_times(tap_dict=False, sub=None, tap_border_sec=1,
                   return_in_secs=False, DATA_VERSION='v4.0',):
     """
+    Returns start and end timings for all taps,
+    regardless of body side. 
     takes dict with tap results, returns start timings
     in minutes: start and end timings of every epoch
     """
@@ -417,15 +434,17 @@ def get_tap_times(tap_dict=False, sub=None, tap_border_sec=1,
 
 def select_taps_out_window(win_times, starts, ends):
     """
+    gives BOOL to remove data in between the given
+    timestamps
+
     Input:
-        - starts and ends: timestamps (in minutes?!)
-            for blocks of total tapping
-        - win_times: should be same unit as timestamps
+        - starts and ends: timestamps for blocks of tapping
+        - win_times: ephys times, should be same unit as timestamps
     
     Returns:
-        - win_sel: boolean array, true if data should
-            be included (none tap data), false is
-            data should be excluded based on tapping
+        - win_sel: boolean array, the moments BETWEEN the
+            start- and end-stamps are set to ZERO,
+            the rest is ONES
     """
     win_start = win_times[0]
     win_end = win_times[-1]
@@ -579,3 +598,202 @@ def custom_tap_finding(acc_class, acc_side, move_type='tap',):
             peak_t = acc_class.data[peak_i, 0]
                     
         return peak_i, peak_t, tap_bool
+
+
+def create_move_specific_ephys(
+    FT_VERSION='v6',
+    custom_tappers=['105', '017', '010'],
+    TAP_BORDER_sec=0,
+):
+    """
+    get boolean arrays for movement labels corresponding to ephys
+        
+    Arguments:  
+        - FT_VERSION: ..
+        - TAP_BORDER_sec: seconds that will be included in bool
+            prior and after start/end of single tap-epoch
+        - custom_tappers: default list
+    only includes taps DURING TAP TASK
+
+    """
+    SETTINGS = load_ft_ext_cfg(FT_VERSION=FT_VERSION)
+    DATA_VERSION = SETTINGS['DATA_VERSION']
+    SUBS = get_avail_ssd_subs(DATA_VERSION=SETTINGS["DATA_VERSION"],
+                              FT_VERSION=FT_VERSION)
+    # use merged-data v4.0 for creation of v4.2
+    if DATA_VERSION == 'v4.2': DATA_VERSION = 'v4.0'
+    WINLEN_SEC = SETTINGS['WINLEN_sec']
+
+    for sub in SUBS:
+        # possibly exclude subjects
+
+        # get ephys data and times
+        ssd_sub = get_subject_SSDs(sub=sub,
+                                   incl_stn=True,
+                                   incl_ecog=True,
+                                   settings=SETTINGS,)
+
+        # POTENTIALLY LOOP OVER EPHYS SOURCES
+        src = 'lfp_left'
+        temp_ssd = getattr(ssd_sub, src)
+
+        # create timestamps for every ephys sample in 2d array (2048 Hz)
+        time_arr = np.array([
+            np.arange(t, t + WINLEN_SEC, 1 / temp_ssd.fs)
+            for t in temp_ssd.times
+        ])
+        nan_arr = np.isnan(temp_ssd.lo_beta)
+
+
+        # get acc data for sub (side irrelevant for labels)
+        sub_data_path = os.path.join(
+            get_project_path('data'), 'merged_sub_data',
+            DATA_VERSION, f'sub-{sub}')
+        fname = f'{sub}_mergedData_{DATA_VERSION}_acc_left.P'  # side does not matter for already detected bool labels
+        accl = load_class_pickle(os.path.join(sub_data_path, fname))
+        accl = correct_acc_class(accl)
+
+        # get movement bools based on acc data (512 Hz)
+        MOVE_BOOLS = {'no_move': accl.data[:, -1],
+                    'any_move': np.sum(accl.data[:, -5:-1], axis=1) > 0,
+                    'left_tap': accl.data[:, -5],
+                    'left_allmove': (accl.data[:, -5] + accl.data[:, -3]) > 0,
+                    'right_tap': accl.data[:, -4],
+                    'right_allmove': (accl.data[:, -4] + accl.data[:, -2]) > 0}
+        # exclude non-tap-task TAPs later (they contain other movement)
+
+        # CREATE TAP BOOLS PER MOVEMENT/BODYSIDE
+        BOOL_SEL = 'any_move'
+
+        starts, ends = get_start_end_times_move_epochs(
+            bool_to_incl=MOVE_BOOLS[BOOL_SEL],
+            acc_times_arr=accl.times,
+        )
+        move_mask = mask_movement_on_times(
+            ephys_time_arr=time_arr, nan_arr=nan_arr,
+            starts=starts, ends=ends,)
+
+        # # print to check portion in orig bool and 2d array
+        # print(np.nansum(move_mask) / (move_mask.shape[0] * move_mask.shape[1] - np.sum(np.isnan(move_mask))))
+        # print(sum(MOVE_BOOLS[BOOL_SEL]) / len(MOVE_BOOLS[BOOL_SEL]))
+
+        
+
+
+
+def get_start_end_times_move_epochs(
+    bool_to_incl, acc_times_arr
+):
+    """
+    replacement for tap times, now handles all
+    movement bools
+
+    finds timings (seconds in dopatime) of starts
+    and ends of positive movement-epochs
+    """
+    # find start and end timestamps (sec) of total tapping
+    starts = np.where(np.diff(bool_to_incl.astype(int)) == 1)[0]
+    ends = np.where(np.diff(bool_to_incl.astype(int)) == -1)[0]
+
+    # add starts and ends as indices
+    if bool_to_incl[0]:
+        starts = np.concatenate([np.atleast_1d([0]), starts])
+    if bool_to_incl[-1]:
+        ends = np.concatenate([ends, np.atleast_1d([-1])])
+
+    # convert to times
+    starts = acc_times_arr[starts]
+    ends = acc_times_arr[ends]  # still 512 Hz        
+
+    return starts, ends
+
+
+def mask_movement_on_times(
+    ephys_time_arr, starts, ends, nan_arr=None,
+    verbose: bool = False,
+):
+    """
+    creates a bool nd-array (like ephys data shape) that
+    indicates whether the ephys data should be included
+    for the given movement boolean used to get the
+    starts and ends times
+
+    Arguments:
+        - ephys_time_arr: nd.array corresponding to 2d ephys-array
+            (with SSD timeseries)
+        - starts: timestamps of beginnings of movement-states,
+            generated with get_start_end_times_move_epochs
+        - ends: same
+        - nan_arr: if given, has same shape as time_arr and
+            corresponds with nans in ephys data
+    """
+    if isinstance(nan_arr, np.ndarray):
+        assert nan_arr.shape == ephys_time_arr.shape, (
+            'nan_arr and time_arr have different shapes'
+        )
+    
+    move_mask = np.zeros_like(ephys_time_arr)
+    skipped_wins = 0
+    
+    for i_row, row in enumerate(ephys_time_arr):
+        if verbose: print(row[0], row[-1])
+        # find starts and ends within window
+        temp_starts = starts[np.logical_and(starts>row[0],
+                                            starts<row[-1])]
+        temp_ends = ends[np.logical_and(ends>row[0],
+                                        ends<row[-1])]
+        if verbose: print(temp_starts, temp_ends)
+        temp_starts = [np.argmin(abs(row - t)) for t in temp_starts]
+        temp_ends = [np.argmin(abs(row - t)) for t in temp_ends]
+
+        # when no starts or endings were found in window
+        if len(temp_ends) == len(temp_starts) == 0:
+            skipped_wins += 1
+            if len(starts[starts < row[0]]) == 0: continue  # no start prior, bool stays negative
+            # find closest prior start or end
+            dist_start = min(abs(starts[starts < row[0]] - row[0]))
+            dist_end = min(abs(ends[ends < row[0]] - row[0]))
+            if dist_start < dist_end: move_mask[i_row, :] = 1  # ongoing positive bool
+            # else: move_mask[i_row, :] = 0  # ongoing negative bool (is already zero)
+
+        # when multiple starts and ends were found
+        while len(temp_starts) > 0 and len(temp_ends) > 0:
+            if verbose: print('while',temp_starts, temp_ends)
+            if verbose: print('masked', sum(move_mask[i_row]) / 2048)
+            # fill bool for ongoing start
+            if temp_ends[0] < temp_starts[0]:
+                move_mask[i_row, :temp_ends[0]] = 1
+                if verbose: print(f'masks first end: {temp_ends[0]/2048}')
+                temp_ends = temp_ends[1:]
+                continue
+            # fill bool for ongoing end
+            if temp_starts[-1] > temp_ends[-1]:
+                move_mask[i_row, temp_starts[-1]:] = 1
+                if verbose: print(f'masks last start: {10-(temp_starts[-1]/2048)}')
+                temp_starts = temp_starts[:-1]
+
+                continue
+            # in between matching starts-ends
+            for i1, i2 in zip(temp_starts, temp_ends):
+                move_mask[i_row, i1:i2] = 1
+                if verbose: print(f'mask between {i1}:{i2} = {(i2-i1)/2048}')
+            temp_starts, temp_ends = [], []
+            break
+        # fill open starts or endings that are left
+        if len(temp_starts) > 0: move_mask[i_row, temp_starts[0]:] = 1
+        if verbose: print('masked', sum(move_mask[i_row]) / 2048)
+        if len(temp_ends) > 0: move_mask[i_row, :temp_ends[0]:] = 1
+        if verbose: print('masked', sum(move_mask[i_row]) / 2048)
+
+        if verbose: print(sum(move_mask[i_row]), sum(move_mask[i_row]) / 2048)
+        if verbose: print()
+
+    if verbose: print(f'SKIPPED WINDOWS: {skipped_wins}')
+
+    # set nan values in ephys to nan in move bool
+    if isinstance(nan_arr, np.ndarray):
+        move_mask[nan_arr] = np.nan
+
+        
+    return move_mask
+        
