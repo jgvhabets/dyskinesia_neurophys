@@ -58,25 +58,36 @@ from lfpecog_analysis.prep_movement_psd_analysis import (
 
 
 @dataclass(init=True,)
-class PSD_vs_Move:
-    sel_subs: list = None
+class PSD_vs_Move_sub:
+    sub: str
     CDRS_RATER: str = 'Patricia'
     FT_VERSION: str = 'v6'
 
     def __post_init__(self,):
         self.SETTINGS = load_ft_ext_cfg(FT_VERSION=self.FT_VERSION)
 
-        if isinstance(self.sel_subs, str):
-            if len(self.sel_subs) == 3: self.sel_subs = [self.sel_subs]
-        if not isinstance(self.sel_subs, list):
-            self.sel_subs = get_avail_ssd_subs(
-                DATA_VERSION=self.SETTINGS["DATA_VERSION"],
-                FT_VERSION=self.FT_VERSION
-            )
-        # repeat for every subject
-        for sub in self.sel_subs:
-            print(f'adding masks for sub {sub}')
-            create_move_specific_ephys(sub=sub,
-                                       FT_VERSION=self.FT_VERSION,
-                                       ADD_TO_CLASS=True,
-                                       self_class=self)
+        print(f'adding masks for sub {self.sub}')
+        create_move_specific_ephys(sub=self.sub,
+                                    FT_VERSION=self.FT_VERSION,
+                                    ADD_TO_CLASS=True,
+                                    self_class=self)
+        # put bands in 3d structure
+        self.band_names = list(self.SETTINGS['SPECTRAL_BANDS'].keys())
+        self.ephys_sources = self.ssd_sub.ephys_sources
+        # loop over available lfp/ecog-left/right
+        for src in self.ephys_sources:
+            # loop over freq bands
+            for i_band, band in enumerate(self.band_names):
+                print(band)
+                if i_band == 0:
+                    src_bands = getattr(getattr(self.ssd_sub, src), band)
+                else:
+                    src_bands = np.dstack(
+                        [src_bands, getattr(getattr(self.ssd_sub, src), band)]
+                    )
+            # add as 3d array
+            setattr(self, f'{src}_3d', src_bands)
+        delattr(self, 'ssd_sub')
+    
+                
+            

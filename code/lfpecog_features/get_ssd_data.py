@@ -209,18 +209,22 @@ class SSD_bands_windowed:
                                             dType=self.datasource,
                                             settings=self.settings)
         
+        # add ephys data per freq-band
         for i_f, fband in enumerate(meta['bandwidths']):
             setattr(self, fband, data[:, i_f, :])  # [n-windows x n-samples]
+        
+        # add times as array
+        self.times = np.array(meta['timestamps'])
+        # add sample freq        
+        self.fs = meta['fs']
 
-        self.times = meta['timestamps']
         # correct for incorrect timestamps in v4 subject 103 (Wrong day in json)
         if self.sub == '103' and max(self.times) > 2e6:
             setattr(self,
                     'times',
-                    np.array(self.times) - np.float64(27 * 24 * 60 * 60))
+                    self.times - np.float64(27 * 24 * 60 * 60))
             print('corrected 103 SSD timings for', self.datasource)
-        self.fs = meta['fs']
-
+        
 
 
 def load_windowed_ssds(sub, dType, settings: dict):
@@ -268,8 +272,10 @@ def load_windowed_ssds(sub, dType, settings: dict):
         # load meta-file
         with open(meta_f, 'r') as meta_f:
             meta_ssd = json.load(meta_f)
+        print('...meta-data loaded')
         # load data-file
         data_ssd = np.load(data_f, allow_pickle=True).astype(np.float64)
+        print('...ssd-data loaded')
 
     # try external harddrive storage
     except FileNotFoundError:
@@ -286,9 +292,11 @@ def load_windowed_ssds(sub, dType, settings: dict):
         # load meta-file
         with open(join(ext_path, f'{ssd_win_fname}.json'), 'r') as meta_f:
             meta_ssd = json.load(meta_f)
+        print('...meta-data loaded')
         # load data-file                          
         data_ssd = np.load(join(ext_path, f'{ssd_win_fname}.npy'),
                            allow_pickle=True,).astype(np.float64)
+        print('...ssd-data loaded')
 
     
     return data_ssd, meta_ssd

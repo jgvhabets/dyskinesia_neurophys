@@ -15,7 +15,6 @@ from utils.utils_fileManagement import (get_project_path,
                                         correct_acc_class,
                                         load_ft_ext_cfg,
                                         get_avail_ssd_subs)
-from lfpecog_features.get_ssd_data import get_subject_SSDs
 from lfpecog_analysis.ft_processing_helpers import (
     find_select_nearest_CDRS_for_ephys,
     categorical_CDRS
@@ -611,6 +610,7 @@ def create_move_specific_ephys(
     custom_tappers=['105', '017', '010'],
     TAP_BORDER_sec=0,
     ADD_TO_CLASS=False, self_class=None,
+    verbose: bool = False,
 ):
     """
     get boolean arrays for movement labels corresponding to ephys
@@ -623,6 +623,9 @@ def create_move_specific_ephys(
     only includes taps DURING TAP TASK
 
     """
+    # import here to prevent circular import loading prepMovePSD elsewhere
+    from lfpecog_features.get_ssd_data import get_subject_SSDs
+
     SETTINGS = load_ft_ext_cfg(FT_VERSION=FT_VERSION)
     DATA_VERSION = SETTINGS['DATA_VERSION']
     # SUBS = get_avail_ssd_subs(DATA_VERSION=SETTINGS["DATA_VERSION"],
@@ -648,6 +651,7 @@ def create_move_specific_ephys(
     # POTENTIALLY LOOP OVER EPHYS SOURCES
     src = 'lfp_left'
     temp_ssd = getattr(ssd_sub, src)
+    print(f'uses only {src} for mask finding!!!')
 
     # create timestamps for every ephys sample in 2d array (2048 Hz)
     ephys_time_arr = np.array([
@@ -655,7 +659,9 @@ def create_move_specific_ephys(
         for t in temp_ssd.times
     ])
     nan_arr = np.isnan(temp_ssd.lo_beta)
-    if ADD_TO_CLASS: setattr(self_class, 'ephys_time_arr', ephys_time_arr)
+    if ADD_TO_CLASS:
+        setattr(self_class, 'ephys_time_arr', ephys_time_arr)
+        setattr(self_class, 'fs', temp_ssd.fs)
 
     # get acc data for sub (side irrelevant for labels)
     print('...loading ACC')
@@ -686,7 +692,7 @@ def create_move_specific_ephys(
             )
             move_masks[BOOL_SEL] = mask_movement_on_times(
                 ephys_time_arr=ephys_time_arr, nan_arr=nan_arr,
-                starts=starts, ends=ends,
+                starts=starts, ends=ends, verbose=verbose,
             )
             # print to check portion in orig bool and 2d array
             print(f'move_mask CHECK for : {BOOL_SEL}')
@@ -706,7 +712,8 @@ def create_move_specific_ephys(
         )
         move_mask = mask_movement_on_times(
             ephys_time_arr=ephys_time_arr, nan_arr=nan_arr,
-            starts=starts, ends=ends,)
+            starts=starts, ends=ends,
+            verbose=verbose)
 
     # # print to check portion in orig bool and 2d array
     # print(np.nansum(move_mask) / (move_mask.shape[0] * move_mask.shape[1] - np.sum(np.isnan(move_mask))))
