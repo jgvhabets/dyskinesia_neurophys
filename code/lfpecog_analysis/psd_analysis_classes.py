@@ -14,7 +14,7 @@ from utils.utils_fileManagement import (
     load_ft_ext_cfg
 )
 from lfpecog_analysis.prep_movement_psd_analysis import (
-    create_move_specific_ephys
+    create_ephys_masks
 )
 
 # @dataclass(init=True,)
@@ -67,7 +67,7 @@ class PSD_vs_Move_sub:
         self.SETTINGS = load_ft_ext_cfg(FT_VERSION=self.FT_VERSION)
 
         print(f'adding masks for sub {self.sub}')
-        create_move_specific_ephys(sub=self.sub,
+        create_ephys_masks(sub=self.sub,
                                     FT_VERSION=self.FT_VERSION,
                                     ADD_TO_CLASS=True,
                                     self_class=self)
@@ -78,7 +78,6 @@ class PSD_vs_Move_sub:
         for src in self.ephys_sources:
             # loop over freq bands
             for i_band, band in enumerate(self.band_names):
-                print(band)
                 if i_band == 0:
                     src_bands = getattr(getattr(self.ssd_sub, src), band)
                 else:
@@ -87,6 +86,7 @@ class PSD_vs_Move_sub:
                     )
             # add as 3d array
             setattr(self, f'{src}_3d', src_bands)
+            print(f'added {src}_3d')
         delattr(self, 'ssd_sub')
     
                 

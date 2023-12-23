@@ -603,10 +603,11 @@ def custom_tap_finding(acc_class, acc_side, move_type='tap',):
         return peak_i, peak_t, tap_bool
 
 
-def create_move_specific_ephys(
+def create_ephys_masks(
     sub: str,
     FT_VERSION='v6',
     CATEG_CDRS: bool = False,
+    CDRS_RATER: str = 'Patricia',
     custom_tappers=['105', '017', '010'],
     TAP_BORDER_sec=0,
     ADD_TO_CLASS=False, self_class=None,
@@ -651,7 +652,7 @@ def create_move_specific_ephys(
     # POTENTIALLY LOOP OVER EPHYS SOURCES
     src = 'lfp_left'
     temp_ssd = getattr(ssd_sub, src)
-    print(f'uses only {src} for mask finding!!!')
+    print(f'\n### REMINDER: uses only {src} for mask finding!!!\n')
 
     # create timestamps for every ephys sample in 2d array (2048 Hz)
     ephys_time_arr = np.array([
@@ -733,37 +734,49 @@ def create_move_specific_ephys(
                                     MASK='TASK',)
     
     # CREATE CDRS MASK (corresponding to ephys 2d-data)
-    print('...create CDRS-mask for ephys')
-    cdrs = find_select_nearest_CDRS_for_ephys(
-        sub=sub, side='bilat',  
-        ft_times=np.array(temp_ssd.times) / 60,
-        INCL_CORE_CDRS=True,
-        cdrs_rater='Patricia',
-    )
-    if CATEG_CDRS:
-        cdrs = categorical_CDRS(cdrs,
-                                cutoff_mildModerate=3.5,
-                                cutoff_moderateSevere=7.5,)
-    # get actual mask
-    lid_mask_times = get_mask_timings(
-        orig_labels=cdrs,
-        orig_times=temp_ssd.times,
-        MASK='LID',
-    )
-    # currently codes: rest=0, tap=1, free=2
-    lid_mask = create_ephys_mask(ephys_time_arr=ephys_time_arr,
-                                    ephys_win_times=temp_ssd.times,
-                                    mask_times=lid_mask_times,
-                                    MASK='LID',)
+    if not ADD_TO_CLASS: lid_masks = {}
+
+    for lid_name, lid_side, lid_ax in zip(
+        ['lid_mask', 'lid_mask_left', 'lid_mask_right'],
+        ['bilat', 'left', 'right'],
+        [True, False, False]
+    ):
+        print(f'...create CDRS-mask ({lid_name}) for ephys')
+        cdrs = find_select_nearest_CDRS_for_ephys(
+            sub=sub, side=lid_side,  
+            ft_times=np.array(temp_ssd.times) / 60,
+            INCL_CORE_CDRS=lid_ax,
+            cdrs_rater=CDRS_RATER,
+        )
+        if CATEG_CDRS:
+            cdrs = categorical_CDRS(cdrs,
+                                    cutoff_mildModerate=3.5,
+                                    cutoff_moderateSevere=7.5,)
+        # get actual mask
+        lid_mask_times = get_mask_timings(
+            orig_labels=cdrs,
+            orig_times=temp_ssd.times,
+            MASK='LID',
+        )
+        # currently codes: rest=0, tap=1, free=2
+        lid_mask = create_ephys_mask(ephys_time_arr=ephys_time_arr,
+                                        ephys_win_times=temp_ssd.times,
+                                        mask_times=lid_mask_times,
+                                        MASK='LID',)
+        # store lid_mask in dict to return or class
+        if not ADD_TO_CLASS: lid_masks[lid_name] = lid_mask
+        else: setattr(self_class, lid_name, lid_mask)
     
+
     if not ADD_TO_CLASS:
         assert (temp_ssd.lo_beta.shape == task_mask.shape
                 == lid_mask.shape == move_mask.shape), (
             'one of masks or ephys data does not match shapes'
         )
-        return move_mask, task_mask, lid_mask
+        return move_mask, task_mask, lid_masks
     
     if ADD_TO_CLASS:
+        # add remaining masks to add
         assert (temp_ssd.lo_beta.shape == task_mask.shape
                 == lid_mask.shape == list(move_masks.values())[0].shape), (
             'one of masks or ephys data does not match shapes: '
@@ -772,7 +785,6 @@ def create_move_specific_ephys(
         
         setattr(self_class, 'move_masks', move_masks)
         setattr(self_class, 'task_mask', task_mask)
-        setattr(self_class, 'lid_mask', lid_mask)
         print('added all masks to class')
 
 
@@ -898,8 +910,8 @@ def mask_movement_on_times(
 
 
 def get_mask_timings(orig_labels,
-                        orig_times,
-                        MASK: str = 'TASK'):
+                     orig_times,
+                     MASK: str = 'TASK'):
     
     if MASK.upper() == 'TASK':
         label_times = {'rest': [],
