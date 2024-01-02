@@ -674,12 +674,17 @@ def create_ephys_masks(
     accl = correct_acc_class(accl)
 
     # get movement bools based on acc data (512 Hz)
-    MOVE_BOOLS = {'no_move': accl.data[:, -1],
-                  'any_move': np.sum(accl.data[:, -5:-1], axis=1) > 0,
-                  'left_tap': accl.data[:, -5],
-                  'left_allmove': (accl.data[:, -5] + accl.data[:, -3]) > 0,
-                  'right_tap': accl.data[:, -4],
-                  'right_allmove': (accl.data[:, -4] + accl.data[:, -2]) > 0}
+    i_lefttap = np.where(['left_tap' in c.lower() for c in accl.colnames])[0][0]
+    i_righttap = np.where(['right_tap' in c.lower() for c in accl.colnames])[0][0]
+    i_leftmove = np.where(['left_move' in c.lower() for c in accl.colnames])[0][0]
+    i_rightmove = np.where(['right_move' in c.lower() for c in accl.colnames])[0][0]
+    i_nomove = np.where(['no_move' in c.lower() for c in accl.colnames])[0][0]
+    MOVE_BOOLS = {'no_move': accl.data[:, i_nomove],
+                  'any_move': np.sum(accl.data[:, i_lefttap:i_rightmove+1], axis=1) > 0,
+                  'left_tap': accl.data[:, i_lefttap],
+                  'left_allmove': (accl.data[:, i_lefttap] + accl.data[:, i_leftmove]) > 0,
+                  'right_tap': accl.data[:, i_righttap],
+                  'right_allmove': (accl.data[:, i_righttap] + accl.data[:, i_rightmove]) > 0}
     # exclude non-tap-task TAPs later (they contain other movement)
 
     # CREATE TAP BOOLS PER MOVEMENT/BODYSIDE
@@ -722,8 +727,11 @@ def create_ephys_masks(
 
     # CREATE TASK MASK (corresponding to ephys 2d-data)
     print('...create task-mask for ephys')
+    i_task = np.where(['task' in c.lower() for c in accl.colnames])[0][0]
+    print(f'...based on {accl.data[:5, i_task]} and {accl.times[:5]}')
+    print(f'first row: {accl.data[0, :]}, colnames: {accl.colnames}')
     task_mask_times = get_mask_timings(
-        orig_labels=accl.data[:, 4],
+        orig_labels=accl.data[:, i_task],
         orig_times=accl.times,
         MASK='TASK',
     )
@@ -915,8 +923,8 @@ def get_mask_timings(orig_labels,
     
     if MASK.upper() == 'TASK':
         label_times = {'rest': [],
-                    'tap': [],
-                    'free': []}
+                       'tap': [],
+                       'free': []}
 
     elif MASK.upper() in ['CDRS', 'LID']:
         label_times = {
@@ -925,6 +933,7 @@ def get_mask_timings(orig_labels,
 
     assert orig_labels[0] in list(label_times.keys()), (
             'orig_labels does not contain tasks/cdrs'
+            f' uniq: {np.unique(orig_labels)}'
         )
 
     for i_task, task in enumerate(orig_labels):

@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from itertools import product
+from scipy.signal import welch
 
 # import own functions
 # import lfpecog_analysis.load_SSD_features as load_ssd_fts
@@ -20,7 +21,7 @@ from lfpecog_analysis.ft_processing_helpers import (
     find_select_nearest_CDRS_for_ephys,
     categorical_CDRS
 )
-from lfpecog_analysis.psd_analysis_classes import PSD_vs_Move_sub
+# from lfpecog_analysis.psd_analysis_classes import PSD_vs_Move_sub
 
 
 def select_3d_ephys_moveTaskLid(
@@ -37,6 +38,7 @@ def select_3d_ephys_moveTaskLid(
     EXCL_ECOG_IPSILAT: bool = False,
     BASELINE_MINUTES: int = 5,
     NAN_ACCEPT_WIN: int = 2,
+    EPHYS_FS: int = 2048,
     verbose: bool = False,
 ):
     """
@@ -94,40 +96,42 @@ def select_3d_ephys_moveTaskLid(
         'if INVOLUNTARY is defined, NO DYSK (or all) cannot be included'
     )
 
-    # get all variables out of class
-    if type(psdMoveClass) == PSD_vs_Move_sub:
-        assert ephys_source in psdMoveClass.ephys_sources, (
-            'incorrect ephyssource for psdMoveClass usage'
+    # get all variables out of class (causes circular import error)
+    # if type(psdMoveClass) == PSD_vs_Move_sub:
+    #     assert ephys_source in psdMoveClass.ephys_sources, (
+    #         'incorrect ephyssource for psdMoveClass usage'
+    #     )
+
+    ephys_3d = getattr(psdMoveClass, f'{ephys_source}_3d').copy()
+    ephys_time_2d = psdMoveClass.ephys_time_arr.copy()
+    move_masks=psdMoveClass.move_masks
+    task_mask=psdMoveClass.task_mask.copy()
+
+    # if unilateral dyskinesia analysis is required
+    if DYSK_UNILAT_SIDE in ['left', 'right']:
+        print(f'use UNILAT LID_MASK {DYSK_UNILAT_SIDE}')
+        if DYSK_UNILAT_SIDE == 'left': NOLID_SIDE = 'right'
+        elif DYSK_UNILAT_SIDE == 'right': NOLID_SIDE = 'left'
+        lid_mask = np.logical_and(
+            getattr(psdMoveClass, f'lid_mask_{DYSK_UNILAT_SIDE}') > 0,
+            getattr(psdMoveClass, f'lid_mask_{NOLID_SIDE}') == 0
         )
-        ephys_3d = getattr(psdMoveClass, f'{ephys_source}_3d').copy()
-        ephys_time_2d = psdMoveClass.ephys_time_arr.copy()
-        move_masks=psdMoveClass.move_masks
-        task_mask=psdMoveClass.task_mask.copy()
-        if DYSK_UNILAT_SIDE in ['left', 'right']:
-            print(f'use UNILAT LID_MASK {DYSK_UNILAT_SIDE}')
-            if DYSK_UNILAT_SIDE == 'left': NOLID_SIDE = 'right'
-            elif DYSK_UNILAT_SIDE == 'right': NOLID_SIDE = 'left'
-            lid_mask = np.logical_and(
-                getattr(psdMoveClass, f'lid_mask_{DYSK_UNILAT_SIDE}') > 0,
-                getattr(psdMoveClass, f'lid_mask_{NOLID_SIDE}') == 0
-            )
-        else:
-            lid_mask = psdMoveClass.lid_mask
-        # optionnaly remove ipsilat-unilat-dyskinesia comp to ECoG
-        if EXCL_ECOG_IPSILAT and any(['ecog' in s for s in
-                                      psdMoveClass.ephys_sources]):
-            if 'ecog_left' in psdMoveClass.ephys_sources:
-                EXCL_ECOG_IPSILAT = np.logical_and(psdMoveClass.lid_mask_left > 0,
-                                                   psdMoveClass.lid_mask_right == 0)
-            elif 'ecog_right' in psdMoveClass.ephys_sources:
-                EXCL_ECOG_IPSILAT = np.logical_and(psdMoveClass.lid_mask_left == 0,
-                                                   psdMoveClass.lid_mask_right > 0)
-                
+    else:
+        lid_mask = psdMoveClass.lid_mask
+    # optionnaly remove ipsilat-unilat-dyskinesia comp to ECoG
+    if EXCL_ECOG_IPSILAT and any(['ecog' in s for s in
+                                    psdMoveClass.ephys_sources]):
+        if 'ecog_left' in psdMoveClass.ephys_sources:
+            EXCL_ECOG_IPSILAT = np.logical_and(psdMoveClass.lid_mask_left > 0,
+                                                psdMoveClass.lid_mask_right == 0)
+        elif 'ecog_right' in psdMoveClass.ephys_sources:
+            EXCL_ECOG_IPSILAT = np.logical_and(psdMoveClass.lid_mask_left == 0,
+                                                psdMoveClass.lid_mask_right > 0)
             
-    
     if DYSK_UNILAT_SIDE in ['left', 'right']:
         DYSK_SEL = 'lid'  # do not categorize unilat Dyskinesia
         print(f'UNILAT DYSKINESIA ({DYSK_UNILAT_SIDE}) taken in raw CDRS scores')
+
 
     # create overall 2d-MASK to finally select desired data
     MASK = np.zeros_like(task_mask)  # take 2d mask, 1 is keep, 0 is drop
@@ -154,13 +158,13 @@ def select_3d_ephys_moveTaskLid(
         TASK == [0, 1, 2]  # select all
 
     for T in TASK: MASK[task_mask == T] = 1
-    if verbose: print(f'total KEEPS in MASK after TASK : {np.sum(MASK) / 7 / 2048} (sec, p/band)')
+    if verbose: print(f'total KEEPS in MASK after TASK : {np.sum(MASK) / 7 / EPHYS_FS} (sec, p/band)')
 
     # select only first X minutes for baseline
     if SEL == 'BASELINE':
         time_mask = ephys_time_2d < (BASELINE_MINUTES * 60)
         MASK = np.logical_and(MASK, time_mask)  # combine with existing mask-selection
-        if verbose: print(f'total KEEPS in MASK after baseline time : {np.sum(MASK) / 7 / 2048} (sec, p/band)')
+        if verbose: print(f'total KEEPS in MASK after baseline time : {np.sum(MASK) / 7 / EPHYS_FS} (sec, p/band)')
 
 
     ### SELECTION-2: add 2d-mask for MOVEMENT SELECTION
@@ -184,7 +188,7 @@ def select_3d_ephys_moveTaskLid(
                 mov_mask[move_masks[f'{mask_side}_allmove'] == 1] = 1
         
     MASK = np.logical_and(MASK, mov_mask)  # combine with existing mask-selection
-    if verbose: print(f'total KEEPS in MASK after MOVE: {np.sum(MASK) / 7 / 2048} (sec, p/band)')
+    if verbose: print(f'total KEEPS in MASK after MOVE: {np.sum(MASK) / 7 / EPHYS_FS} (sec, p/band)')
 
 
     ### SELECTION-3: add 2d-mask for LID (DYSKINESIA PRESENCE or SEVERITY)
@@ -206,13 +210,13 @@ def select_3d_ephys_moveTaskLid(
         lid_mask = np.ones_like(lid_mask)
     
     MASK = np.logical_and(MASK, lid_mask)  # combine with existing mask-selection
-    if verbose: print(f'total KEEPS in MASK after LID: {np.sum(MASK) / 7 / 2048} (sec, p/band)')
+    if verbose: print(f'total KEEPS in MASK after LID: {np.sum(MASK) / 7 / EPHYS_FS} (sec, p/band)')
 
     # optionally exclude ipsilat-Dysk IPSI-lat to ECoG
     if isinstance(EXCL_ECOG_IPSILAT, np.ndarray):  # if defined above 
         MASK = np.logical_and(MASK, ~EXCL_ECOG_IPSILAT)  # unilat ecog array is positive for excl
         if verbose: print(f'total KEEPS in MASK after uni-lat-ipsi-lat-ecog '
-                          f'exclusion: {np.sum(MASK) / 7 / 2048} (sec, p/band)')
+                          f'exclusion: {np.sum(MASK) / 7 / EPHYS_FS} (sec, p/band)')
 
 
     ### SELECTION-4: APPLY MASKs on all ephys AND times
@@ -220,14 +224,14 @@ def select_3d_ephys_moveTaskLid(
     ephys_time_2d[MASK == 0] = np.nan
 
     if verbose: print(f'total NaNs in 3d after MASK: '
-                      f'{np.sum(np.isnan(ephys_3d)) / 7 / ephys_3d.shape[0] / 2048}'
+                      f'{np.sum(np.isnan(ephys_3d)) / 7 / ephys_3d.shape[0] / EPHYS_FS}'
                       ' sec per 10-sec window (mean)')
     
     # masks windows to exclude based on NaNs with full-row-nans
     ephys_3d[nan_win_sel, :, :] = np.nan
     ephys_time_2d[nan_win_sel, :] = np.nan
     if verbose: print(f'total NaNs in 3d after NaN-window-masking: '
-                        f'{np.sum(np.isnan(ephys_3d)) / 7 / ephys_3d.shape[0] / 2048}'
+                        f'{np.sum(np.isnan(ephys_3d)) / 7 / ephys_3d.shape[0] / EPHYS_FS}'
                         ' sec per 10-sec window (mean)')
 
 
@@ -247,7 +251,7 @@ def select_3d_ephys_moveTaskLid(
     uniq_ephys_2d = SEL_ephys_3d[uniq_idx, :]
     if verbose: print(f'{len(SEL_time_2d)} time-samples, '
                       f'{len(uniq_times)} UNIQUE times, '
-                      f'{uniq_ephys_2d.shape} ({len(uniq_times) / 2048} sec)')
+                      f'{uniq_ephys_2d.shape} ({len(uniq_times) / EPHYS_FS} sec)')
     lid_out = lid_out[uniq_idx]
     task_out = task_out[uniq_idx]
     
@@ -282,3 +286,43 @@ def plot_check_ephys_selection(
         ax.set_xlabel ('Time (after L-Dopa)', weight='bold',)
 
     plt.show()
+
+
+def get_ssd_psd_from_array(
+    ephys_arr, sfreq, SETTINGS,
+    band_names, PSD_WIN_sec: int = 1
+):
+    """
+    extracts PSD based on specific SSDd
+    frquency bands. input is selected ephys
+    based on meta-data.
+
+    Arguments:
+
+    Returns:
+        - new_f: array with PSD-freqs (4-35, 60-90)
+        - new_psd: array containing PSDs corr to new_f
+    """
+
+    if ephys_arr.shape[0] < sfreq: return [], []
+
+    new_f = np.concatenate([np.arange(4, 35),
+                            np.arange(60, 90)])
+    new_psd = []
+
+    for i, band in enumerate(band_names):
+        f_range = list(SETTINGS['SPECTRAL_BANDS'].values())[i]
+        sig = ephys_arr[:, i]
+        sig = sig[~np.isnan(sig)]
+        freqs, ps = welch(sig, sfreq,
+                          nperseg=sfreq * PSD_WIN_sec,)
+        f_sel_temp = [f >= f_range[0] and f < f_range[1]
+                        for f in freqs]
+        new_psd.extend(ps[f_sel_temp])
+
+    new_psd = np.array(new_psd)
+
+    assert new_psd.shape == new_f.shape, 'f and psd not match'
+
+    return new_f, new_psd
+
