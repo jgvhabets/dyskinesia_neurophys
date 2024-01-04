@@ -1173,7 +1173,21 @@ def plot_unilateral_LID(
 
 def break_x_axis_psds_ticks(tf_freqs, PSD, PSD_sd=False,
                             x_break = (35, 60), nan_pad = 5):
-    
+    """
+    remove frequencies to not show on X-axis, replace with
+    NaN-values (n = nan_pad)
+
+    Arguments:
+        - tf_freqs: frequencies
+        - PSD: psd values, can be dict, arr or list
+        - PSD_sd: similar to PSD, then std dev instead of mean i.e.
+
+    Returns:
+        - PSD: nan-padded dor freqs not to show
+        - (IF INSERTED: corresponding std dev values)
+        - xticks: x-array for plotting
+        - corr labels for ticks
+    """
     del_sel = np.logical_and(tf_freqs > x_break[0],
                              tf_freqs < x_break[1])
 
@@ -1217,10 +1231,10 @@ def break_x_axis_psds_ticks(tf_freqs, PSD, PSD_sd=False,
         xticks = np.arange(len(PSD))
         
     xlabels = [''] * len(xticks)
-    low_ticks = plt_freqs[plt_freqs < x_break[0]]
+    low_ticks = plt_freqs[plt_freqs <= x_break[0]]
     low_ticks = [round(t) for t in low_ticks]
     xlabels[:len(low_ticks)] = low_ticks
-    high_ticks = plt_freqs[plt_freqs > x_break[1]]
+    high_ticks = plt_freqs[plt_freqs >= x_break[1]]
     high_ticks = [round(t) for t in high_ticks]
     xlabels[len(xlabels) - len(high_ticks):] = high_ticks
 

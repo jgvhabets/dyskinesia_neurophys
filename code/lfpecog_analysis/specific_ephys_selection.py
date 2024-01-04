@@ -326,3 +326,48 @@ def get_ssd_psd_from_array(
 
     return new_f, new_psd
 
+
+
+def get_hemisphere_movement_location(
+    SRC, cond, sub=None, ecog_sides=None,
+):
+    """
+    find hemisphere location related to
+    movement (IPSI or CONTRA lateral)
+
+    sub and ecog_sides only required for
+    ecog localisations
+    """
+    # find none movement conditions
+    if not 'tap' in cond and not 'move' in cond: return False, False
+
+    # define left or right hemisphere of current data
+    if SRC.startswith('lfp'):
+        hemisph = SRC.split('_')[1]  # left or right (stn)
+    else:
+        hemisph = ecog_sides[sub]
+    
+    # define left or right body side movement
+    if 'tapleft' in cond.lower() or 'dyskmoveleft' in cond.lower():
+        move_side = 'left'
+    elif 'tapright' in cond.lower() or 'dyskmoveright' in cond.lower():
+        move_side = 'right'
+    elif 'dyskmoveboth' in cond.lower():
+        move_side = 'bilat'
+    
+    # define contra or ipsi lateral movement
+    if hemisph == move_side:
+        IP_CON = 'IPSI'
+        # print(f'....{attr}, hemisph: {hemisph} x {move_side} move: {IP_CON}')
+    elif move_side == 'bilat':
+        IP_CON = 'BILAT'
+    else: IP_CON = 'CONTRA'
+    
+    # define movement type
+    if 'tap' in cond: MOVETYPE = 'TAP'
+    elif 'dyskmove' in cond: MOVETYPE = 'INVOLUNT'
+    
+    # print(f'\n...in {cond}, {attr}, hemisphere {hemisph} and moveside '
+    #         f'{move_side} lead to {MOVETYPE} {IP_CON}')
+    
+    return IP_CON, MOVETYPE

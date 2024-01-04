@@ -78,8 +78,15 @@ class get_selectedEphys:
     ONLY_CREATE: bool = False
     PREVENT_NEW_CREATION: bool = False
     available_states: list = field(default_factory=lambda: [
-        'baseline', 'rest_noLid', 'rest_lid',
-        'dysk_bilatMove'
+        # 'rest_alllid', 'rest_mildlid', 'rest_moderatelid', 'rest_severelid',
+        f'{s}_{d}lid' for s, d in product(
+            ['rest', 'tapleft', 'tapright',
+             'dyskmoveboth', 'dyskmoveleftonly',
+             'dyskmoverightonly'],
+            ['no', 'all', 'mild', 'moderate', 'severe']
+        )
+        # 'tapleft', 'tapright',
+        # 'dyskmoveboth', 'dyskmoveright', 'dyskmoveleft', 
     ])
     ecog_sides: dict = field(default_factory= lambda: {})
     DYSK_CUTOFFS: dict = field(default_factory= lambda: 
@@ -94,8 +101,11 @@ class get_selectedEphys:
 
     def __post_init__(self,):
         # CHECK AND PREPARE INPUT AND VARIABLES
+        self.available_states.extend(['baseline', 'rest_nolidbelow30',
+                                      'rest_nolidover30'])
+        self.STATE_SEL = self.STATE_SEL.lower()
         assert self.STATE_SEL in self.available_states, (
-            f'STATE_SEL should be in {self.available_states}'
+            f'STATE_SEL "{self.STATE_SEL}" should be in {self.available_states}'
         )
         self.SETTINGS = load_ft_ext_cfg(FT_VERSION=self.FT_VERSION)
         data_path = get_project_path('data')
@@ -138,7 +148,9 @@ class get_selectedEphys:
                                                 np.arange(60, 90)])
                     continue
 
-            # get data for current subject
+            # CALCULATE PSD PER CONDITION
+
+            # get (load or create) large data-pickle for current subject
             picklename = f'ephys_selections_{sub}.P'
             # load existing data
             if self.LOAD_PICKLE and picklename in os.listdir(picklepath):
@@ -170,53 +182,49 @@ class get_selectedEphys:
                     print(f'...saved new Class {picklename}')
 
 
-            ### AFTER LOADING OR CREATING SUB_CLASS with many selections
-            
+            ### calculate condition-PSDs with loaded SUB_CLASS
+            src_INVOL_TODO = {s: True for s in sub_class.ephys_sources}  # bool to calc DYSK MOVE once per source     
             # select relevant data (PSDs) for subject
             for src, sel in product(sub_class.ephys_sources,
                                     sub_class.incl_selections):
                 # add baseline per source
-                # TODO ADD sub-012 baseline
+                # TODO PM ADD sub-012 baseline
                 if src in sel and 'baseline' in sel.lower():
                     # load 2d arr: n-samples, n-bands (only samples for selection)
+                    bl_sig = getattr(sub_class, sel).ephys_2d_arr
                     ftemp, psdtemp = get_ssd_psd_from_array(
-                        ephys_arr=getattr(sub_class, sel).ephys_2d_arr,
+                        ephys_arr=bl_sig,
                         sfreq=sub_class.fs,
                         SETTINGS=self.SETTINGS,
                         band_names=sub_class.band_names
                     )
                     if len(psdtemp) == 0: continue  # array shorter than 1 second
                     np.save(os.path.join(states_picklepath,
-                                         f'{sub}_{src}_baseline.npy'),
+                                         f'{sub}_{src}_baseline_'
+                                         f'{bl_sig.shape[0]}samples.npy'),
                             psdtemp, allow_pickle=True)
-                    setattr(self,
-                            f'{src}_{sub}_baseline',
-                            psdtemp)
+                    setattr(self, f'{src}_{sub}_baseline', psdtemp)
 
-            # # select specific clinical states for all SOURCES (lfp/ecog)
-            # for src, sel in product(sub_class.ephys_sources,
-            #                         sub_class.incl_selections):
-                
                 # all REST WITHOUT DYSKINESIA
                 if src in sel and 'REST' in sel and 'lidno' in sel:
-                    # print(f'\n...process and PLOT {src}, {sel}')
-                    # plot_check_ephys_selection(
-                    #     sel_times=getattr(sub_class, sel).time_arr,
-                    #     sel_ephys=getattr(sub_class, sel).ephys_2d_arr,
-                    #     sel_cdrs=getattr(sub_class, sel).cdrs_arr,
-                    #     sel_task=getattr(sub_class, sel).task_arr
-                    # )
-                    # load 2d arr: n-samples, n-bands (only samples for selection)
-                    ftemp, psdtemp = get_ssd_psd_from_array(
-                        ephys_arr=getattr(sub_class, sel).ephys_2d_arr,
-                        sfreq=sub_class.fs,
-                        SETTINGS=self.SETTINGS,
-                        band_names=sub_class.band_names
-                    )
-                    if len(psdtemp) == 0: continue  # array shorter than 1 second
-                    np.save(os.path.join(states_picklepath,
-                                         f'{sub}_{src}_rest_noLid.npy'),
-                            psdtemp, allow_pickle=True)
+                    
+                    for time_SEL, time_code in zip(
+                        [getattr(sub_class, sel).time_arr < (30 * 60),
+                         getattr(sub_class, sel).time_arr > (30 * 60)],
+                        ['below30', 'over30']
+                    ):
+                        # load 2d arr: n-samples, n-bands (only samples for selection)
+                        ftemp, psdtemp = get_ssd_psd_from_array(
+                            ephys_arr=getattr(sub_class, sel).ephys_2d_arr[time_SEL.astype(bool), :],
+                            sfreq=sub_class.fs,
+                            SETTINGS=self.SETTINGS,
+                            band_names=sub_class.band_names
+                        )
+                        if len(psdtemp) == 0: continue  # array shorter than 1 second
+                        np.save(os.path.join(states_picklepath,
+                                            f'{sub}_{src}_rest_nolid{time_code}'
+                                            f'_{sum(time_SEL)}samples.npy'),
+                                psdtemp, allow_pickle=True)
 
                 
                 # get rest with ALL LID
@@ -239,23 +247,48 @@ class get_selectedEphys:
                         if len(psdtemp) == 0: continue  # array shorter than 1 second
                         if lid_code == 'lid': lid_code = 'all'
                         np.save(os.path.join(states_picklepath,
-                                            f'{sub}_{src}_dyskRest_{lid_code}lid.npy'),
+                                            f'{sub}_{src}_dyskRest_{lid_code}lid'
+                                            f'_{lid_sel.shape[0]}samples.npy'),
                                 psdtemp, allow_pickle=True)
                     
-                # add bilat dyskinetic movement (only REST, all LID+movement)
-                # INVOLUNTARY IS ONLY CALCULATED FOR LIDLID
-                for move_code in ['moveboth', 'moveright', 'moveleft']:
-                    if src in sel and 'INVOL' in sel and move_code in sel:
-                        # select LID categories
+                ## ADD DYSKINETIC MOVEMENTS (only during REST-tasks)
+                if src in sel and 'INVOL' in sel and src_INVOL_TODO[src]:
+                    # set INVOL-todo bool false, only calculate once
+                    src_INVOL_TODO[src] = False
+                    
+                    move_times = {}
+                    for s in ['left', 'right']:
+                        try:
+                            move_times[s] = getattr(sub_class, f'{src}_INVOLUNTARY_move{s}_lidlid').time_arr
+                        except:
+                            move_times[s] = []  # empty list works in np intersect/in1d
+                    # gives boolean array: LEFT time-array NOT IN RIGHT, and viceversa
+                    left_only_bool = ~np.in1d(move_times['left'], move_times['right'])  # np.in1d is true if first array value is in second arr
+                    right_only_bool = ~np.in1d(move_times['right'], move_times['left'])
+                    both_bool_l = ~left_only_bool  # both is based on moveLEFT selection
+                    
+                    # loop over only-left, only-right and both
+                    for move_bool, move_code in zip([both_bool_l, left_only_bool, right_only_bool],
+                                                   ['Both', 'LeftOnly', 'RightOnly']):
+                        if sum(move_bool) == 0: continue  # skip empty combinations
+                        # get corresponding ephys arr and cdrs scores
+                        if move_code == 'RightOnly':
+                            sel = f'{src}_INVOLUNTARY_moveright_lidlid'
+                        else:
+                            sel = f'{src}_INVOLUNTARY_moveleft_lidlid'  # both is also based on left
+                        temp_ephys = getattr(sub_class, sel).ephys_2d_arr[move_bool, :]
+                        temp_cdrs = getattr(sub_class, sel).cdrs_arr[move_bool]
+                            
+                        # select LID categories based on lidlid (contains all)
                         for lid_code in ['lid', 'mild', 'moderate', 'severe']:
                             if lid_code == 'lid': 
-                                lid_sel = np.ones_like(getattr(sub_class, sel).cdrs_arr)
+                                lid_sel = np.ones_like(temp_cdrs)
                             else:
                                 lid_sel = np.logical_and(
-                                    getattr(sub_class, sel).cdrs_arr >= self.DYSK_CUTOFFS[lid_code][0],
-                                    getattr(sub_class, sel).cdrs_arr <= self.DYSK_CUTOFFS[lid_code][1]
+                                    temp_cdrs >= self.DYSK_CUTOFFS[lid_code][0],
+                                    temp_cdrs <= self.DYSK_CUTOFFS[lid_code][1]
                                 )
-                            lid_sel = getattr(sub_class, sel).ephys_2d_arr[lid_sel.astype(bool), :]
+                            lid_sel = temp_ephys[lid_sel.astype(bool), :]
                             ftemp, psdtemp = get_ssd_psd_from_array(
                                 ephys_arr=lid_sel,
                                 sfreq=sub_class.fs,
@@ -265,27 +298,33 @@ class get_selectedEphys:
                             if len(psdtemp) == 0: continue  # array shorter than 1 second
                             if lid_code == 'lid': lid_code = 'all'
                             np.save(os.path.join(states_picklepath,
-                                                f'{sub}_{src}_dysk{move_code}'
-                                                f'_{lid_code}lid.npy'),
+                                                f'{sub}_{src}_dyskmove{move_code}_'
+                                                f'{lid_code}lid_{lid_sel.shape[0]}samples.npy'),
                                     psdtemp, allow_pickle=True)
+                            
                         
                         
-                # add TAPs 
+                ## add TAPs 
                 if src in sel and '_VOLUN' in sel:
+                    
                     if 'moveboth' in sel or 'lidall' in sel: continue  # skip summary groups
+                    
                     tap_side = sel.split('move')[1].split('_')[0]
                     # once add taps without LID and once taps in LID-categories
                     if 'lidno' in sel.lower():
+                        sig = getattr(sub_class, sel).ephys_2d_arr
                         ftemp, psdtemp = get_ssd_psd_from_array(
-                            ephys_arr=getattr(sub_class, sel).ephys_2d_arr,
+                            ephys_arr=sig,
                             sfreq=sub_class.fs,
                             SETTINGS=self.SETTINGS,
                             band_names=sub_class.band_names
                         )
                         if len(psdtemp) == 0: continue  # array shorter than 1 second
                         np.save(os.path.join(states_picklepath,
-                                            f'{sub}_{src}_tap{tap_side}_noLid.npy'),
+                                            f'{sub}_{src}_tap{tap_side}_noLid'
+                                            f'_{sig.shape[0]}samples.npy'),
                                 psdtemp, allow_pickle=True)
+                    
                     else:
                         for lid_code in ['mild', 'moderate', 'severe']:
                             lid_sel = np.logical_and(
@@ -301,8 +340,8 @@ class get_selectedEphys:
                             )
                             if len(psdtemp) == 0: continue  # array shorter than 1 second
                             np.save(os.path.join(states_picklepath,
-                                                f'{sub}_{src}_tap{tap_side}'
-                                                f'_{lid_code}lid.npy'),
+                                                f'{sub}_{src}_tap{tap_side}_'
+                                                f'{lid_code}lid_{lid_sel.shape[0]}samples.npy'),
                                     psdtemp, allow_pickle=True)
 
 
@@ -463,7 +502,7 @@ def load_sub_states(state, sub, pickled_state_path,
 
     sub_arrs = [f for f in os.listdir(pickled_state_path)
                  if f.endswith('.npy') and sub in f]
-    state_arrs = [f for f in sub_arrs if state in f]
+    state_arrs = [f for f in sub_arrs if state in f.lower()]
     if verbose: print(f'for ({sub}, {state}) selected: {state_arrs}')
     
     # load existing data
@@ -483,7 +522,7 @@ def load_sub_states(state, sub, pickled_state_path,
 
     elif len(sub_arrs) > 0:
         print(f'\n### NO STATE-specific array available '
-              f'for sub-{sub}, OTHER STATE ALREADY CREATED ###\n')
+              f'for {state} in sub-{sub}, other states ALREADY CREATED ###\n')
         return True, []
     
     else:
