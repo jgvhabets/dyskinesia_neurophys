@@ -20,10 +20,35 @@ cond_colors = {
     'moderatelid': 'red', 'severelid': 'purple',
 }
 
+def prep_and_plot_moveSpecPsd(
+    PSD_DICT, BASELINE, PLOT_CONDITION,
+    SAVE_PLOT: bool = False,
+    SHOW_PLOT: bool = True,
+):
+    # define correct prep function
+    if PLOT_CONDITION == 'REST':
+        prep_func = prep_REST_spec_psds
+    elif PLOT_CONDITION in ['TAP', 'INVOLUNT']:
+        prep_func = prep_MOVEMENT_spec_psds
+    # execute prep function
+    psd_arrs, psd_freqs = prep_func(
+        PLOT_MOVE=PLOT_CONDITION,
+        PSD_DICT=PSD_DICT,
+        BASELINE=BASELINE,
+    )
+    # plot
+    plot_moveLidSpec_PSDs(
+        psd_arrs, psd_freqs=psd_freqs,
+        PLOT_MOVE_TYPE=PLOT_CONDITION,
+        SAVE_PLOT=SAVE_PLOT,
+        SHOW_PLOT=SHOW_PLOT,
+    )
+
+
 def plot_moveLidSpec_PSDs(
     psd_arrs, psd_freqs, PLOT_MOVE_TYPE,
-    SAVE_PLOT: bool = True,
-
+    SAVE_PLOT: bool = False,
+    SHOW_PLOT: bool = True,
 ):
     """
     Plots first keys as rows (LFP-ECoG), second keys as cols (CONTRA/IPSI lat)
@@ -33,17 +58,25 @@ def plot_moveLidSpec_PSDs(
         psd_arrs = {'rest': psd_arrs}
 
     # LFP-row0, ECoG-row1; IPSI/CONTRA/BOTH in columns
+    AX_WIDTH, AX_HEIGHT = 8, 6
     ax_row_keys = list(psd_arrs.keys())
     ax_col_keys = list(psd_arrs[ax_row_keys[0]].keys())
+    # # for x-ax-break
+    # new_ax_col_keys = []
+    # for k in ax_col_keys: new_ax_col_keys.extend([k, k])
+    # ax_col_keys = new_ax_col_keys
+    # AX_WIDTH /= 2  # each ax is two plot-axes for X-break
 
     fig, axes = plt.subplots(len(ax_row_keys), len(ax_col_keys),
-                             figsize=(len(ax_col_keys)*8, len(ax_row_keys)*6),
+                             figsize=(len(ax_col_keys)*AX_WIDTH,
+                                      len(ax_row_keys)*AX_HEIGHT),
                              sharey='row', sharex='col',)
     
     if len(axes.shape) == 1: axes = np.atleast_2d(axes)  # make axes array 2d (i.e., 3x1)
 
-    XTICKS = [4, 12, 20, 28, 60, 70, 80, 89]  # 89 will be labeled 90
+    XTICKS = [4, 12, 20, 28, 34, 60, 70, 80, 89]  # 89 will be labeled 90
     ls = 'solid'
+    FS = 16  # fontsize
 
     for axrow, src in enumerate(ax_row_keys):
 
@@ -66,10 +99,13 @@ def plot_moveLidSpec_PSDs(
                     PSD=m, PSD_sd=sem,
                     x_break = (35, 60), nan_pad = 5
                 )
+                lab = lid.replace('lid', ' LID')  #  add spaces for readability
+                lab = lab.replace('below30', ' < 30min')
+                lab = lab.replace('over30', ' > 30min')
                 axes[axrow, axcol].plot(
                     x_plot, m, # PSDs[cond].freqs, m,
                     color=cond_colors[lid], alpha=.8, ls=ls,
-                    label=f'{lid} (n={n_subs})',
+                    label=f"{lab} (n={n_subs})",
 
                 )
                 axes[axrow, axcol].fill_between(
@@ -78,13 +114,16 @@ def plot_moveLidSpec_PSDs(
                 )
                 # add title
                 if PLOT_MOVE_TYPE != 'REST':
-                    axes[axrow, axcol].set_title(
-                        f'{src.upper()}: {mov}-lateral', weight='bold',
-                    )
+                    ax_title = (f'{src.upper()} during '
+                                f'{mov.split("_")[1]}-lateral'
+                                f' {mov.split("_")[0]}-movement')
+                    ax_title = ax_title.replace('INVOLUNT', 'DYSK')
+                    ax_title = ax_title.replace('BILAT', 'BI')
                 else:
-                    axes[axrow, axcol].set_title(
-                        f'{mov.upper()} during REST (no movement)', weight='bold',
-                    )
+                    ax_title = (f'{mov.upper()} during REST (no movement)')
+                axes[axrow, axcol].set_title(ax_title, weight='bold',
+                                             size=FS,)
+
 
     xtick_sel = np.where([x in XTICKS for x in xlabs])[0]
     xticks = x_plot[xtick_sel]
@@ -94,15 +133,18 @@ def plot_moveLidSpec_PSDs(
     for i_ax, ax in enumerate(axes.ravel()):
         ax.axhline(0, xmin=0, xmax=1, color='gray', alpha=.3,)
         ax.set_xticks(xticks)
-        ax.set_xticklabels(xlabs)
+        ax.set_xticklabels(xlabs, fontsize=FS,)
         ax.set_ylim(-75, 275)
-        ax.legend()
+        ax.legend(fontsize=FS, frameon=False,)
+        ax.tick_params(size=FS, labelsize=FS,)
+        for s in ['right', 'top']: ax.spines[s].set_visible(False)
+
     # set axis labels
     for ax in axes[-1, :]:
-        ax.set_xlabel('Frequency (Hz)')
+        ax.set_xlabel('Frequency (Hz)', size=FS, weight='bold',)
     for ax in axes[:, 0]:
         ax.set_ylabel('Spectral Power, %-change\n'
-                    '(vs Med-OFF, no LID)')
+                    '(vs Med-OFF, no LID)', size=FS, weight='bold',)
 
     plt.tight_layout()
 
@@ -118,8 +160,10 @@ def plot_moveLidSpec_PSDs(
         
         plt.savefig(os.path.join(FIG_PATH, FIG_NAME),
                     dpi=300, facecolor='w',)
+        print(f'saved plot {FIG_NAME} in {FIG_PATH}!')
 
-    plt.show()
+    if SHOW_PLOT: plt.show()
+    else: plt.close()
 
 
 def prep_MOVEMENT_spec_psds(PLOT_MOVE, PSD_DICT, BASELINE):
@@ -144,8 +188,8 @@ def prep_MOVEMENT_spec_psds(PLOT_MOVE, PSD_DICT, BASELINE):
 
     sources = ['lfp_left', 'lfp_right', 'ecog']
     lid_states = ['no', 'mild', 'moderate', 'severe']
-    move_axes = [f'{PLOT_MOVE} CONTRA', f'{PLOT_MOVE} IPSI']
-    if PLOT_MOVE == 'INVOLUNT': move_axes.append('INVOLUNT BILAT')
+    move_axes = [f'{PLOT_MOVE}_CONTRA', f'{PLOT_MOVE}_IPSI']
+    if PLOT_MOVE == 'INVOLUNT': move_axes.append('INVOLUNT_BILAT')
 
     psd_arrs = {'lfp': {d: [] for d in move_axes},
                 'ecog': {d: [] for d in move_axes}}  # store all psds for move axes
@@ -186,7 +230,7 @@ def prep_MOVEMENT_spec_psds(PLOT_MOVE, PSD_DICT, BASELINE):
             # include LID-state:
             temp_lid = attr.split('_')[-1]
             psd_arrs[
-                SRC.split('_')[0]][f'{MOV_TYPE} {HEM_LOC}'
+                SRC.split('_')[0]][f'{MOV_TYPE}_{HEM_LOC}'
             ][temp_lid].append(temp_psd)
             
             # print(f'added {attr} to {SRC}, {MOV_TYPE} {HEM_LOC} {temp_lid}')
