@@ -166,7 +166,8 @@ def plot_moveLidSpec_PSDs(
     else: plt.close()
 
 
-def prep_MOVEMENT_spec_psds(PLOT_MOVE, PSD_DICT, BASELINE):
+def prep_MOVEMENT_spec_psds(PLOT_MOVE, PSD_DICT, BASELINE,
+                            RETURN_IDS: bool = False,):
     """
 
     Arguments:
@@ -194,6 +195,10 @@ def prep_MOVEMENT_spec_psds(PLOT_MOVE, PSD_DICT, BASELINE):
     psd_arrs = {'lfp': {d: [] for d in move_axes},
                 'ecog': {d: [] for d in move_axes}}  # store all psds for move axes
     
+    # store IDs parallel to psds
+    if RETURN_IDS: sub_arrs = {'lfp': {d: [] for d in move_axes},
+                               'ecog': {d: [] for d in move_axes}}
+
     # replace single large lists for dicts with lid-states
     for s, m in product(psd_arrs.keys(), move_axes):
         psd_arrs[s][m] = {f'{l}lid': [] for l in lid_states}
@@ -232,16 +237,24 @@ def prep_MOVEMENT_spec_psds(PLOT_MOVE, PSD_DICT, BASELINE):
             psd_arrs[
                 SRC.split('_')[0]][f'{MOV_TYPE}_{HEM_LOC}'
             ][temp_lid].append(temp_psd)
+
+            # add subject ID to list
+            if RETURN_IDS: sub_arrs[
+                SRC.split('_')[0]][f'{MOV_TYPE}_{HEM_LOC}'
+            ][temp_lid].append(sub)
             
             # print(f'added {attr} to {SRC}, {MOV_TYPE} {HEM_LOC} {temp_lid}')
 
     psd_freqs = PSD_DICT[cond].freqs
 
-    return psd_arrs, psd_freqs
+    if not RETURN_IDS: return psd_arrs, psd_freqs
+
+    elif RETURN_IDS: return psd_arrs, psd_freqs, sub_arrs
 
 
 def prep_REST_spec_psds(PSD_DICT, BASELINE,
-                        PLOT_MOVE: str = 'REST'):
+                        PLOT_MOVE: str = 'REST',
+                        RETURN_IDS: bool = False,):
     """
 
     Arguments:
@@ -249,6 +262,10 @@ def prep_REST_spec_psds(PSD_DICT, BASELINE,
             get_selectedEphys() classes per condition (from
             psd_analysis_classes.py)
         - BASELINE: get_selectedEphys() class
+        - PLOT_MOVE: included to keep function in parallel
+            with MOVEMENT prep_spec_psds function
+        - RETURN_IDS: give parallel output with subject IDs
+            corresponding to psd_arr (for mix eff models) 
 
     Returns:
         - psd_arrs: dicts of lists with selected and processed
@@ -262,6 +279,7 @@ def prep_REST_spec_psds(PSD_DICT, BASELINE,
 
     psd_arrs = {s: {l: [] for l in lid_states} for s in sources}  # store all psds for move axes
     
+    if RETURN_IDS: sub_arrs = {s: {l: [] for l in lid_states} for s in sources}  # store IDs parallel to psds
 
     # categorize, average, baseline-corr all conditions
     for SRC, cond in product(sources, PSD_DICT.keys()):        
@@ -285,8 +303,11 @@ def prep_REST_spec_psds(PSD_DICT, BASELINE,
             temp_lid = attr.split('_')[-1]
             psd_arrs[SRC][temp_lid].append(temp_psd)
             
-            # print(f'added {attr} to {SRC}, {temp_lid}')
+            # add subject ID to list
+            if RETURN_IDS: sub_arrs[SRC][temp_lid].append(sub)
     
     psd_freqs = PSD_DICT[cond].freqs
     
-    return psd_arrs, psd_freqs
+    if not RETURN_IDS: return psd_arrs, psd_freqs
+
+    elif RETURN_IDS: return psd_arrs, psd_freqs, sub_arrs
