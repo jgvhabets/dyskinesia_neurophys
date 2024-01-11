@@ -290,7 +290,8 @@ def plot_check_ephys_selection(
 
 def get_ssd_psd_from_array(
     ephys_arr, sfreq, SETTINGS,
-    band_names, PSD_WIN_sec: int = 1
+    band_names, PSD_WIN_sec: int = 1,
+    RETURN_PSD_1sec: bool = False,
 ):
     """
     extracts PSD based on specific SSDd
@@ -303,27 +304,68 @@ def get_ssd_psd_from_array(
         - new_f: array with PSD-freqs (4-35, 60-90)
         - new_psd: array containing PSDs corr to new_f
     """
-
+    # skip too short samples
     if ephys_arr.shape[0] < sfreq: return [], []
 
+    # create new freq array to return
     new_f = np.concatenate([np.arange(4, 35),
                             np.arange(60, 90)])
-    new_psd = []
+    
+    # create NaN-array (1d for means, 2d for 1sec windows)
+    if not RETURN_PSD_1sec:
+        new_psd = np.array([np.nan] * len(new_f))
+    elif RETURN_PSD_1sec:
+        n_wins = ephys_arr.shape[0] // sfreq  # number of a sec windows fitting in data
+        new_psd = np.array([[np.nan] * len(new_f)] * n_wins)
 
+    # calculate per freq-band
     for i, band in enumerate(band_names):
         f_range = list(SETTINGS['SPECTRAL_BANDS'].values())[i]
-        sig = ephys_arr[:, i]
-        sig = sig[~np.isnan(sig)]
-        freqs, ps = welch(sig, sfreq,
-                          nperseg=sfreq * PSD_WIN_sec,)
-        f_sel_temp = [f >= f_range[0] and f < f_range[1]
-                        for f in freqs]
-        new_psd.extend(ps[f_sel_temp])
+        sig = ephys_arr[:, i]  # select band signal (SSD)
+        sig = sig[~np.isnan(sig)]  # delete NaNs
 
-    new_psd = np.array(new_psd)
+        if RETURN_PSD_1sec:
+            # reshape in 2d array with 1 sec windows
+            sig = sig[:sfreq * n_wins]
+            try:
+                sig = sig.reshape((n_wins, sfreq))
+            except ValueError:
+                # if one sample short this can happen (trxy with one window less)
+                n_wins -= 1
+                sig = sig[:sfreq * n_wins]
+                sig = sig.reshape((n_wins, sfreq))
+                new_psd = new_psd[:n_wins, :]
+                
+        # calculate PSD, is 2d if RETURN_PSD_1sec is true
+        freqs, ps = welch(sig, sfreq, nperseg=sfreq * PSD_WIN_sec,)
+        band_sel = [f >= f_range[0] and f < f_range[1]
+                    for f in freqs]
+        new_band_sel = [f >= f_range[0] and f < f_range[1]
+                        for f in new_f]
+        
+        if not RETURN_PSD_1sec:
+            new_psd[new_band_sel] = ps[band_sel]
+        elif RETURN_PSD_1sec:
+            new_psd[:, new_band_sel] = ps[:, band_sel]
 
-    assert new_psd.shape == new_f.shape, 'f and psd not match'
+    # check shape PSDs and freqs, check NaNs
+    if not RETURN_PSD_1sec:
+        assert len(new_psd) == len(new_f), (
+            f'f {new_f.shape} and psd {new_psd.shape} not match'
+        )
+        assert np.any(np.isnan(new_psd), axis=0), (
+            f'NaNs in new_psd ({sum(np.isnan(new_psd))})'
+        )
 
+    elif RETURN_PSD_1sec:
+        assert new_psd.shape == (n_wins, len(new_f)), (
+            f'f: {new_f.shape}, wins: {n_wins}, and psd: '
+            f'{new_psd.shape} do not match'
+        )
+        assert ~np.any(np.isnan(new_psd), axis=0).any(), (
+            'NaNs in new_psd (in # freqs columns: '
+            f'{sum(np.any(np.isnan(new_psd), axis=0))})'
+        )
     return new_f, new_psd
 
 

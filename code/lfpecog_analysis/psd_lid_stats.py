@@ -16,12 +16,12 @@ from utils.utils_fileManagement import (get_project_path,
 # import lfpecog_analysis.process_connectivity as processConn
 from statsmodels.regression.mixed_linear_model import MixedLM
 
-
 ### new stat functions (Jan 24)
 
 def calc_lmem_freqCoeffs(temp_values,
                          temp_ids,
                          temp_freqs,
+                         ALPHA: float = .05,
                          VALUES_GIVEN_GROUPED=False,
                          GROUP_LABELS=None,):
     """
@@ -41,8 +41,8 @@ def calc_lmem_freqCoeffs(temp_values,
     )
 
     # correct alpha for multiple comparisons
-    ALPHA = .05 / sum(f_sel)
-    print(f'corrected ALPHA within LMEM: {round(ALPHA, 5)} rounded')
+    ALPHA = ALPHA / sum(f_sel)
+    print(f'multi-comp (n={sum(f_sel)}) corr-ALPHA: {round(ALPHA, 5)}')
 
     if VALUES_GIVEN_GROUPED and any(GROUP_LABELS != None):
         stat_values = temp_values
@@ -74,6 +74,12 @@ def calc_lmem_freqCoeffs(temp_values,
             RETURN_GRADIENT=RETURN_GRAD,
             RETURN_CI=RETURN_CI
         )
+        if isinstance(result_list, bool):
+            if result_list == False:
+                print(f'\n#### no conversion for {f}\n')
+                coeffs_freqs.append(0)
+                sign_freqs.append(False)
+                continue
         # unpack dynamic result list
         if RETURN_GRAD:
             grad = result_list[-1]
@@ -81,6 +87,7 @@ def calc_lmem_freqCoeffs(temp_values,
         if RETURN_CI and RETURN_GRAD: ci = result_list[-2]
         elif RETURN_CI and not RETURN_GRAD: ci = result_list[-1]
         fixEff_cf, pval = result_list[:2]
+        # print(f'p-value {f} Hz: {pval}')
         sig_bool = pval < ALPHA
         # add values to lists
         coeffs_freqs.append(fixEff_cf)
@@ -88,6 +95,7 @@ def calc_lmem_freqCoeffs(temp_values,
         
     coeffs_freqs = np.array(coeffs_freqs)
     sign_freqs = np.array(sign_freqs)
+
     if RETURN_GRAD: grads = np.array(grads)
 
     if RETURN_CI: print('fix result_list output with CI')
@@ -119,7 +127,10 @@ def run_mixEff_wGroups(dep_var, indep_var,
         exog_re=None,  # (None)  defaults to a random intercept for each group
     )
     # run and fit model
-    lm_results = lm_model.fit()
+    try:
+        lm_results = lm_model.fit()
+    except:
+        return False
     # extract results
     fixeff_cf = lm_results._results.fe_params[0]
     pval = lm_results._results.pvalues[0]

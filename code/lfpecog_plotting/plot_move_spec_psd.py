@@ -20,6 +20,7 @@ cond_colors = {
     'moderatelid': 'red', 'severelid': 'purple',
 }
 
+
 def prep_and_plot_moveSpecPsd(
     PSD_DICT, BASELINE, PLOT_CONDITION,
     SAVE_PLOT: bool = False,
@@ -167,7 +168,8 @@ def plot_moveLidSpec_PSDs(
 
 
 def prep_MOVEMENT_spec_psds(PLOT_MOVE, PSD_DICT, BASELINE,
-                            RETURN_IDS: bool = False,):
+                            RETURN_IDS: bool = False,
+                            RETURN_STATE_ARRAYS: bool = False,):
     """
 
     Arguments:
@@ -202,7 +204,7 @@ def prep_MOVEMENT_spec_psds(PLOT_MOVE, PSD_DICT, BASELINE,
     # replace single large lists for dicts with lid-states
     for s, m in product(psd_arrs.keys(), move_axes):
         psd_arrs[s][m] = {f'{l}lid': [] for l in lid_states}
-
+        if RETURN_IDS: sub_arrs[s][m] = {f'{l}lid': [] for l in lid_states}
 
     # categorize, average, baseline-corr all conditions
     for SRC, cond in product(sources, PSD_DICT.keys()):
@@ -219,11 +221,12 @@ def prep_MOVEMENT_spec_psds(PLOT_MOVE, PSD_DICT, BASELINE,
             # get psd arr and correct for baseline
             temp_psd = getattr(PSD_DICT[cond], attr)
             try:
-                bl = getattr(BASELINE, f'{SRC}_{sub}_baseline')
+                bl = getattr(BASELINE, f'{SRC}_{sub}_baseline').mean(axis=0)
             except:
                 print(f'### WARNING: no baseline found for {sub}: {SRC}, skipped')
                 continue
             temp_psd = ((temp_psd - bl) / bl) * 100
+            if RETURN_STATE_ARRAYS: print(f'...arr shape {attr}: {temp_psd.shape}')
 
             # add to LFP or ECOG and correct move-dict
                 # define hemisphere location to movement
@@ -293,7 +296,7 @@ def prep_REST_spec_psds(PSD_DICT, BASELINE,
             # get psd arr and correct for baseline
             temp_psd = getattr(PSD_DICT[cond], attr)
             try:
-                bl = getattr(BASELINE, f'{SRC}_{sub}_baseline')
+                bl = getattr(BASELINE, f'{SRC}_{sub}_baseline').mean(axis=0)
             except:
                 print(f'### WARNING: no baseline found for {sub}: {SRC}, skipped')
                 continue

@@ -26,50 +26,13 @@ from lfpecog_preproc.preproc_import_scores_annotations import (
     get_ecog_side
 )
 
-# @dataclass(init=True,)
-# class PSD_plot_data:
-#     sel_subs: list
-#     LAT_OR_SCALE: str
-#     datatype: str = 'STN'
-#     CDRS_RATER: str = 'Patricia'
-#     CREATE_NEW_DATA: bool = False
-#     LOG_POWER=True
-#     ZSCORE_FREQS=True
-#     SMOOTH_PLOT_FREQS=0
-#     BASELINE_CORRECT=False
-#     BREAK_X_AX=False
-#     STD_ERR=True
-#     plt_ax_to_return=False
-#     fsize: int = 12
-#     fig_name='PLOT_STN_PSD_vs_DYSK'
-#     CALC_FREQ_CORR=False
-#     SINGLE_SUB_LINES=False
-#     SHOW_ONLY_GAMMA=False
-#     SHOW_SIGN=False
-#     PROCESS_STATS=False
-
-#     def __post_init__(self,):
-#         # get sorted psd data
-#         # try to load, either create
-#         if not self.CREATE_NEW_DATA:
-#             try:
-#                 self.psd_data = 
-#                 self.tf_freqs=
-#                 self.n_subs_incl,
-#                 self.cdrs_cat_coding
-#             except:
-#                 (self.psd_data, self.tf_freqs, self.n_subs_incl,
-#                  self.cdrs_cat_coding) = prep_Plot_PSD()
-#         else:
-#             (self.psd_data, self.tf_freqs, self.n_subs_incl,
-#              self.cdrs_cat_coding) = prep_Plot_PSD()
-
 
 @dataclass(init=True,)
 class get_selectedEphys:
     STATE_SEL: str
     FT_VERSION: int = 'v6'
     MIN_SEL_LENGTH: int = 5
+    RETURN_PSD_1sec: bool = False
     LOAD_PICKLE: bool = True
     SAVE_NEW_PICKLES: bool = True
     PLOT_SEL_DATA_PROCESS: bool = False
@@ -121,6 +84,8 @@ class get_selectedEphys:
             'windowed_data_classes_10s_0.5overlap',
             'selected_psd_states'
         )
+        if self.RETURN_PSD_1sec: states_picklepath += '_1secArrays'
+        
         self.loaded_subs = []
 
         # GET RELEVANT STATE PSDs per Subject and Source
@@ -171,6 +136,7 @@ class get_selectedEphys:
 
                 sub_class = PSD_vs_Move_sub(sub=sub,
                                             PLOT_SELECTION_DATA=self.PLOT_SEL_DATA_PROCESS)
+                
                 # for saving delete total 3d arrays and save only mean psd arrays
                 for src in sub_class.ephys_sources:
                     delattr(sub_class, f'{src}_3d')
@@ -184,6 +150,7 @@ class get_selectedEphys:
 
             ### calculate condition-PSDs with loaded SUB_CLASS
             src_INVOL_TODO = {s: True for s in sub_class.ephys_sources}  # bool to calc DYSK MOVE once per source     
+            
             # select relevant data (PSDs) for subject
             for src, sel in product(sub_class.ephys_sources,
                                     sub_class.incl_selections):
@@ -196,7 +163,8 @@ class get_selectedEphys:
                         ephys_arr=bl_sig,
                         sfreq=sub_class.fs,
                         SETTINGS=self.SETTINGS,
-                        band_names=sub_class.band_names
+                        band_names=sub_class.band_names,
+                        RETURN_PSD_1sec=self.RETURN_PSD_1sec,
                     )
                     if len(psdtemp) == 0: continue  # array shorter than 1 second
                     np.save(os.path.join(states_picklepath,
@@ -218,7 +186,8 @@ class get_selectedEphys:
                             ephys_arr=getattr(sub_class, sel).ephys_2d_arr[time_SEL.astype(bool), :],
                             sfreq=sub_class.fs,
                             SETTINGS=self.SETTINGS,
-                            band_names=sub_class.band_names
+                            band_names=sub_class.band_names,
+                            RETURN_PSD_1sec=self.RETURN_PSD_1sec,
                         )
                         if len(psdtemp) == 0: continue  # array shorter than 1 second
                         np.save(os.path.join(states_picklepath,
@@ -242,7 +211,8 @@ class get_selectedEphys:
                             ephys_arr=lid_sel,
                             sfreq=sub_class.fs,
                             SETTINGS=self.SETTINGS,
-                            band_names=sub_class.band_names
+                            band_names=sub_class.band_names,
+                            RETURN_PSD_1sec=self.RETURN_PSD_1sec,
                         )
                         if len(psdtemp) == 0: continue  # array shorter than 1 second
                         if lid_code == 'lid': lid_code = 'all'
@@ -293,7 +263,8 @@ class get_selectedEphys:
                                 ephys_arr=lid_sel,
                                 sfreq=sub_class.fs,
                                 SETTINGS=self.SETTINGS,
-                                band_names=sub_class.band_names
+                                band_names=sub_class.band_names,
+                                RETURN_PSD_1sec=self.RETURN_PSD_1sec,
                             )
                             if len(psdtemp) == 0: continue  # array shorter than 1 second
                             if lid_code == 'lid': lid_code = 'all'
@@ -317,7 +288,8 @@ class get_selectedEphys:
                             ephys_arr=sig,
                             sfreq=sub_class.fs,
                             SETTINGS=self.SETTINGS,
-                            band_names=sub_class.band_names
+                            band_names=sub_class.band_names,
+                            RETURN_PSD_1sec=self.RETURN_PSD_1sec,
                         )
                         if len(psdtemp) == 0: continue  # array shorter than 1 second
                         np.save(os.path.join(states_picklepath,
@@ -336,7 +308,8 @@ class get_selectedEphys:
                                 ephys_arr=lid_sel,
                                 sfreq=sub_class.fs,
                                 SETTINGS=self.SETTINGS,
-                                band_names=sub_class.band_names
+                                band_names=sub_class.band_names,
+                                RETURN_PSD_1sec=self.RETURN_PSD_1sec,
                             )
                             if len(psdtemp) == 0: continue  # array shorter than 1 second
                             np.save(os.path.join(states_picklepath,
@@ -526,5 +499,6 @@ def load_sub_states(state, sub, pickled_state_path,
         return True, []
     
     else:
-        print('\n...no available state-sub-arrays found, try new CREATION \n')
+        print('\n...no available state-sub-arrays found, try new CREATION '
+              f'for {state} in sub-{sub}\n')
         return False, None
