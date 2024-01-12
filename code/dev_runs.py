@@ -11,9 +11,15 @@ from lfpecog_analysis.psd_analysis_classes import (
 if __name__ == '__main__':
 
     print('run get_selectedEphys()')
-    ALLSUBS = get_selectedEphys(STATE_SEL='rest_noLid',
+    ALLSUBS = get_selectedEphys(STATE_SEL='freenomove_nolid',
+                                RETURN_PSD_1sec=True,
                                 LOAD_PICKLE=True,
                                 USE_EXT_HD=True,
                                 PREVENT_NEW_CREATION=False,
-                                FORCE_CALC_PSDs=True,
-                                verbose=True,)
+                                FORCE_CALC_PSDs=True,   # FORCE PARTLY NEW CREATION
+                                verbose=True,
+                                # SKIP_BASELINE=True,
+                                # SKIP_DYSKMOVE=True,
+                                # SKIP_REST=True,
+                                # SKIP_TAP=True,
+                                SKIP_FREE=False,)

@@ -80,7 +80,8 @@ def select_3d_ephys_moveTaskLid(
     """
     # automated input check and correction
     allowed_sels = ['BASELINE', 'REST',
-                    'VOLUNTARY', 'INVOLUNTARY',]
+                    'VOLUNTARY', 'INVOLUNTARY',
+                    'FREENOMOVE', 'FREEMOVE']
     assert SEL.upper() in allowed_sels, f'incorrect SEL: {SEL}'
     SEL = SEL.upper()
     
@@ -96,11 +97,6 @@ def select_3d_ephys_moveTaskLid(
         'if INVOLUNTARY is defined, NO DYSK (or all) cannot be included'
     )
 
-    # get all variables out of class (causes circular import error)
-    # if type(psdMoveClass) == PSD_vs_Move_sub:
-    #     assert ephys_source in psdMoveClass.ephys_sources, (
-    #         'incorrect ephyssource for psdMoveClass usage'
-    #     )
 
     ephys_3d = getattr(psdMoveClass, f'{ephys_source}_3d').copy()
     ephys_time_2d = psdMoveClass.ephys_time_arr.copy()
@@ -154,6 +150,8 @@ def select_3d_ephys_moveTaskLid(
         TASK = [0]  # only select rest
     elif SEL == 'VOLUNTARY':
         TASK = [1]  # only select tap
+    elif 'FREE' in SEL:
+        TASK = [2]  # only select free
     else:
         TASK == [0, 1, 2]  # select all
 
@@ -168,9 +166,9 @@ def select_3d_ephys_moveTaskLid(
 
 
     ### SELECTION-2: add 2d-mask for MOVEMENT SELECTION
-    if 'REST' in SEL or SEL == 'BASELINE':
+    if 'REST' in SEL or SEL in ['BASELINE', 'FREENOMOVE']:
         mov_mask = move_masks['no_move']  # select move-mask
-        if verbose: print('\t...all movement excluded in rest or baseline')
+        if verbose: print('\t...all movement excluded in rest or baseline or freenomove')
     
     # add taps per defined side to mask
     elif SEL == 'VOLUNTARY':
@@ -181,7 +179,7 @@ def select_3d_ephys_moveTaskLid(
         
     # add most ensured dyskinesia moments
     # above only rest-task selected, now add all movements
-    elif SEL == 'INVOLUNTARY':
+    elif SEL in ['INVOLUNTARY', 'FREEMOVE']:
         mov_mask = np.zeros_like(MASK)
         for mask_side in ['left', 'right']:
             if SEL_bodyside in ['both', mask_side]:

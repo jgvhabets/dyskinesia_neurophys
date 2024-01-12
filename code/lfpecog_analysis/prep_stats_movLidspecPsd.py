@@ -109,9 +109,9 @@ def get_MOVE_stat_grouped_data(
     if STAT_SPLIT == 'no-LID vs all-LID':
         group_states = {0: ['nolid'],
                         1: ['mildlid', 'moderatelid', 'severelid']}
-    # elif STAT_SPLIT == 'no-LID (<30) vs all-LID':
-    #     group_states = {0: ['nolidbelow30'],
-    #                     1: ['mildlid', 'moderatelid', 'severelid']}
+    elif STAT_SPLIT == 'LID linear':
+        group_states = {0: ['nolid'], 1: ['mildlid'], 
+                        2: ['moderatelid'], 3: ['severelid']}
 
     # GET PSD ARRAYS (move states are dependent on move_cond)
     (psd_arrs,

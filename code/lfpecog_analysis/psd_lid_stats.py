@@ -8,7 +8,7 @@ import pandas as pd
 import json
 import os
 # from statsmodels.formula.api import mixedlm
-
+import matplotlib.pyplot as plt
 # import own functions
 from utils.utils_fileManagement import (get_project_path,
                                         make_object_jsonable)
@@ -77,6 +77,14 @@ def calc_lmem_freqCoeffs(temp_values,
         if isinstance(result_list, bool):
             if result_list == False:
                 print(f'\n#### no conversion for {f}\n')
+                fig, ax = plt.subplots(1,1, figsize=(4, 4))
+                ax.scatter([0] * sum(stat_labels == 0),
+                           stat_values[stat_labels == 0, i_f],)
+                ax.scatter([1] * sum(stat_labels == 1),
+                           stat_values[stat_labels == 1, i_f],)
+                ax.set_title(f'{f} Hz')
+                plt.show()
+                break
                 coeffs_freqs.append(0)
                 sign_freqs.append(False)
                 continue
