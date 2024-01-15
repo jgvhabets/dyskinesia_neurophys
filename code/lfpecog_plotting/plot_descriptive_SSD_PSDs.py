@@ -1218,6 +1218,7 @@ def break_x_axis_psds_ticks(tf_freqs, PSD, PSD_sd=False,
         
         if isinstance(PSD_sd, np.ndarray):
             PSD_sd = np.delete(PSD_sd, del_sel,)
+
         plt_freqs = np.delete(tf_freqs.copy(), del_sel,).astype(float)
         i_sel = np.argmin(abs(plt_freqs - x_break[0]))
         PSD = np.insert(PSD, i_sel + 1, values=[np.nan] * nan_pad,)
@@ -1229,6 +1230,9 @@ def break_x_axis_psds_ticks(tf_freqs, PSD, PSD_sd=False,
                                 values=[np.nan] * nan_pad,)
 
         xticks = np.arange(len(PSD))
+    
+    else:
+        raise ValueError(f'PSD should be array or list, type: {type(PSD)}')
         
     xlabels = [''] * len(xticks)
     low_ticks = plt_freqs[plt_freqs <= x_break[0]]
@@ -1238,6 +1242,13 @@ def break_x_axis_psds_ticks(tf_freqs, PSD, PSD_sd=False,
     high_ticks = [round(t) for t in high_ticks]
     xlabels[len(xlabels) - len(high_ticks):] = high_ticks
 
+    # correct missing NaNs (necessary during sign True/False arras)
+    if not np.isnan(PSD).any():
+        for i, lab in enumerate(xlabels):
+            if lab == '' and PSD[i] == True:
+                print(f'...(break_xaxis) corrected label {i} ({lab}) from {PSD[i]} to False')
+                PSD[i] = False
+                
 
     if isinstance(PSD, dict): return PSD, xticks, xlabels
     elif isinstance(PSD, np.ndarray):

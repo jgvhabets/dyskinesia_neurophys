@@ -16,7 +16,7 @@ if __name__ == '__main__':
                                 LOAD_PICKLE=True,
                                 USE_EXT_HD=True,
                                 PREVENT_NEW_CREATION=False,
-                                FORCE_CALC_PSDs=True,   # FORCE PARTLY NEW CREATION
+                                FORCE_CALC_PSDs=False,
                                 verbose=True,
                                 # SKIP_BASELINE=True,
                                 # SKIP_DYSKMOVE=True,

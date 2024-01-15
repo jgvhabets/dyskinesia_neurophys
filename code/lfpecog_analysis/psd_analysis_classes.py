@@ -26,6 +26,56 @@ from lfpecog_preproc.preproc_import_scores_annotations import (
     get_ecog_side
 )
 
+def get_allSpecStates_Psds(
+    RETURN_PSD_1sec = True
+):
+    """
+    
+    Returns:
+        - PSDs: dict with all conditions
+        - BLs: baseline class
+    """
+
+    
+
+    sources = ['lfp_left', 'lfp_right', 'ecog']
+    lid_states = ['no', 'mild', 'moderate', 'severe']
+
+    # define conditions to be loaded as seperate get_selectedEphys classes
+    rest_conditions = ['rest_nolidbelow30', 'rest_nolidover30'] + [
+        f'rest_{l}lid' for l in lid_states[1:]
+    ]
+    tap_conditions = [f'tap{s}_{l}lid' for s, l in
+                    product(['left', 'right'], lid_states)]
+    lidmove_conditions = [
+        f'dyskmove{s}only_{l}lid' for s, l in
+        product(['left', 'right'], lid_states)
+    ] + [f'dyskmoveboth_{l}lid' for l in lid_states]
+
+    conditions = rest_conditions + tap_conditions + lidmove_conditions
+    print(f'EXTRACT classes for specific Conditions: {conditions}')
+
+    # get baselines
+    BLs = get_selectedEphys(
+        STATE_SEL='baseline',
+        LOAD_PICKLE=True,
+        USE_EXT_HD=True,
+        PREVENT_NEW_CREATION=False,
+        RETURN_PSD_1sec=RETURN_PSD_1sec,
+    )
+
+    PSDs = {
+        cond: get_selectedEphys(
+            STATE_SEL=cond,
+            LOAD_PICKLE=True,
+            USE_EXT_HD=True,
+            PREVENT_NEW_CREATION=False,
+            RETURN_PSD_1sec=RETURN_PSD_1sec,
+        ) for cond in conditions
+    }
+
+    return PSDs, BLs
+
 
 @dataclass(init=True,)
 class get_selectedEphys:
@@ -90,9 +140,10 @@ class get_selectedEphys:
         )
         
         ### INCLUDE FREE
-        print(f'\n#### ADDING inclFREE to FOLDERNAMES FOR NEW CREATION')
-        picklepath += '_inclFREE'
-        states_picklepath += '_inclFREE'
+        # print(f'\n#### ADDED inclFREE to FOLDERNAMES FOR NEW CREATION')
+        # picklepath += '_inclFREE'
+        # states_picklepath += '_inclFREE'
+        print(f'\n#### (no FREE folder) TODO: calculate selectedPsdState (MEANS) incl FREE')
         
         if self.RETURN_PSD_1sec: states_picklepath += '_1secArrays'
         
@@ -337,23 +388,31 @@ class get_selectedEphys:
                 ## extract FREE moments
                 if src in sel and 'FREE' in sel:
                     if self.SKIP_FREE: continue
+                    print(f'...process {sel}')
                     # take for no move or both: all times, for L/R-moves, take only unilat movement
-                    if np.logical_or(sel == 'FREEMOVE' and 'moveboth' in sel,
-                                     sel == 'FREENOMOVE'):
+                    if np.logical_or('FREEMOVE' in sel and 'moveboth' in sel,
+                                     'FREENOMOVE' in sel):
                         move_bool = [True] * len(getattr(sub_class, sel).time_arr)
                         if sel == 'FREENOMOVE': move_code = 'nomove'
                         else: move_code = 'moveboth'
                     else:  # for left and right FREEMOVE
+                        # get unique side-only times, catch Error if other side is not present
                         own_times = getattr(sub_class, sel).time_arr
                         if 'moveleft' in sel:
-                            contra_times = getattr(sub_class, sel.replace('moveleft', 'moveright')).time_arr
                             move_code = 'move_left'
+                            try:
+                                contra_times = getattr(sub_class, sel.replace('moveleft', 'moveright')).time_arr
+                            except AttributeError:
+                                contra_times = np.array([])
                         elif 'moveright' in sel:
-                            contra_times = getattr(sub_class, sel.replace('moveright', 'moveleft')).time_arr 
                             move_code = 'move_right'
+                            try:
+                                contra_times = getattr(sub_class, sel.replace('moveright', 'moveleft')).time_arr
+                            except AttributeError:
+                                contra_times = np.array([])
                         # gives boolean array: LEFT time-array NOT IN RIGHT, and viceversa
                         move_bool = ~np.in1d(own_times, contra_times)  # np.in1d is true if first array value is in second arr
-                    print(f'...FREE move_bool for {sel}: selected {sum(move_bool)} out of {len(move_bool)}')
+                    
                     if sum(move_bool) == 0: continue  # skip empty combinations
                     temp_ephys = getattr(sub_class, sel).ephys_2d_arr[move_bool, :]
                     temp_cdrs = getattr(sub_class, sel).cdrs_arr[move_bool]

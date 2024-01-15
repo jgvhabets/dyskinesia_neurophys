@@ -11,19 +11,28 @@ AND IPSI, CONTRA movements
 """
 
 # import public packes
+import os
 import numpy as np
+import pandas as pd
 from itertools import product
 
 # import own functions
 from lfpecog_plotting.plot_move_spec_psd import (
-    prep_REST_spec_psds,
-    prep_MOVEMENT_spec_psds
+    prep_REST_spec_psds, prep_MOVEMENT_spec_psds,
+    plot_rest_lmm, plot_move_lmm
 )
+from utils.utils_fileManagement import get_project_path
+import lfpecog_analysis.psd_lid_stats as psd_Stats
+from lfpecog_analysis.psd_analysis_classes import (
+    get_allSpecStates_Psds
+)
+
 
 def get_REST_stat_grouped_data(
     PSD_DICT, BL_class,
     STAT_SPLIT: str,
     SRC: str = 'lfp_left',
+    MERGE_STNs: bool = False,
     PSD_1s_windows: bool = False,
 ):
     # DEFINE STAT GROUPS
@@ -43,9 +52,12 @@ def get_REST_stat_grouped_data(
      psd_subs) = prep_REST_spec_psds(
         PSD_DICT=PSD_DICT,
         BASELINE=BL_class,
-        RETURN_IDS=True)
+        RETURN_IDS=True,
+        MERGE_REST_STNS=MERGE_STNs,)
+
     src_psd = psd_arrs[SRC]
     src_subs = psd_subs[SRC]
+
 
     # put data from diff LID-states in correct groups
     for group in group_states:
@@ -81,7 +93,6 @@ def get_REST_stat_grouped_data(
                 f'psd_arrs ({group_psds[group].shape}) DONT MATCH '
                 f'subs: {len(group_subs[group])} and/or freqs: {len(psd_freqs)}'
         )
-        print(f'...created PSD-group {group}: {group_psds[group].shape} correct')
 
     stat_values = np.concatenate([group_psds[i] for i in group_states.keys()])
     stat_labels = np.concatenate([[i] * len(group_subs[i]) for i in group_states.keys()])
@@ -93,7 +104,7 @@ def get_REST_stat_grouped_data(
 def get_MOVE_stat_grouped_data(
     PSD_DICT, BL_class,
     MOVE_COND: str,
-    STAT_SPLIT: str = 'no-LID vs all-LID',
+    STAT_SPLIT: str = 'linear',
     SRC: str = 'lfp',
     PSD_1s_windows: bool = False,
 ):
@@ -106,10 +117,10 @@ def get_MOVE_stat_grouped_data(
 
     """
     # DEFINE STAT GROUPS
-    if STAT_SPLIT == 'no-LID vs all-LID':
+    if STAT_SPLIT == 'binary':
         group_states = {0: ['nolid'],
                         1: ['mildlid', 'moderatelid', 'severelid']}
-    elif STAT_SPLIT == 'LID linear':
+    elif STAT_SPLIT == 'linear':
         group_states = {0: ['nolid'], 1: ['mildlid'], 
                         2: ['moderatelid'], 3: ['severelid']}
 
@@ -187,3 +198,208 @@ def get_MOVE_stat_grouped_data(
     return stat_values, stat_labels, stat_ids, psd_freqs
 
 
+def get_stats_REST_psds(
+    STAT_DATA_EXT_PATH = True,
+    STAT_LID_COMPARE = 'binary',
+    PLOT_STATS = False,
+    MERGE_STNs: bool = False,
+):
+    CLASSES_LOADED = False  # bool to only load classes once during creation
+    
+    if STAT_DATA_EXT_PATH:
+        stat_dir = ('D://Research/CHARITE/projects/'
+                    'dyskinesia_neurophys/data/'
+                    'windowed_data_classes_10s_0.5overlap/psdStateStats')
+    elif not STAT_DATA_EXT_PATH:
+        stat_dir = (get_project_path('data'),
+                    'windowed_data_classes_10s_0.5overlap/psdStateStats')
+
+    assert STAT_LID_COMPARE in ['binary', 'linear'], (
+        f'STAT_LID_COMPARE ({STAT_LID_COMPARE}) should be linear / binary'
+    )
+    stat_dir += f'_lid{STAT_LID_COMPARE.capitalize()}'  # add Linear or Binary
+
+    # define LID split for analysis
+    allowed_splits = ['no-LID (<30) vs all-LID',
+                      'no-LID vs all-LID']
+    sources = ['lfp_left', 'lfp_right', 'ecog']
+    if MERGE_STNs: sources = ['lfp', 'ecog']
+
+    stat_dfs = {}
+
+    for i_src, SRC in enumerate(sources):
+        print(f'#### START {SRC}')
+        # for binary LID comparisons
+        df_name = f'PsdStateStats_1secWins_REST_{SRC}.csv'
+        stat_path = os.path.join(stat_dir, df_name)
+
+        if os.path.exists(stat_path):
+            print(f'... loading existing csv {stat_path}')
+            stat_dfs[SRC] = pd.read_csv(stat_path, header=0, index_col=0)
+            continue
+
+        # CALCULATE statistics
+        if not CLASSES_LOADED:
+            PSDs, BLs = get_allSpecStates_Psds(RETURN_PSD_1sec=True)
+            CLASSES_LOADED = True
+            
+        sign_bools, lmm_coeffs = [], []
+
+        for SPLIT in allowed_splits:
+            # get grouped stat data
+            (
+                stat_values, stat_labels, stat_ids, value_freqs
+            ) = get_REST_stat_grouped_data(
+                STAT_SPLIT=SPLIT, SRC=SRC,
+                PSD_DICT=PSDs, BL_class=BLs,
+                PSD_1s_windows=True,
+                MERGE_STNs=MERGE_STNs,
+            )
+
+            # get STATS (coeffs, sign-bools) based on grouped data
+            (
+                (coeffs_freqs, sign_freqs), stat_freqs
+            ) = psd_Stats.calc_lmem_freqCoeffs(
+                temp_values=stat_values,
+                temp_ids=stat_ids,
+                temp_freqs=value_freqs,
+                VALUES_GIVEN_GROUPED=True,
+                GROUP_LABELS=stat_labels,
+            )
+            sign_bools.append(sign_freqs)
+            lmm_coeffs.append(coeffs_freqs)
+
+        sign_bools = np.array(sign_bools)
+        lmm_coeffs = np.array(lmm_coeffs)
+
+
+        # SAVE STATS in dataframes
+        colnames = [[f'coef_{s}', f'sig_{s}'] for s in allowed_splits]
+        stat_df = pd.DataFrame(
+            index=stat_freqs,
+            columns=[c for s in colnames for c in s])
+
+        stat_df.iloc[:, 0] = lmm_coeffs[0]
+        stat_df.iloc[:, 2] = lmm_coeffs[1]
+        stat_df.iloc[:, 1] = sign_bools[0]
+        stat_df.iloc[:, 3] = sign_bools[1]
+
+        stat_df.to_csv(os.path.join(stat_dir, df_name),
+                        header=True, index=True)
+        stat_dfs[SRC] = stat_df
+        
+        
+        a = round(.05 / len(value_freqs), 4)
+
+    if PLOT_STATS:
+        plot_rest_lmm(stat_dfs, allowed_splits,
+                        FIGNAME='REST_lmm_sigs_binary',
+                        SAVE_FIG=True,)
+
+
+def get_stats_MOVE_psds(
+    STAT_DATA_EXT_PATH = True,
+    STAT_LID_COMPARE = 'linear',
+    PLOT_STATS = False,
+):
+    SOURCES = ['lfp', 'ecog']
+    SIDES = ['CONTRA', 'IPSI', 'BILAT']
+
+    if STAT_LID_COMPARE == 'linear':
+        label = 'LID linear'
+    elif STAT_LID_COMPARE == 'binary':
+        label = 'no-LID vs all-LID'
+
+    CLASSES_LOADED = False  # bool to only load classes once during creation
+    
+    if STAT_DATA_EXT_PATH:
+        stat_dir = ('D://Research/CHARITE/projects/'
+                    'dyskinesia_neurophys/data/'
+                    'windowed_data_classes_10s_0.5overlap/psdStateStats')
+    elif not STAT_DATA_EXT_PATH:
+        stat_dir = (get_project_path('data'),
+                    'windowed_data_classes_10s_0.5overlap/psdStateStats')
+
+    assert STAT_LID_COMPARE in ['binary', 'linear'], (
+        f'STAT_LID_COMPARE ({STAT_LID_COMPARE}) should be linear / binary'
+    )
+    stat_dir += f'_lid{STAT_LID_COMPARE.capitalize()}'  # add Linear or Binary
+
+    
+    for MOV in ['TAP', 'INVOLUNT']:
+    
+        if STAT_LID_COMPARE == 'binary' and MOV == 'INVOLUNT':
+            print(f'SKIP binary comparison for dyskinetic movement')
+            continue
+
+        print(f'\nSTART {MOV}\n')
+
+        stat_dfs = {}
+
+        for i_src, (SRC, SIDE) in enumerate(
+            product(SOURCES, SIDES)
+        ):
+            print(f'({MOV}) START-{i_src}: {SRC} x {SIDE}')
+            df_name = f'PsdStateStats_1secWins_{MOV}_{SRC}_{SIDE}.csv'
+            stat_path = os.path.join(stat_dir, df_name)
+
+            if os.path.exists(stat_path):
+                print(f'...load {df_name}')
+                stat_dfs[f'{SRC}_{SIDE}'] = pd.read_csv(stat_path,
+                                                        header=0, index_col=0)
+                continue
+
+            ## calculate grouped stat data
+
+            # load PSD classes (1sec arrays) only once
+            if not CLASSES_LOADED:
+                PSDs, BLs = get_allSpecStates_Psds(RETURN_PSD_1sec=True)
+                CLASSES_LOADED = True
+            
+            (
+                stat_values, stat_labels, stat_ids, value_freqs
+            ) = get_MOVE_stat_grouped_data(
+                MOVE_COND=MOV, SRC=SRC,
+                STAT_SPLIT=STAT_LID_COMPARE,
+                PSD_DICT=PSDs, BL_class=BLs,  # USE 1-SEC CLASSES FOR STATISTICS
+                PSD_1s_windows=True,
+            )
+            # adjust SIDE to keys
+            SIDE = [k for k in stat_values.keys() if SIDE in k]
+            if len(SIDE) == 1:
+                SIDE = SIDE[0]
+            elif len(SIDE) == 0:
+                print(f'no matching SIDE VALUES for')
+                continue
+            else:
+                print(f'TOO MANY SIDES found {SIDE}')
+            stat_values = stat_values[SIDE]
+            stat_labels = stat_labels[SIDE]
+            stat_ids = stat_ids[SIDE]
+
+            # get STATS (coeffs, sign-bools) based on grouped data
+            (
+                (coeffs_freqs, sign_freqs), stat_freqs
+            ) = psd_Stats.calc_lmem_freqCoeffs(
+                temp_values=stat_values,
+                temp_ids=stat_ids,
+                temp_freqs=value_freqs,
+                VALUES_GIVEN_GROUPED=True,
+                GROUP_LABELS=stat_labels,
+            )
+
+            # SAVE STATS in dataframes
+            stat_df = pd.DataFrame(
+                index=stat_freqs,
+                columns=[f'coef_{STAT_LID_COMPARE}',
+                         f'sig_{STAT_LID_COMPARE}'])
+            stat_df.iloc[:, 0] = coeffs_freqs
+            stat_df.iloc[:, 1] = sign_freqs
+
+            stat_df.to_csv(stat_path, header=True, index=True)
+            stat_dfs[f'{SRC}_{SIDE}'] = stat_df
+
+        # PLOT
+        if PLOT_STATS:
+            plot_move_lmm(MOV, stat_dfs, SAVE_FIG=True,
+                          FIGNAME=f'LMMcoeffs_{MOV}_{STAT_LID_COMPARE}')
