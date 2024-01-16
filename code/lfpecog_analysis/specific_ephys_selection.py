@@ -179,7 +179,7 @@ def select_3d_ephys_moveTaskLid(
         
     # add most ensured dyskinesia moments
     # above only rest-task selected, now add all movements
-    elif SEL in ['INVOLUNTARY', 'FREEMOVE']:
+    elif SEL in ['INVOLUNTARY', 'FREEMOVE']:  # FREEMOVE comes as left/right move
         mov_mask = np.zeros_like(MASK)
         for mask_side in ['left', 'right']:
             if SEL_bodyside in ['both', mask_side]:
@@ -351,7 +351,7 @@ def get_ssd_psd_from_array(
         assert len(new_psd) == len(new_f), (
             f'f {new_f.shape} and psd {new_psd.shape} not match'
         )
-        assert np.any(np.isnan(new_psd), axis=0), (
+        assert ~np.any(np.isnan(new_psd), axis=0), (
             f'NaNs in new_psd ({sum(np.isnan(new_psd))})'
         )
 

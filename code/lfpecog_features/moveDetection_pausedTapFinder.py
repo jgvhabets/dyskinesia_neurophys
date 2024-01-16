@@ -266,53 +266,35 @@ def remove_lists_with_NaN(
 
 
 def find_local_act_borders(peak_i, svm_sig, svmThr):
+    """
+    returns indices of borders around activity peak,
+    indices correspond to svm_sig-indices
+    """
     # find moments below threshold
-    bool_low = np.where(svm_sig < svmThr)[0]  # low due to tilde conversion
-    bools = bool_low - peak_i  # find distances to peak-index
+    idx_low_act = np.where(svm_sig < svmThr)[0]  # low due to tilde conversion
+    dists_bools = idx_low_act - peak_i  # find distances to peak-index
     # find closest point on the left
-    left_bools = bools[bools < 0]
-    left_idx = bool_low[bools < 0]
+    neg_dists = dists_bools[dists_bools < 0]
+    if len(neg_dists) == 0: return False, False
+    left_idx = idx_low_act[dists_bools < 0]
     try:
-        left_border = left_idx[np.argmin(abs(left_bools))]
+        idx_left_border = left_idx[np.argmin(abs(neg_dists))]
     except ValueError:
-        # if peak_i < 1000:
-        #     left_border = 0
-        # else:
-        # incorrect border found
-        return False, False
+        if np.argmin(abs(neg_dists)) == len(left_idx):
+            idx_left_border = len(left_idx) - 1
+        else: return False, False
     # find closest point on the right
-    right_bools = bools[bools > 0]
-    right_idx = bool_low[bools > 0]
+    pos_dists = dists_bools[dists_bools > 0]
+    if len(pos_dists) == 0: return False, False
+    right_idx = idx_low_act[dists_bools > 0]
     try:
-        right_border = right_idx[np.argmin(abs(right_bools))]
+        idx_right_border = right_idx[np.argmin(abs(pos_dists))]
     except ValueError:
-        # if (len(svm_sig) - peak_i) < 1000:
-        #     right_border = len(svm_sig) - 
-        # else:
-        # incorrect border found
-        return False, False
-    # pre_i = np.nan
-    # post_i = np.nan
-
-    # i = peak_i
-    # while np.isnan(pre_i):
-        
-    #     i -= 1
-    #     try:
-    #         if svm_sig[i] < svmThr: pre_i = i
-    #     except IndexError:
-    #         break  # skip if border is out of data
+        if np.argmin(abs(pos_dists)) == len(right_idx):
+            idx_right_border = len(right_idx) - 1
+        else: return False, False
     
-    # i = peak_i
-    # while np.isnan(post_i):
-        
-    #     i += 1
-    #     try:
-    #         if svm_sig[i] < svmThr: post_i = i
-    #     except IndexError:
-    #         break  # skip if border is out of data
-    
-    return left_border, right_border
+    return idx_left_border, idx_right_border
 
 
 def saveAllEphysRestblocks(
@@ -365,3 +347,161 @@ def saveAllEphysRestblocks(
 
     dopaIN = datetime.strptime(dopaIntakeTime, '%Y-%m-%d %H:%M')
 
+
+
+def specTask_movementClassifier(
+    acc_class, task: str = 'free',
+    svm_thr=1e-7, verbose=False,    
+):
+    """
+    Function finds specific movement blocks
+    (containing ALL movement, no TAP selection)
+    for a specific task. (used for movement labeling
+    of FREE tasks)
+
+    Args:
+        - acc_clas: resulting from accDerivs.get_raw_acc_traces()
+        - task: task to select
+        - svm_thr: used for activity detection, adjusted
+            automatically in specific cases
+    
+    Returns:
+        - move_times, dict containing start and end-lists
+            with TIMES (in sec) of movement blocks
+    """
+    # select out task data
+    task_idx = ['task' in c for c in acc_class.colnames]
+    task_arr = acc_class.data[:, task_idx].ravel()  # ravel to reduce to 1d for indexing
+    # select task moments
+    task_sel = task_arr == task
+
+    # select times
+    time_idx = ['time' in c for c in acc_class.colnames]
+    time_sel = acc_class.data[task_sel, time_idx]
+
+    # select acc data
+    acc_idx = ['ACC' in c for c in acc_class.colnames]
+    acc_arr = acc_class.data[:, acc_idx]
+    acc_sel = acc_arr[task_sel, :]
+
+    # define main axis
+    mainAx_ind = movePrep.find_main_axis(acc_arr)
+
+    # calculate and smooth SVM
+    svm = movePrep.signalvectormagn(acc_sel)  # svm for task data
+    svm = uniform_filter1d(
+        svm, size=int(acc_class.fs / 4)
+    )
+    # find peaks (indices corr to task selection)
+    mov_peaks = find_move_moments(
+        main_ax_sig=acc_sel[:, mainAx_ind],
+        svm=svm, sub=acc_class.sub,
+        fs=acc_class.fs,
+    )
+    if verbose: print(f'# peaks found: {len(mov_peaks)}')
+    # get borders of activity around movement peaks (idx corr to svm-indices)
+    move_times = {'start': [], 'end': []}
+    # prevents double peak processing if border is already set further
+    last_border = -30 * 60 * acc_class.fs
+    for p in mov_peaks:
+        if p < last_border: continue
+        i1, i2 = find_local_act_borders(
+            p, svm_sig=svm, svmThr=svm_thr,  # svm is already task selected
+        )
+        if isinstance(i1, bool): continue  # skip incorrect indices
+        # convert svm (tasl-selected) indices to time, and apply as mask
+        t1, t2 = time_sel[i1], time_sel[i2]
+        # check for too big jump bcs of missing data (> 60 seconds)
+        if (t2 - t1) > 60: continue
+        # add to lists
+        move_times['start'].append(time_sel[i1])
+        move_times['end'].append(time_sel[i2])
+        last_border = i2  # update current border
+        
+    for k in move_times: move_times[k] = np.array(move_times[k])
+
+    durations = [b - a for a,b in zip(move_times["start"],
+                                      move_times["end"])]
+    if verbose:
+        print(f'...found {len(move_times["start"])} blocks, '
+          f'mean duration: {round(np.mean(durations), 1)} seconds')
+    
+    return move_times
+
+
+def find_move_moments(
+    main_ax_sig, svm, sub, fs,
+    large_height = 5e-7,
+    small_height = 2.5e-7,
+):
+    """
+    Find three different types of movement peaks
+    that are similarly used for TAP detection
+    
+    - main_ax_sig:
+    - svm: (smoothed!, on 250 ms)
+    """
+    # correct thresholds if necessary
+    if max(main_ax_sig) > 1 and sub in ['105']:
+        svm_thr = .05  # correct for incorrect ACC range
+        large_height = .3
+        small_height = .1
+    elif max(main_ax_sig) > 1:
+        svm_thr = .1  # correct for incorrect ACC range
+        large_height = .5
+        small_height = .3
+    elif sub in ['105']:
+        svm_thr = 5e-8  # correct for incorrect ACC range
+        large_height = 3e-7
+        small_height = 1e-7
+
+    # Find peaks to help movement detection
+    largePos = find_peaks(
+        main_ax_sig,
+        height=large_height,
+        distance=fs,  # 1 s
+    )[0]
+    smallPeaks = find_peaks(
+        svm,
+        height=small_height,
+        distance=fs,
+    )[0]
+    largeNeg = find_peaks(
+        -1 * main_ax_sig,  # convert pos/neg for negative peaks
+        height=large_height,
+        distance=fs,
+    )[0]
+
+    all_peaks = np.sort(np.concatenate([largePos, smallPeaks, largeNeg]))
+    all_peaks = np.unique(all_peaks)
+
+    # PEAKS into find_local_act_borders()
+    return all_peaks
+
+
+def get_move_bool_for_timeArray(
+    time_arr, move_times: dict,
+    MAX_BLOCK_SEC: int = 60,
+):
+    """
+    Args:
+        - time_arr: time_arr to match with bool (in SECONDS)
+        - move_times: dict containing 'start' and 
+            'end' with TIMES of move blocks
+        - MAX_BLOCK_SEC: blocks longer than this
+            n of seconds are skipped
+    
+    Returns:
+        - move_bool: size corresponds to time_arr,
+            "1" for moveblocks, "0" for no movement
+    """
+    move_bool = np.zeros_like(time_arr)
+
+    for t1, t2 in zip(move_times['start'], move_times['end']):
+        if (t2 - t1) > MAX_BLOCK_SEC:
+            print(f'very large block  {(t2 - t1) / MAX_BLOCK_SEC}')
+        mov_sel = np.logical_and(time_arr > t1,
+                                 time_arr < t2)
+        move_bool[mov_sel] = 1
+    
+    return move_bool

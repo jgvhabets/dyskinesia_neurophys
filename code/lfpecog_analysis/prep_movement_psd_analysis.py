@@ -15,6 +15,7 @@ from utils.utils_fileManagement import (get_project_path,
                                         correct_acc_class,
                                         load_ft_ext_cfg,
                                         get_avail_ssd_subs)
+from lfpecog_analysis.get_acc_task_derivs import get_raw_acc_traces
 from lfpecog_analysis.ft_processing_helpers import (
     find_select_nearest_CDRS_for_ephys,
     categorical_CDRS
@@ -22,7 +23,7 @@ from lfpecog_analysis.ft_processing_helpers import (
 
 
 
-def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v4',
+def create_sub_movement_psds(sub, data_version='v4.0', ft_version='v6',
                              states_to_save=['tap', 'rest_no_move',
                                              'free_no_move', 'free_move'],
                              custom_tappers=['105', '010', '017'],):
@@ -353,14 +354,15 @@ def get_sub_tapTimings(sub,
     # use merged-data v4.0 for creation of v4.2
     if DATA_VERSION == 'v4.2': DATA_VERSION = 'v4.0'
     
-    sub_data_path = os.path.join(get_project_path('data'),
-                                 'merged_sub_data',
-                                  DATA_VERSION,
-                                  f'sub-{sub}')
-    fname = (f'{sub}_mergedData_{DATA_VERSION}'
-             '_acc_left.P')  # side does not matter for already detected bool labels
-    # load Acc-detected movement labels
-    acc = load_class_pickle(os.path.join(sub_data_path, fname))
+    # sub_data_path = os.path.join(get_project_path('data'),
+    #                              'merged_sub_data',
+    #                               DATA_VERSION,
+    #                               f'sub-{sub}')
+    # fname = (f'{sub}_mergedData_{DATA_VERSION}'
+    #          '_acc_left.P')  # side does not matter for already detected bool labels
+    # # load Acc-detected movement labels
+    # acc = load_class_pickle(os.path.join(sub_data_path, fname))
+    acc = get_raw_acc_traces(sub=sub, side='left', data_version=DATA_VERSION)
     acc = correct_acc_class(acc)
 
     # create dict with times, task, and taps
@@ -373,9 +375,11 @@ def get_sub_tapTimings(sub,
     if sub in custom_tappers:
         for side in ['left', 'right']:
             # load sided timeseries
-            fname = (f'{sub}_mergedData_{DATA_VERSION}'
-                        f'_acc_{side}.P')
-            acc = load_class_pickle(os.path.join(sub_data_path, fname))
+            acc = get_raw_acc_traces(sub=sub, side=side,
+                                     data_version=DATA_VERSION)
+            # fname = (f'{sub}_mergedData_{DATA_VERSION}'
+            #             f'_acc_{side}.P')
+            # acc = load_class_pickle(os.path.join(sub_data_path, fname))
             acc = correct_acc_class(acc)
             # find taps based on custom function
             _, _, taps = custom_tap_finding(
@@ -652,7 +656,7 @@ def create_ephys_masks(
     # POTENTIALLY LOOP OVER EPHYS SOURCES
     src = 'lfp_left'
     temp_ssd = getattr(ssd_sub, src)
-    print(f'\n### REMINDER: uses only {src} for mask finding!!!\n')
+    print(f'\n### REMINDER: only uses times from {src} for mask finding!!!\n')
 
     # create timestamps for every ephys sample in 2d array (2048 Hz)
     ephys_time_arr = np.array([
@@ -666,19 +670,21 @@ def create_ephys_masks(
 
     # get acc data for sub (side irrelevant for labels)
     print('...loading ACC')
-    sub_data_path = os.path.join(
-        get_project_path('data'), 'merged_sub_data',
-        DATA_VERSION, f'sub-{sub}')
-    fname = f'{sub}_mergedData_{DATA_VERSION}_acc_left.P'  # side does not matter for already detected bool labels
-    accl = load_class_pickle(os.path.join(sub_data_path, fname))
+    # sub_data_path = os.path.join(
+    #     get_project_path('data'), 'merged_sub_data',
+    #     DATA_VERSION, f'sub-{sub}')
+    # fname = f'{sub}_mergedData_{DATA_VERSION}_acc_left.P'  # side does not matter for already detected bool labels
+    # accl = load_class_pickle(os.path.join(sub_data_path, fname))
+    accl = get_raw_acc_traces(sub=sub, side='left', data_version=DATA_VERSION)
     accl = correct_acc_class(accl)
 
-    # get movement bools based on acc data (512 Hz)
+    # get movement column indices
     i_lefttap = np.where(['left_tap' in c.lower() for c in accl.colnames])[0][0]
     i_righttap = np.where(['right_tap' in c.lower() for c in accl.colnames])[0][0]
     i_leftmove = np.where(['left_move' in c.lower() for c in accl.colnames])[0][0]
     i_rightmove = np.where(['right_move' in c.lower() for c in accl.colnames])[0][0]
     i_nomove = np.where(['no_move' in c.lower() for c in accl.colnames])[0][0]
+    # get movement bools based on acc data (512 Hz)
     MOVE_BOOLS = {'no_move': accl.data[:, i_nomove],
                   'any_move': np.sum(accl.data[:, i_lefttap:i_rightmove+1], axis=1) > 0,
                   'left_tap': accl.data[:, i_lefttap],
@@ -710,16 +716,17 @@ def create_ephys_masks(
 
 
     else:
-        BOOL_SEL = 'any_move'
-        print(f'...create movement-mask ({BOOL_SEL}) for ephys')
-        starts, ends = get_start_end_times_move_epochs(
-            bool_to_incl=MOVE_BOOLS[BOOL_SEL],
-            acc_times_arr=accl.times,
-        )
-        move_mask = mask_movement_on_times(
-            ephys_time_arr=ephys_time_arr, nan_arr=nan_arr,
-            starts=starts, ends=ends,
-            verbose=verbose)
+        move_masks = {}
+        for BOOL_SEL in MOVE_BOOLS.keys():
+            print(f'...create movement-mask ({BOOL_SEL}) for ephys')
+            starts, ends = get_start_end_times_move_epochs(
+                bool_to_incl=MOVE_BOOLS[BOOL_SEL],
+                acc_times_arr=accl.times,
+            )
+            move_masks[BOOL_SEL] = mask_movement_on_times(
+                ephys_time_arr=ephys_time_arr, nan_arr=nan_arr,
+                starts=starts, ends=ends,
+                verbose=verbose)
 
     # # print to check portion in orig bool and 2d array
     # print(np.nansum(move_mask) / (move_mask.shape[0] * move_mask.shape[1] - np.sum(np.isnan(move_mask))))
@@ -778,10 +785,10 @@ def create_ephys_masks(
 
     if not ADD_TO_CLASS:
         assert (temp_ssd.lo_beta.shape == task_mask.shape
-                == lid_mask.shape == move_mask.shape), (
+                == lid_mask.shape == list(move_masks.values())[0].shape), (
             'one of masks or ephys data does not match shapes'
         )
-        return move_mask, task_mask, lid_masks
+        return move_masks, task_mask, lid_masks
     
     if ADD_TO_CLASS:
         # add remaining masks to add
@@ -865,8 +872,8 @@ def mask_movement_on_times(
         # when no starts or endings were found in window
         if len(temp_ends) == len(temp_starts) == 0:
             skipped_wins += 1
-            if len(starts[starts < row[0]]) == 0: continue  # no start prior, bool stays negative
-            if len(ends[ends < row[0]]) == 0:
+            if sum(starts < row[0]) == 0: continue  # no start prior, bool stays negative
+            if sum(ends < row[0]) == 0:
                 move_mask[i_row, :] = 1  # ongoing positive bool (only start found)
                 continue  # no start prior, bool stays negative
             # find closest prior start or end
@@ -877,8 +884,8 @@ def mask_movement_on_times(
 
         # when multiple starts and ends were found
         while len(temp_starts) > 0 and len(temp_ends) > 0:
-            if verbose: print('while',temp_starts, temp_ends)
-            if verbose: print('masked', sum(move_mask[i_row]) / 2048)
+            if verbose: print(f'while in window: starts {temp_starts}, ends {temp_ends}')
+            if verbose: print(f'so far masked in row: {sum(move_mask[i_row]) / 2048} secs')
             # fill bool for ongoing start
             if temp_ends[0] < temp_starts[0]:
                 move_mask[i_row, :temp_ends[0]] = 1

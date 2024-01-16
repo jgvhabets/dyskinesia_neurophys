@@ -90,6 +90,7 @@ class get_selectedEphys:
     FORCE_CALC_PSDs: bool = False
     ONLY_CREATE: bool = False
     PREVENT_NEW_CREATION: bool = False
+    EXTRACT_FREE: bool = False
     available_states: list = field(default_factory=lambda: [
         f'{s}_{d}lid' for s, d in product(
             ['rest', 'tapleft', 'tapright',
@@ -104,11 +105,7 @@ class get_selectedEphys:
     DYSK_CUTOFFS: dict = field(default_factory= lambda: 
                                {'mild': (1, 3), 'moderate': (4, 7),
                                 'severe': (8, 25)})
-    SKIP_BASELINE: bool = False  # bools to skip selections if other selections should be created
-    SKIP_REST: bool = False
-    SKIP_TAP: bool = False
-    SKIP_DYSKMOVE: bool = False
-    SKIP_FREE: bool = False
+    SKIP_NEW_CREATION: list = field(default_factory= lambda: [])
     verbose: bool = False
     """
     Attributes:
@@ -140,10 +137,11 @@ class get_selectedEphys:
         )
         
         ### INCLUDE FREE
-        # print(f'\n#### ADDED inclFREE to FOLDERNAMES FOR NEW CREATION')
-        # picklepath += '_inclFREE'
-        # states_picklepath += '_inclFREE'
-        print(f'\n#### (no FREE folder) TODO: calculate selectedPsdState (MEANS) incl FREE')
+        if self.EXTRACT_FREE:
+            print(f'\n#### ADDED _FREE to FOLDERNAMES')
+            picklepath += '_FREE'
+            states_picklepath += '_FREE'
+        # print(f'\n#### (no FREE folder) TODO: calculate selectedPsdState (MEANS) incl FREE')
         
         if self.RETURN_PSD_1sec: states_picklepath += '_1secArrays'
         
@@ -159,7 +157,7 @@ class get_selectedEphys:
                     verbose=self.verbose
                 )
                 if LOADED_BOOL:
-                    print('...loaded successful')
+                    print(f'...sub class ({sub}) loaded successful')
                     # if succesful, list contains tuples with source, array
                     for src, arr in sub_state_tups:
                         # add adjusted class to current main class
@@ -172,8 +170,7 @@ class get_selectedEphys:
                     self.loaded_subs.append(sub)
                     if self.verbose: print(f'added states of sub-{sub} to main get class (loaded existing)')
 
-                    self.freqs = np.concatenate([np.arange(4, 35),
-                                                np.arange(60, 90)])
+                    self.freqs = np.concatenate([np.arange(4, 35), np.arange(60, 90)])
                     continue
 
             # CALCULATE PSD PER CONDITION
@@ -196,9 +193,11 @@ class get_selectedEphys:
             else:
                 if self.verbose: print(f'{picklename} NOT AVAILABLE IN {picklepath}')
                 if self.PREVENT_NEW_CREATION: continue  # 
-
+                print(f'...create new PSD_vs_Move_sub class ({picklename})')
                 sub_class = PSD_vs_Move_sub(sub=sub,
-                                            PLOT_SELECTION_DATA=self.PLOT_SEL_DATA_PROCESS)
+                                            PLOT_SELECTION_DATA=self.PLOT_SEL_DATA_PROCESS,
+                                            SKIP_NEW_CREATION=self.SKIP_NEW_CREATION,  # (currently: create separate FREE files) classes ideally contain ALL; only give list here for debugging
+                                            verbose=self.verbose,)
                 
                 # for saving delete total 3d arrays and save only mean psd arrays
                 for src in sub_class.ephys_sources:
@@ -220,7 +219,7 @@ class get_selectedEphys:
                 # add baseline per source
                 # TODO PM ADD sub-012 baseline
                 if src in sel and 'baseline' in sel.lower():
-                    if self.SKIP_BASELINE: continue
+                    if 'BASELINE' in self.SKIP_NEW_CREATION: continue
                     # load 2d arr: n-samples, n-bands (only samples for selection)
                     bl_sig = getattr(sub_class, sel).ephys_2d_arr
                     ftemp, psdtemp = get_ssd_psd_from_array(
@@ -239,8 +238,8 @@ class get_selectedEphys:
 
                 # all REST WITHOUT DYSKINESIA
                 if src in sel and 'REST' in sel and 'lidno' in sel:
-                    if self.SKIP_REST: continue
-
+                    if 'REST' in self.SKIP_NEW_CREATION: continue
+                    
                     for time_SEL, time_code in zip(
                         [getattr(sub_class, sel).time_arr < (30 * 60),
                          getattr(sub_class, sel).time_arr > (30 * 60)],
@@ -263,7 +262,7 @@ class get_selectedEphys:
                 
                 # get rest with ALL LID
                 if src in sel and 'REST' in sel and 'lidlid' in sel:
-                    if self.SKIP_REST: continue
+                    if 'REST' in self.SKIP_NEW_CREATION: continue
 
                     for lid_code in ['lid', 'mild', 'moderate', 'severe']:
                         if lid_code == 'lid': 
@@ -290,7 +289,7 @@ class get_selectedEphys:
                     
                 ## ADD DYSKINETIC MOVEMENTS (only during REST-tasks)
                 if src in sel and 'INVOL' in sel and src_INVOL_TODO[src]:
-                    if self.SKIP_DYSKMOVE: continue
+                    if 'INVOLUNTARY' in self.SKIP_NEW_CREATION: continue
 
                     # set INVOL-todo bool false, only calculate once
                     src_INVOL_TODO[src] = False
@@ -344,7 +343,7 @@ class get_selectedEphys:
                             
                 ## add TAPs (voluntary movement)
                 if src in sel and '_VOLUN' in sel:
-                    if self.SKIP_TAP: continue
+                    if 'VOLUNTARY' in self.SKIP_NEW_CREATION: continue
                     
                     if 'moveboth' in sel or 'lidall' in sel: continue  # skip summary groups
                     
@@ -387,25 +386,27 @@ class get_selectedEphys:
 
                 ## extract FREE moments
                 if src in sel and 'FREE' in sel:
-                    if self.SKIP_FREE: continue
-                    print(f'...process {sel}')
+                    if 'FREE' in self.SKIP_NEW_CREATION: continue
+                    if 'lidall' in sel or 'lidlid' in sel: continue  # skip summary groups
+                    print(f'\n...new FREE process: {sel}')
+
                     # take for no move or both: all times, for L/R-moves, take only unilat movement
-                    if np.logical_or('FREEMOVE' in sel and 'moveboth' in sel,
-                                     'FREENOMOVE' in sel):
+                    if 'FREENOMOVE' in sel or ('FREEMOVE' in sel and 'moveboth' in sel):
                         move_bool = [True] * len(getattr(sub_class, sel).time_arr)
-                        if sel == 'FREENOMOVE': move_code = 'nomove'
-                        else: move_code = 'moveboth'
-                    else:  # for left and right FREEMOVE
+                        if 'FREENOMOVE' in sel: move_code = 'nomove'
+                        elif 'FREEMOVE' in sel: move_code = 'moveboth'
+
+                    else:  # for left, right, both FREEMOVE
                         # get unique side-only times, catch Error if other side is not present
                         own_times = getattr(sub_class, sel).time_arr
                         if 'moveleft' in sel:
-                            move_code = 'move_left'
+                            move_code = 'moveLeftOnly'
                             try:
                                 contra_times = getattr(sub_class, sel.replace('moveleft', 'moveright')).time_arr
                             except AttributeError:
                                 contra_times = np.array([])
                         elif 'moveright' in sel:
-                            move_code = 'move_right'
+                            move_code = 'moveRightOnly'
                             try:
                                 contra_times = getattr(sub_class, sel.replace('moveright', 'moveleft')).time_arr
                             except AttributeError:
@@ -418,8 +419,9 @@ class get_selectedEphys:
                     temp_cdrs = getattr(sub_class, sel).cdrs_arr[move_bool]
                     # CDRS should already be selected in preparation
                     print(f'...FREE CDRS check, LID categs? {sel}: {temp_cdrs}')
-                    for templid in ['nolid', 'mildlid', 'moderatelid', 'severelid']:
-                        if templid in sel: lid_code = templid 
+                    for templid in ['mild', 'moderate', 'severe']:
+                        if templid in sel: lid_code = templid
+                    if 'lidno' in sel: lid_code = 'no'
                 
                     ftemp, psdtemp = get_ssd_psd_from_array(
                         ephys_arr=temp_ephys,
@@ -432,7 +434,7 @@ class get_selectedEphys:
 
                     np.save(os.path.join(states_picklepath,
                                         f'{sub}_{src}_free{move_code}_'
-                                        f'{lid_code}_{temp_ephys.shape[0]}samples.npy'),
+                                        f'{lid_code}lid_{temp_ephys.shape[0]}samples.npy'),
                             psdtemp, allow_pickle=True)
 
             # ADD SPECIFIC STATE AFTER CREATION
@@ -467,6 +469,8 @@ class PSD_vs_Move_sub:
     CDRS_RATER: str = 'Patricia'
     FT_VERSION: str = 'v6'
     PLOT_SELECTION_DATA: bool = False
+    SKIP_NEW_CREATION: list = field(default_factory= lambda: [])
+    verbose: bool = False
 
     def __post_init__(self,):
         self.SETTINGS = load_ft_ext_cfg(FT_VERSION=self.FT_VERSION)
@@ -492,7 +496,6 @@ class PSD_vs_Move_sub:
                     )
             # add as 3d array
             setattr(self, f'{src}_3d', src_bands)
-            # print(f'added {src}_3d ({getattr(self, f"{src}_3d").shape})')
 
             for SEL, move_side, LID_STATE in product(
                 ['VOLUNTARY', 'INVOLUNTARY',
@@ -501,15 +504,19 @@ class PSD_vs_Move_sub:
                 ['both', 'left', 'right'],
                 ['no', 'lid', 'all', 'mild', 'moderate', 'severe']
             ):
+                if SEL in self.SKIP_NEW_CREATION: continue
                 # excl non-relevant combinations
                 if SEL == 'INVOLUNTARY' and LID_STATE in ['no', 'all']: continue
                 if SEL == 'BASELINE' and not (LID_STATE == 'no' and move_side == 'both'): continue
-                if SEL == 'REST' and move_side != 'both': continue
-                if 'FREE' in SEL and LID_STATE in ['lid', 'all']: continue
-                if SEL == 'FREENOMOVE' and move_side != 'both': continue
+                if (SEL in ['REST', 'FREENOMOVE']) and move_side != 'both': continue  # no movement only once
+                if 'FREE' in SEL and LID_STATE in ['lid', 'all']: continue  # no double summary classes for free
+                # if SEL == 'FREEMOVE' and move_side == 'both': continue  # only save per side, not double
 
                 if 'ecog' in src: DYSK_UNI_EXCL = True
                 else: DYSK_UNI_EXCL = False
+
+                if 'FREE' in SEL:
+                    print(f'\n...START ephys_moveTaskLid for {SEL}, {move_side}, {LID_STATE}')
 
                 (sel_ephys,
                  sel_times,
@@ -520,7 +527,7 @@ class PSD_vs_Move_sub:
                     DYSK_SEL=LID_STATE,
                     DYSK_UNILAT_SIDE=DYSK_UNI_EXCL,
                     EXCL_ECOG_IPSILAT=DYSK_UNI_EXCL,
-                    verbose=False,
+                    verbose=self.verbose,
                 )
 
                 print(
@@ -593,16 +600,16 @@ class metaSelected_ephysData:
 def load_sub_states(state, sub, pickled_state_path,
                     verbose: bool = False,):
 
-    sub_arrs = [f for f in os.listdir(pickled_state_path)
-                 if f.endswith('.npy') and sub in f]
-    state_arrs = [f for f in sub_arrs if state in f.lower()]
-    if verbose: print(f'for ({sub}, {state}) selected: {state_arrs}')
+    sub_files = [f for f in os.listdir(pickled_state_path)
+                 if f.endswith('.npy') and f.startswith(sub)]
+    sub_state_files = [f for f in sub_files if state in f.lower()]
+    if verbose: print(f'for ({sub}, {state}) selected: {sub_state_files}')
     
     # load existing data
-    if len(state_arrs) > 0:
+    if len(sub_state_files) > 0:
         list_tuples = []
 
-        for f in state_arrs:
+        for f in sub_state_files:
             arr = np.load(os.path.join(pickled_state_path, f),
                           allow_pickle=True)
             
@@ -613,7 +620,7 @@ def load_sub_states(state, sub, pickled_state_path,
     
         return True, list_tuples
 
-    elif len(sub_arrs) > 0:
+    elif len(sub_files) > 0:
         print(f'\n### NO STATE-specific array available '
               f'for {state} in sub-{sub}, other states ALREADY CREATED ###\n')
         return True, []

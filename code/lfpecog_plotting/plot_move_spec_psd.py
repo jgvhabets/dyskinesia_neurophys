@@ -226,6 +226,7 @@ def plot_moveLidSpec_PSDs(
         ax.legend(fontsize=FS, frameon=False,)
         ax.tick_params(size=FS, labelsize=FS,)
         for s in ['right', 'top']: ax.spines[s].set_visible(False)
+        ax.text(x=xticks[len(xticks) // 2] + 2, y=-73, s='//', size=16, color='k')
 
     # set axis labels
     for ax in axes[-1, :]:
@@ -433,7 +434,7 @@ def prep_REST_spec_psds(PSD_DICT, BASELINE,
 
 
 def plot_rest_lmm(
-    stat_dfs, allowed_splits,
+    stat_dfs,
     FIGNAME=False, SAVE_FIG: bool = False,
     a = .05,
 ):
@@ -482,14 +483,14 @@ def plot_rest_lmm(
     plt.tight_layout()
 
     if SAVE_FIG:
-        if len(stat_dfs) == 2:
-            FIGNAME += '_mergedSTNs'
-
-        plt.savefig(os.path.join(get_project_path('figures'),
+        # if len(stat_dfs) == 2:
+        #     FIGNAME += '_mergedSTNs'
+        FIG_DIR = os.path.join(get_project_path('figures'),
                                  'ft_exploration',
                                  'data_v4.0_ft_v6',
-                                 'PSDs_state_specific', 'only_stats',
-                                 FIGNAME),
+                                 'PSDs_state_specific', 'only_stats')
+        print(f'...saving plot {FIGNAME} in {FIG_DIR}')
+        plt.savefig(os.path.join(FIG_DIR, FIGNAME),
                     dpi=300, facecolor='w',)
         plt.close()
     else:

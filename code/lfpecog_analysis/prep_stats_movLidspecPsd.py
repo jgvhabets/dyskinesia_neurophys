@@ -31,17 +31,27 @@ from lfpecog_analysis.psd_analysis_classes import (
 def get_REST_stat_grouped_data(
     PSD_DICT, BL_class,
     STAT_SPLIT: str,
+    BIN_or_LIN: str = 'binary',
     SRC: str = 'lfp_left',
     MERGE_STNs: bool = False,
     PSD_1s_windows: bool = False,
 ):
     # DEFINE STAT GROUPS
-    if STAT_SPLIT == 'no-LID vs all-LID':
+    if STAT_SPLIT == 'no-LID vs all-LID' and BIN_or_LIN == 'binary':
         group_states = {0: ['nolidbelow30', 'nolidover30'],
                         1: ['mildlid', 'moderatelid', 'severelid']}
-    elif STAT_SPLIT == 'no-LID (<30) vs all-LID':
+        
+    elif STAT_SPLIT == 'no-LID (<30) vs all-LID' and BIN_or_LIN == 'binary':
         group_states = {0: ['nolidbelow30'],
                         1: ['mildlid', 'moderatelid', 'severelid']}
+    # linear stat groups
+    elif STAT_SPLIT == 'no-LID vs all-LID' and BIN_or_LIN == 'linear':
+        group_states = {0: ['nolidbelow30', 'nolidover30'],
+                        1: ['mildlid'], 2: ['moderatelid'], 3: ['severelid']}
+    
+    elif STAT_SPLIT == 'no-LID (<30) vs all-LID' and BIN_or_LIN == 'linear':
+        group_states = {0: ['nolidbelow30'], 1: ['nolidover30'],
+                        2: ['mildlid'], 3: ['moderatelid'], 4: ['severelid']}
 
     group_subs = {i: [] for i in group_states.keys()}
     group_psds = {i: [] for i in group_states.keys()}
@@ -239,6 +249,7 @@ def get_stats_REST_psds(
             continue
 
         # CALCULATE statistics
+        print(f'... calculating non-existing csv {stat_path}')
         if not CLASSES_LOADED:
             PSDs, BLs = get_allSpecStates_Psds(RETURN_PSD_1sec=True)
             CLASSES_LOADED = True
@@ -251,6 +262,7 @@ def get_stats_REST_psds(
                 stat_values, stat_labels, stat_ids, value_freqs
             ) = get_REST_stat_grouped_data(
                 STAT_SPLIT=SPLIT, SRC=SRC,
+                BIN_or_LIN=STAT_LID_COMPARE,
                 PSD_DICT=PSDs, BL_class=BLs,
                 PSD_1s_windows=True,
                 MERGE_STNs=MERGE_STNs,
@@ -283,7 +295,7 @@ def get_stats_REST_psds(
         stat_df.iloc[:, 2] = lmm_coeffs[1]
         stat_df.iloc[:, 1] = sign_bools[0]
         stat_df.iloc[:, 3] = sign_bools[1]
-
+        print(f'\n...SAVING STAT DF: {df_name} (in {stat_dir})')
         stat_df.to_csv(os.path.join(stat_dir, df_name),
                         header=True, index=True)
         stat_dfs[SRC] = stat_df
@@ -292,9 +304,10 @@ def get_stats_REST_psds(
         a = round(.05 / len(value_freqs), 4)
 
     if PLOT_STATS:
-        plot_rest_lmm(stat_dfs, allowed_splits,
-                        FIGNAME='REST_lmm_sigs_binary',
-                        SAVE_FIG=True,)
+        FIG_NAME = f"REST_lmm_sigs_{STAT_LID_COMPARE}"
+        if MERGE_STNs: FIG_NAME += '_mergedSTNs'
+        print(f'\n...call plotting {FIG_NAME} ')
+        plot_rest_lmm(stat_dfs, FIGNAME=FIG_NAME, SAVE_FIG=True,)
 
 
 def get_stats_MOVE_psds(
