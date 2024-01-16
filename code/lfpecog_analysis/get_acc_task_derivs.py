@@ -313,6 +313,10 @@ def get_raw_acc_traces(sub, side, data_version):
                 f'_acc_{side}.P')
     acc = load_class_pickle(join(sub_data_path, fname))
 
+    print('PM: add FREE movement labels via '
+          'tapFind.specTask_movementClassifier()'
+          'and tapFind.get_move_bool_for_timeArray()')
+
     return acc
 
 

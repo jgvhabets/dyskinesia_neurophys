@@ -607,12 +607,17 @@ def custom_tap_finding(acc_class, acc_side, move_type='tap',):
         return peak_i, peak_t, tap_bool
 
 
+from lfpecog_features.moveDetection_pausedTapFinder import (
+    specTask_movementClassifier, get_move_bool_for_timeArray
+)
+
 def create_ephys_masks(
     sub: str,
     FT_VERSION='v6',
     CATEG_CDRS: bool = False,
     CDRS_RATER: str = 'Patricia',
     custom_tappers=['105', '017', '010'],
+    ADD_FREE_MOVE_SELECTIONS: bool = False,
     TAP_BORDER_sec=0,
     ADD_TO_CLASS=False, self_class=None,
     verbose: bool = False,
@@ -649,14 +654,11 @@ def create_ephys_masks(
                                 incl_stn=True,
                                 incl_ecog=True,
                                 settings=SETTINGS,)
-    if ADD_TO_CLASS: setattr(self_class,
-                             'ssd_sub',
-                             ssd_sub)
+    if ADD_TO_CLASS: setattr(self_class, 'ssd_sub', ssd_sub)
 
     # POTENTIALLY LOOP OVER EPHYS SOURCES
     src = 'lfp_left'
     temp_ssd = getattr(ssd_sub, src)
-    print(f'\n### REMINDER: only uses times from {src} for mask finding!!!\n')
 
     # create timestamps for every ephys sample in 2d array (2048 Hz)
     ephys_time_arr = np.array([
@@ -670,20 +672,45 @@ def create_ephys_masks(
 
     # get acc data for sub (side irrelevant for labels)
     print('...loading ACC')
-    # sub_data_path = os.path.join(
-    #     get_project_path('data'), 'merged_sub_data',
-    #     DATA_VERSION, f'sub-{sub}')
-    # fname = f'{sub}_mergedData_{DATA_VERSION}_acc_left.P'  # side does not matter for already detected bool labels
-    # accl = load_class_pickle(os.path.join(sub_data_path, fname))
     accl = get_raw_acc_traces(sub=sub, side='left', data_version=DATA_VERSION)
     accl = correct_acc_class(accl)
 
     # get movement column indices
+    i_times = np.where(['time' in c.lower() for c in accl.colnames])[0][0]
     i_lefttap = np.where(['left_tap' in c.lower() for c in accl.colnames])[0][0]
     i_righttap = np.where(['right_tap' in c.lower() for c in accl.colnames])[0][0]
     i_leftmove = np.where(['left_move' in c.lower() for c in accl.colnames])[0][0]
     i_rightmove = np.where(['right_move' in c.lower() for c in accl.colnames])[0][0]
     i_nomove = np.where(['no_move' in c.lower() for c in accl.colnames])[0][0]
+
+    # ADD FREE-TASK MOVEMENTS BASED ON SEPARATE SELECTION
+    if ADD_FREE_MOVE_SELECTIONS:
+        print(f'...ADDING FREE MOVEMENT BOOLS FOR SUB-{sub}')
+        free_moves = {}
+        movedatapath = os.path.join(get_project_path('data'),
+                                    'windowed_data_classes_10s_0.5overlap',
+                                    'v4.0', 'task_movement_labels')
+        for side in ['left', 'right']:
+            # get movement times for side
+            fname = f'sub{sub}_free_move{side}.npy'
+            if fname in os.listdir(movedatapath):
+                move_times = np.load(os.path.join(movedatapath, fname), allow_pickle=True)
+                print(f'...loaded times from {fname}')
+            else:
+                temp_acc = get_raw_acc_traces(sub=sub, side=side, data_version=DATA_VERSION)
+                temp_acc = correct_acc_class(temp_acc)
+                move_times = specTask_movementClassifier(temp_acc, task='free', return_array=True,)
+                np.save(os.path.join(movedatapath, fname), move_times, allow_pickle=True,)
+                print(f'...created and saved times to {fname}')
+            # transform movement times in sec to boolean matching current ACC
+            move_bool = get_move_bool_for_timeArray(
+                time_arr=accl.data[:, i_times], move_times=move_times,
+            )
+            free_moves[side] = move_bool
+        # add free moves to current ACC-data
+        accl.data[free_moves['left'].astype(bool), i_leftmove] = 1
+        accl.data[free_moves['right'].astype(bool), i_rightmove] = 1
+
     # get movement bools based on acc data (512 Hz)
     MOVE_BOOLS = {'no_move': accl.data[:, i_nomove],
                   'any_move': np.sum(accl.data[:, i_lefttap:i_rightmove+1], axis=1) > 0,

@@ -14,6 +14,7 @@ if __name__ == '__main__':
     ALLSUBS = get_selectedEphys(STATE_SEL='freenomove_nolid',
                                 RETURN_PSD_1sec=False,
                                 EXTRACT_FREE=True,
+                                ADD_FREE_MOVE_SELECTIONS=True,  # add FREE move labels separately collected
                                 LOAD_PICKLE=True,
                                 USE_EXT_HD=True,
                                 PREVENT_NEW_CREATION=False,

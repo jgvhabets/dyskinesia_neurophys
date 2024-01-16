@@ -351,6 +351,7 @@ def saveAllEphysRestblocks(
 
 def specTask_movementClassifier(
     acc_class, task: str = 'free',
+    return_array: bool = False,
     svm_thr=1e-7, verbose=False,    
 ):
     """
@@ -362,6 +363,7 @@ def specTask_movementClassifier(
     Args:
         - acc_clas: resulting from accDerivs.get_raw_acc_traces()
         - task: task to select
+        - return_array: if True give as 2d array (n-blocks, [start, end])
         - svm_thr: used for activity detection, adjusted
             automatically in specific cases
     
@@ -426,6 +428,11 @@ def specTask_movementClassifier(
         print(f'...found {len(move_times["start"])} blocks, '
           f'mean duration: {round(np.mean(durations), 1)} seconds')
     
+    if return_array:
+        move_times = np.concatenate([np.atleast_2d(move_times["start"]),
+                                      np.atleast_2d(move_times["end"])],
+                                    axis=0,).T
+
     return move_times
 
 
@@ -480,14 +487,15 @@ def find_move_moments(
 
 
 def get_move_bool_for_timeArray(
-    time_arr, move_times: dict,
+    time_arr, move_times: dict or np.ndarray,
     MAX_BLOCK_SEC: int = 60,
 ):
     """
     Args:
         - time_arr: time_arr to match with bool (in SECONDS)
         - move_times: dict containing 'start' and 
-            'end' with TIMES of move blocks
+            'end' with TIMES of move blocks, OR ndarray
+
         - MAX_BLOCK_SEC: blocks longer than this
             n of seconds are skipped
     
@@ -495,9 +503,18 @@ def get_move_bool_for_timeArray(
         - move_bool: size corresponds to time_arr,
             "1" for moveblocks, "0" for no movement
     """
+    if isinstance(move_times, np.ndarray):
+        assert move_times.shape[1] == 2, 'must have two columns, start-end'
+        starts = move_times[:, 0]
+        ends = move_times[:, 1]
+
+    else:
+        starts = move_times['start']
+        ends = move_times['end']
+    
     move_bool = np.zeros_like(time_arr)
 
-    for t1, t2 in zip(move_times['start'], move_times['end']):
+    for t1, t2 in zip(starts, ends):
         if (t2 - t1) > MAX_BLOCK_SEC:
             print(f'very large block  {(t2 - t1) / MAX_BLOCK_SEC}')
         mov_sel = np.logical_and(time_arr > t1,

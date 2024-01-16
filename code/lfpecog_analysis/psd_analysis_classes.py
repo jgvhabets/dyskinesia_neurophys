@@ -91,6 +91,7 @@ class get_selectedEphys:
     ONLY_CREATE: bool = False
     PREVENT_NEW_CREATION: bool = False
     EXTRACT_FREE: bool = False
+    ADD_FREE_MOVE_SELECTIONS: bool = True
     available_states: list = field(default_factory=lambda: [
         f'{s}_{d}lid' for s, d in product(
             ['rest', 'tapleft', 'tapright',
@@ -197,6 +198,7 @@ class get_selectedEphys:
                 sub_class = PSD_vs_Move_sub(sub=sub,
                                             PLOT_SELECTION_DATA=self.PLOT_SEL_DATA_PROCESS,
                                             SKIP_NEW_CREATION=self.SKIP_NEW_CREATION,  # (currently: create separate FREE files) classes ideally contain ALL; only give list here for debugging
+                                            ADD_FREE_MOVE_SELECTIONS=self.ADD_FREE_MOVE_SELECTIONS,
                                             verbose=self.verbose,)
                 
                 # for saving delete total 3d arrays and save only mean psd arrays
@@ -470,6 +472,7 @@ class PSD_vs_Move_sub:
     FT_VERSION: str = 'v6'
     PLOT_SELECTION_DATA: bool = False
     SKIP_NEW_CREATION: list = field(default_factory= lambda: [])
+    ADD_FREE_MOVE_SELECTIONS: bool = True,
     verbose: bool = False
 
     def __post_init__(self,):
@@ -479,7 +482,8 @@ class PSD_vs_Move_sub:
         create_ephys_masks(sub=self.sub,
                            FT_VERSION=self.FT_VERSION,
                            ADD_TO_CLASS=True,
-                           self_class=self)
+                           self_class=self,
+                           ADD_FREE_MOVE_SELECTIONS=self.ADD_FREE_MOVE_SELECTIONS,)
         # put bands in 3d structure
         self.band_names = list(self.SETTINGS['SPECTRAL_BANDS'].keys())
         self.ephys_sources = self.ssd_sub.ephys_sources
