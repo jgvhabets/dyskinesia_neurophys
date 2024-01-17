@@ -127,13 +127,15 @@ def get_envelop(
 ):
     """
     """
-    if type(bandpass_freqs) == str:
+    if isinstance(bandpass_freqs, str):
         bandpass_freqs = bw_ranges[bandpass_freqs]
+
+    if isinstance(sig, list): sig = np.array(sig)
 
     # discard nans for hilbert transform
     if not in_blocks:
     # simply removing NaNs and pasting signal toegether
-        sig = sig[~np.isnan(list(sig))]
+        sig = sig[~np.isnan(sig)]
         filt_sig = bandpass(
             sig, bandpass_freqs, fs
         )

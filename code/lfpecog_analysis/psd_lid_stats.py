@@ -23,7 +23,8 @@ def calc_lmem_freqCoeffs(temp_values,
                          temp_freqs,
                          ALPHA: float = .05,
                          VALUES_GIVEN_GROUPED=False,
-                         GROUP_LABELS=None,):
+                         GROUP_LABELS=None,
+                         STATS_PER_LID_CAT: bool = False,):
     """
     temp_values:
     temp_ids: array corresponding to values
@@ -32,6 +33,8 @@ def calc_lmem_freqCoeffs(temp_values,
     Returns:
         - dynamic output_list: list depending
             on returning on GRAD and CI
+            if STATS_PER_LID_CAT: dict's are given
+            with keys: midl/moderate/severe
         - freqs: corr to results
     """
     # select freqs 4 - 35 Hz and 60 - 90 Hz
@@ -43,6 +46,7 @@ def calc_lmem_freqCoeffs(temp_values,
     # correct alpha for multiple comparisons
     ALPHA = ALPHA / sum(f_sel)
     print(f'multi-comp (n={sum(f_sel)}) corr-ALPHA: {round(ALPHA, 5)}')
+    RETURN_GRAD, RETURN_CI = False, False
 
     if VALUES_GIVEN_GROUPED and any(GROUP_LABELS != None):
         stat_values = temp_values
@@ -56,53 +60,103 @@ def calc_lmem_freqCoeffs(temp_values,
          stat_ids) = get_stats_arrays(ipsivalues=temp_values,
                                       ipsi_ids=temp_ids)
 
+    # objects to store data in
+    if not STATS_PER_LID_CAT:
+        coeffs_freqs, sign_freqs, grads = [], [], []
+    elif STATS_PER_LID_CAT:
+        if np.nanmax(GROUP_LABELS) <= 3:
+            CAT_CODING = {1: 'mild', 2: 'moderate', 3: 'severe'}
+        elif np.nanmax(GROUP_LABELS) == 4:
+            CAT_CODING = {1: 'no', 2: 'mild', 3: 'moderate', 4: 'severe'}
+        coeffs_freqs = {c: [] for c in CAT_CODING.values()}
+        sign_freqs = {c: [] for c in CAT_CODING.values()}
+    
     # calculate coeffs and pvalues per frequency bin
-    coeffs_freqs, sign_freqs, grads = [], [], []
     for i_f, f in enumerate(temp_freqs):
         # skip irrelevant freqs
         if not f in temp_freqs[f_sel]:
             print(f'...skip freq {f} Hz in STATs')
             continue
         
-        # calculate coeffs for med-effect on values (random slopes for subjects)
-        RETURN_GRAD, RETURN_CI = False, False
-        result_list = run_mixEff_wGroups(
-            dep_var=stat_values[:, i_f],
-            indep_var=stat_labels,
-            groups=stat_ids,
-            TO_ZSCORE=False,
-            RETURN_GRADIENT=RETURN_GRAD,
-            RETURN_CI=RETURN_CI
-        )
-        if isinstance(result_list, bool):
-            if result_list == False:
-                print(f'\n#### no conversion for {f}\n')
-                fig, ax = plt.subplots(1,1, figsize=(4, 4))
-                ax.scatter([0] * sum(stat_labels == 0),
-                           stat_values[stat_labels == 0, i_f],)
-                ax.scatter([1] * sum(stat_labels == 1),
-                           stat_values[stat_labels == 1, i_f],)
-                ax.set_title(f'{f} Hz')
-                plt.show()
-                break
-                coeffs_freqs.append(0)
-                sign_freqs.append(False)
-                continue
-        # unpack dynamic result list
-        if RETURN_GRAD:
-            grad = result_list[-1]
-            grads.append(grad)
-        if RETURN_CI and RETURN_GRAD: ci = result_list[-2]
-        elif RETURN_CI and not RETURN_GRAD: ci = result_list[-1]
-        fixEff_cf, pval = result_list[:2]
-        # print(f'p-value {f} Hz: {pval}')
-        sig_bool = pval < ALPHA
-        # add values to lists
-        coeffs_freqs.append(fixEff_cf)
-        sign_freqs.append(sig_bool)
+        ### calculate each category separately
+        if STATS_PER_LID_CAT: 
+            # loop over LID-categories, always same baseline (coded as 0)
+            for CAT in CAT_CODING:  # corr to mild-moderate-severe (0: NO-LID is skipped)
+                print(f'...start STAT calc for LID CAT: {CAT}, {CAT_CODING[CAT]} ({f} Hz)')
+                cat_sel = np.logical_or(stat_labels == 0,
+                                        stat_labels == CAT)
+                cat_values = stat_values[cat_sel, i_f]
+                cat_labels = stat_labels[cat_sel]
+                cat_ids = stat_ids[cat_sel]
+                # calculate difference versus 0
+                result_list = run_mixEff_wGroups(
+                    dep_var=cat_values,
+                    indep_var=cat_labels,
+                    groups=cat_ids,
+                    TO_ZSCORE=False,
+                    RETURN_GRADIENT=RETURN_GRAD,
+                    RETURN_CI=RETURN_CI
+                )
+                # in case of unsuccessful calc 
+                if isinstance(result_list, bool):
+                    if result_list == False:
+                        print(f'\n#### no conversion for {f}\n')
+                        fig, ax = plt.subplots(1,1, figsize=(4, 4))
+                        ax.scatter([0] * sum(stat_labels == 0),
+                                stat_values[stat_labels == 0, i_f],)
+                        ax.scatter([1] * sum(stat_labels == 1),
+                                stat_values[stat_labels == 1, i_f],)
+                        ax.set_title(f'{f} Hz')
+                        plt.show()
+                        break
+                        coeffs_freqs.append(0)
+                        sign_freqs.append(False)
+                        continue
+                fixEff_cf, pval = result_list[:2]
+                coeffs_freqs[CAT_CODING[CAT]].append(fixEff_cf)
+                sign_freqs[CAT_CODING[CAT]].append(pval < ALPHA)
+
+        else:  # NONE-CATEGORICAL STATISTICS
+            # calculate coeffs for med-effect on values (random slopes for subjects)
+            result_list = run_mixEff_wGroups(
+                dep_var=stat_values[:, i_f],
+                indep_var=stat_labels,
+                groups=stat_ids,
+                TO_ZSCORE=False,
+                RETURN_GRADIENT=RETURN_GRAD,
+                RETURN_CI=RETURN_CI
+            )
+            if isinstance(result_list, bool):
+                if result_list == False:
+                    print(f'\n#### no conversion for {f}\n')
+                    fig, ax = plt.subplots(1,1, figsize=(4, 4))
+                    ax.scatter([0] * sum(stat_labels == 0),
+                            stat_values[stat_labels == 0, i_f],)
+                    ax.scatter([1] * sum(stat_labels == 1),
+                            stat_values[stat_labels == 1, i_f],)
+                    ax.set_title(f'{f} Hz')
+                    plt.show()
+                    break
+                    coeffs_freqs.append(0)
+                    sign_freqs.append(False)
+                    continue
+            # unpack dynamic result list
+            if RETURN_GRAD:
+                grad = result_list[-1]
+                grads.append(grad)
+            if RETURN_CI and RETURN_GRAD: ci = result_list[-2]
+            elif RETURN_CI and not RETURN_GRAD: ci = result_list[-1]
+            fixEff_cf, pval = result_list[:2]
+            # print(f'p-value {f} Hz: {pval}')
+            sig_bool = pval < ALPHA
+            # add values to lists
+            coeffs_freqs.append(fixEff_cf)
+            sign_freqs.append(sig_bool)
         
-    coeffs_freqs = np.array(coeffs_freqs)
-    sign_freqs = np.array(sign_freqs)
+    if not STATS_PER_LID_CAT:
+        coeffs_freqs = np.array(coeffs_freqs)
+        sign_freqs = np.array(sign_freqs)
+
 
     if RETURN_GRAD: grads = np.array(grads)
 

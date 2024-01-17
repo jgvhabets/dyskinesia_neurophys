@@ -734,12 +734,12 @@ def create_ephys_masks(
                 starts=starts, ends=ends, verbose=verbose,
             )
             # print to check portion in orig bool and 2d array
-            print(f'move_mask CHECK for : {BOOL_SEL}')
-            print(np.nansum(move_masks[BOOL_SEL]) /
-                  (move_masks[BOOL_SEL].shape[0] *
-                   move_masks[BOOL_SEL].shape[1] - np.sum(np.isnan(move_masks[BOOL_SEL])))
-            )
-            print(sum(MOVE_BOOLS[BOOL_SEL]) / len(MOVE_BOOLS[BOOL_SEL]))
+            # print(f'move_mask CHECK for : {BOOL_SEL}')
+            # print(np.nansum(move_masks[BOOL_SEL]) /
+            #       (move_masks[BOOL_SEL].shape[0] *
+            #        move_masks[BOOL_SEL].shape[1] - np.sum(np.isnan(move_masks[BOOL_SEL])))
+            # )
+            # print(sum(MOVE_BOOLS[BOOL_SEL]) / len(MOVE_BOOLS[BOOL_SEL]))
 
 
     else:
@@ -762,8 +762,8 @@ def create_ephys_masks(
     # CREATE TASK MASK (corresponding to ephys 2d-data)
     print('...create task-mask for ephys')
     i_task = np.where(['task' in c.lower() for c in accl.colnames])[0][0]
-    print(f'...based on {accl.data[:5, i_task]} and {accl.times[:5]}')
-    print(f'first row: {accl.data[0, :]}, colnames: {accl.colnames}')
+    # print(f'...based on {accl.data[:5, i_task]} and {accl.times[:5]}')
+    # print(f'first row: {accl.data[0, :]}, colnames: {accl.colnames}')
     task_mask_times = get_mask_timings(
         orig_labels=accl.data[:, i_task],
         orig_times=accl.times,

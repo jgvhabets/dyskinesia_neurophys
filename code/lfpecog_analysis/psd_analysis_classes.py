@@ -419,8 +419,8 @@ class get_selectedEphys:
                     if sum(move_bool) == 0: continue  # skip empty combinations
                     temp_ephys = getattr(sub_class, sel).ephys_2d_arr[move_bool, :]
                     temp_cdrs = getattr(sub_class, sel).cdrs_arr[move_bool]
+
                     # CDRS should already be selected in preparation
-                    print(f'...FREE CDRS check, LID categs? {sel}: {temp_cdrs}')
                     for templid in ['mild', 'moderate', 'severe']:
                         if templid in sel: lid_code = templid
                     if 'lidno' in sel: lid_code = 'no'

@@ -20,7 +20,8 @@ from scipy.stats import variation
 import matplotlib.pyplot as plt
 # import own functions
 import lfpecog_features.feats_spectral_helpers as specHelpers
-
+from lfpecog_features.bursts_funcs import get_envelop
+from lfpecog_features.feats_helper_funcs import smoothing
 
 def bandpass(sig, freqs, fs, order=3,):
     """
@@ -181,6 +182,47 @@ def calc_coherence(
     """
 
     return f, icoh, abs_icoh, coh, sq_coh
+
+
+
+def get_theta_from_betaGamma(
+    beta_sig: np.ndarray,
+    gamma_sig: np.ndarray, fs: int,
+    beta_freqs=[12, 20],
+    gamma_freqs=[70, 80],
+    theta_freqs=[4, 8],
+    ZSCORE_envs: bool = True,  # result of env z-scoring looks most oscillatory
+    ZSCORE_sigs: bool = False,
+):
+    if isinstance(beta_sig, list): beta_sig = np.array(beta_sig)
+    if isinstance(gamma_sig, list): gamma_sig = np.array(gamma_sig)
+
+    assert beta_sig.shape == gamma_sig.shape, 'beta and gamma not same shape'
+    
+    if ZSCORE_sigs:
+        beta_sig = (beta_sig - np.nanmean(beta_sig)) / np.nanstd(beta_sig)
+        gamma_sig = (gamma_sig - np.nanmean(gamma_sig)) / np.nanstd(gamma_sig)
+    # calc beta env 
+    beta = get_envelop(
+        beta_sig, fs=fs, bandpass_freqs=beta_freqs
+    )
+    beta = smoothing(beta, fs=fs, win_ms=250,)
+
+    # calc gamma env
+    gamma = get_envelop(
+        gamma_sig, fs=fs, bandpass_freqs=gamma_freqs
+    )
+    gamma = smoothing(gamma, fs=fs, win_ms=250,)
+
+    if ZSCORE_envs:
+        beta = (beta - np.nanmean(beta)) / np.nanstd(beta)
+        gamma = (gamma - np.nanmean(gamma)) / np.nanstd(gamma)
+    # calc ongoing difference between gamma and beta
+    alt = gamma - beta
+    theta = get_envelop(
+        alt, fs=fs, bandpass_freqs=theta_freqs,
+    )
+    return theta
 
 
 def get_aperiodic(data, fs, method='fooof',

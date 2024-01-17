@@ -27,8 +27,10 @@ def prep_and_plot_moveSpecPsd(
     SAVE_PLOT: bool = False,
     SHOW_PLOT: bool = True,
     INCL_STATS: bool = False,
+    STATS_VERSION: str = '',
     STAT_LID_COMPARE: str = 'binary',
     MERGE_REST_STNS: bool = False,
+    ADD_TO_FIG_NAME = False,
 ):
     # define correct prep function
     if PLOT_CONDITION == 'REST':
@@ -49,8 +51,10 @@ def prep_and_plot_moveSpecPsd(
         SAVE_PLOT=SAVE_PLOT,
         SHOW_PLOT=SHOW_PLOT,
         INCL_STATS=INCL_STATS,
+        STATS_VERSION=STATS_VERSION,
         STAT_LID_COMPARE=STAT_LID_COMPARE,
         MERGED_STNS=MERGE_REST_STNS,
+        ADD_TO_FIG_NAME=ADD_TO_FIG_NAME,
     )
 
 
@@ -59,9 +63,11 @@ def plot_moveLidSpec_PSDs(
     SAVE_PLOT: bool = False,
     SHOW_PLOT: bool = True,
     INCL_STATS: bool = False,
+    STATS_VERSION: str = '',
     STAT_LID_COMPARE: str = 'binary',
     STAT_DATA_EXT_PATH: bool = True,
     MERGED_STNS: bool = False,
+    ADD_TO_FIG_NAME = False,  # additional for quick renaming (debugging)
 ):
     """
     Plots first keys as rows (LFP-ECoG), second keys as cols (CONTRA/IPSI lat)
@@ -79,6 +85,7 @@ def plot_moveLidSpec_PSDs(
     elif INCL_STATS and not STAT_DATA_EXT_PATH:
         stat_dir = (get_project_path('data'),
                     'windowed_data_classes_10s_0.5overlap/psdStateStats')
+
     if INCL_STATS:
         if PLOT_MOVE_TYPE == 'INVOLUNT' and STAT_LID_COMPARE == 'binary':
             print('\n### SKIP INVOUNTARY DYSK FOR BINARY STATS (no none-LID)')
@@ -87,6 +94,7 @@ def plot_moveLidSpec_PSDs(
         assert STAT_LID_COMPARE in ['binary', 'linear'], (
             f'STAT_LID_COMPARE ({STAT_LID_COMPARE}) should be linear / binary'
         )
+        if len (STATS_VERSION) > 1: stat_dir += f'_{STATS_VERSION}'
         stat_dir += f'_lid{STAT_LID_COMPARE.capitalize()}'  # add Linear or Binary
 
     # LFP-row0, ECoG-row1; IPSI/CONTRA/BOTH in columns
@@ -123,11 +131,18 @@ def plot_moveLidSpec_PSDs(
                 if os.path.exists(stat_df):
                     stat_df = read_csv(stat_df, header=0, index_col=0)
                 else:
-                    raise FileNotFoundError(f'STAT DF not existing ({stat_df})')
+                    raise FileNotFoundError(f'STAT DF not existing ({stat_df}), PM: '
+                                            'create with prep_specStats.get_stats_MOVE_psds()')
             
             for lid in psd_arrs[src][mov].keys():
                 # get and average correct PSDs
-                temp_psds = np.array(psd_arrs[src][mov][lid])
+                print(lid, src, mov)
+                # check whether psds are means or not 1-sec windows
+                if all([len(a.shape) == 2 for a in psd_arrs[src][mov][lid]]):  # given as 1s windows
+                    temp_psds = np.array([np.mean(a, axis=0) for a in psd_arrs[src][mov][lid]])
+                    print(temp_psds.shape)
+                else:  # given as subject mean PSDs
+                    temp_psds = np.array(psd_arrs[src][mov][lid])
                 n_subs = len(temp_psds)
                 if n_subs == 0:
                     print(f'no psds for {src, mov, lid}')
@@ -245,6 +260,8 @@ def plot_moveLidSpec_PSDs(
         if MERGED_STNS: FIG_NAME += '_mergedSTNs'
         if INCL_STATS:
             FIG_NAME += f'_stats{STAT_LID_COMPARE}'
+        if ADD_TO_FIG_NAME:
+            FIG_NAME = ADD_TO_FIG_NAME + FIG_NAME
         FIG_PATH = os.path.join(get_project_path('figures'),
                                 'ft_exploration',
                                 'data_v4.0_ft_v6',
@@ -313,6 +330,7 @@ def prep_MOVEMENT_spec_psds(PLOT_MOVE, PSD_DICT, BASELINE,
 
             # get psd arr and correct for baseline
             temp_psd = getattr(PSD_DICT[cond], attr)
+
             try:
                 bl = getattr(BASELINE, f'{SRC}_{sub}_baseline')
                 # take mean baseline if 1-sec windows are given
