@@ -12,6 +12,9 @@ from pandas import read_csv
 from utils.utils_fileManagement import get_project_path
 from lfpecog_plotting.plot_descriptive_SSD_PSDs import break_x_axis_psds_ticks
 from lfpecog_analysis.specific_ephys_selection import get_hemisphere_movement_location
+from lfpecog_analysis.prep_stats_movLidspecPsd import (
+    get_stat_folder
+)
 
 cond_colors = {
     'nolid': 'green',
@@ -27,6 +30,7 @@ def prep_and_plot_moveSpecPsd(
     SAVE_PLOT: bool = False,
     SHOW_PLOT: bool = True,
     INCL_STATS: bool = False,
+    STAT_PER_LID_CAT: bool = True,
     STATS_VERSION: str = '',
     STAT_LID_COMPARE: str = 'binary',
     MERGE_REST_STNS: bool = False,
@@ -51,6 +55,7 @@ def prep_and_plot_moveSpecPsd(
         SAVE_PLOT=SAVE_PLOT,
         SHOW_PLOT=SHOW_PLOT,
         INCL_STATS=INCL_STATS,
+        STAT_PER_LID_CAT=STAT_PER_LID_CAT,
         STATS_VERSION=STATS_VERSION,
         STAT_LID_COMPARE=STAT_LID_COMPARE,
         MERGED_STNS=MERGE_REST_STNS,
@@ -63,6 +68,7 @@ def plot_moveLidSpec_PSDs(
     SAVE_PLOT: bool = False,
     SHOW_PLOT: bool = True,
     INCL_STATS: bool = False,
+    STAT_PER_LID_CAT: bool = True,
     STATS_VERSION: str = '',
     STAT_LID_COMPARE: str = 'binary',
     STAT_DATA_EXT_PATH: bool = True,
@@ -77,26 +83,11 @@ def plot_moveLidSpec_PSDs(
     if PLOT_MOVE_TYPE == 'REST':
         psd_arrs = {'rest': psd_arrs}
 
-
-    if INCL_STATS and STAT_DATA_EXT_PATH:
-        stat_dir = ('D://Research/CHARITE/projects/'
-                    'dyskinesia_neurophys/data/'
-                    'windowed_data_classes_10s_0.5overlap/psdStateStats')
-    elif INCL_STATS and not STAT_DATA_EXT_PATH:
-        stat_dir = (get_project_path('data'),
-                    'windowed_data_classes_10s_0.5overlap/psdStateStats')
-
-    if INCL_STATS:
-        if PLOT_MOVE_TYPE == 'INVOLUNT' and STAT_LID_COMPARE == 'binary':
-            print('\n### SKIP INVOUNTARY DYSK FOR BINARY STATS (no none-LID)')
-            return
-        
-        assert STAT_LID_COMPARE in ['binary', 'linear'], (
-            f'STAT_LID_COMPARE ({STAT_LID_COMPARE}) should be linear / binary'
-        )
-        if len (STATS_VERSION) > 1: stat_dir += f'_{STATS_VERSION}'
-        stat_dir += f'_lid{STAT_LID_COMPARE.capitalize()}'  # add Linear or Binary
-
+    stat_dir = get_stat_folder(STAT_LID_COMPARE=STAT_LID_COMPARE,
+                                STAT_PER_LID_CAT=STAT_PER_LID_CAT,
+                                STAT_DATA_EXT_PATH=STAT_DATA_EXT_PATH,
+                                STATS_VERSION=STATS_VERSION,)
+    
     # LFP-row0, ECoG-row1; IPSI/CONTRA/BOTH in columns
     AX_WIDTH, AX_HEIGHT = 8, 6
     ax_row_keys = list(psd_arrs.keys())
@@ -129,18 +120,17 @@ def plot_moveLidSpec_PSDs(
                     dfname = f'PsdStateStats_1secWins_{PLOT_MOVE_TYPE}_{src}_{mov.split("_")[1]}.csv'
                 stat_df = os.path.join(stat_dir, dfname)
                 if os.path.exists(stat_df):
+                    print(f'...stats df loading: {stat_df}')
                     stat_df = read_csv(stat_df, header=0, index_col=0)
                 else:
                     raise FileNotFoundError(f'STAT DF not existing ({stat_df}), PM: '
                                             'create with prep_specStats.get_stats_MOVE_psds()')
-            
+            print(f'STAT DF KEYS: {stat_df.keys()}')
             for lid in psd_arrs[src][mov].keys():
                 # get and average correct PSDs
-                print(lid, src, mov)
                 # check whether psds are means or not 1-sec windows
                 if all([len(a.shape) == 2 for a in psd_arrs[src][mov][lid]]):  # given as 1s windows
                     temp_psds = np.array([np.mean(a, axis=0) for a in psd_arrs[src][mov][lid]])
-                    print(temp_psds.shape)
                 else:  # given as subject mean PSDs
                     temp_psds = np.array(psd_arrs[src][mov][lid])
                 n_subs = len(temp_psds)
@@ -174,45 +164,16 @@ def plot_moveLidSpec_PSDs(
 
             # plot significancies shades (once per AX)
             if INCL_STATS:
-                if PLOT_MOVE_TYPE == 'REST':    
-                    stat_values = [stat_df.iloc[:, 1].values,
-                                   np.logical_and(stat_df.iloc[:, 1],
-                                                  stat_df.iloc[:, 3]).values]
-                else:
-                    stat_values = [stat_df.iloc[:, 1].values,]
-                if STAT_LID_COMPARE == 'binary':
-                    split_labels = ['no-LID (<30) vs all-LID',
-                                    'no-LID (all) vs all-LID']
-                elif STAT_LID_COMPARE == 'linear':
-                    split_labels = ['sign linear LID coeff',]
 
-                
-                ymin, ymax = axes[axrow, axcol].get_ylim()
-                # break and nan-pad x-axis
-                sign_bool, sign_x, sign_xlabs = break_x_axis_psds_ticks(
-                    tf_freqs=stat_df.index,
-                    PSD=stat_values[-1],
-                    x_break = (35, 60), nan_pad = 5
-                )
-                axes[axrow, axcol].fill_between(
-                    y1=ymin, y2=ymax, x=sign_x,
-                    where=sign_bool,
-                    color='gray', alpha=.2,
-                    label=split_labels[-1],
-                )
-                if PLOT_MOVE_TYPE == 'REST':
-                    # break and nan-pad x-axis
-                    sign_bool, sign_x, _ = break_x_axis_psds_ticks(
-                        tf_freqs=stat_df.index,
-                        PSD=stat_values[0], # sign-bool vs <30 AND all
-                        x_break = (35, 60), nan_pad = 5
+                if not STAT_PER_LID_CAT:
+                    axes = plot_summary_stats(
+                        stat_df=stat_df, axes=axes,
+                        PLOT_MOVE_TYPE=PLOT_MOVE_TYPE,
+                        STAT_LID_COMPARE=STAT_LID_COMPARE,
+                        axrow=axrow, axcol=axcol
                     )
-                    axes[axrow, axcol].fill_between(
-                        y1=ymin, y2=ymax, x=sign_x,
-                        where=sign_bool,  # get only sign-bool vs <30
-                        facecolor='None', edgecolor='gray', hatch='//',
-                        label=split_labels[0], alpha=.5,
-                    )
+                if STAT_PER_LID_CAT:
+                    axes = plot_stats_categ()
                     
 
             # add title (once per AX)
@@ -273,6 +234,8 @@ def plot_moveLidSpec_PSDs(
 
     if SHOW_PLOT: plt.show()
     else: plt.close()
+
+
 
 
 def prep_MOVEMENT_spec_psds(PLOT_MOVE, PSD_DICT, BASELINE,
@@ -556,3 +519,93 @@ def plot_move_lmm(MOV, stat_dfs,
         plt.close()
     else:
         plt.show()
+
+
+def plot_summary_stats(stat_df, axes, PLOT_MOVE_TYPE,
+                       STAT_LID_COMPARE, axrow, axcol):
+    if PLOT_MOVE_TYPE == 'REST':    
+        stat_values = [stat_df.iloc[:, 1].values,
+                        np.logical_and(stat_df.iloc[:, 1],
+                                        stat_df.iloc[:, 3]).values]
+    else:
+        stat_values = [stat_df.iloc[:, 1].values,]
+    if STAT_LID_COMPARE == 'binary':
+        split_labels = ['no-LID (<30) vs all-LID',
+                        'no-LID (all) vs all-LID']
+    elif STAT_LID_COMPARE == 'linear':
+        split_labels = ['sign linear LID coeff',]
+
+    
+    ymin, ymax = axes[axrow, axcol].get_ylim()
+    # break and nan-pad x-axis
+    sign_bool, sign_x, sign_xlabs = break_x_axis_psds_ticks(
+        tf_freqs=stat_df.index,
+        PSD=stat_values[-1],
+        x_break = (35, 60), nan_pad = 5
+    )
+    axes[axrow, axcol].fill_between(
+        y1=ymin, y2=ymax, x=sign_x,
+        where=sign_bool,
+        color='gray', alpha=.2,
+        label=split_labels[-1],
+    )
+    if PLOT_MOVE_TYPE == 'REST':
+        # break and nan-pad x-axis
+        sign_bool, sign_x, _ = break_x_axis_psds_ticks(
+            tf_freqs=stat_df.index,
+            PSD=stat_values[0], # sign-bool vs <30 AND all
+            x_break = (35, 60), nan_pad = 5
+        )
+        axes[axrow, axcol].fill_between(
+            y1=ymin, y2=ymax, x=sign_x,
+            where=sign_bool,  # get only sign-bool vs <30
+            facecolor='None', edgecolor='gray', hatch='//',
+            label=split_labels[0], alpha=.5,
+        )
+
+    return axes
+
+
+def plot_stats_categs(stat_df, axes, PLOT_MOVE_TYPE,
+                       STAT_LID_COMPARE, axrow, axcol):
+    if PLOT_MOVE_TYPE == 'REST':    
+        stat_values = [stat_df.iloc[:, 1].values,
+                        np.logical_and(stat_df.iloc[:, 1],
+                                        stat_df.iloc[:, 3]).values]
+    else:
+        stat_values = [stat_df.iloc[:, 1].values,]
+    if STAT_LID_COMPARE == 'binary':
+        split_labels = ['no-LID (<30) vs all-LID',
+                        'no-LID (all) vs all-LID']
+    elif STAT_LID_COMPARE == 'linear':
+        split_labels = ['sign linear LID coeff',]
+
+    
+    ymin, ymax = axes[axrow, axcol].get_ylim()
+    # break and nan-pad x-axis
+    sign_bool, sign_x, sign_xlabs = break_x_axis_psds_ticks(
+        tf_freqs=stat_df.index,
+        PSD=stat_values[-1],
+        x_break = (35, 60), nan_pad = 5
+    )
+    axes[axrow, axcol].fill_between(
+        y1=ymin, y2=ymax, x=sign_x,
+        where=sign_bool,
+        color='gray', alpha=.2,
+        label=split_labels[-1],
+    )
+    if PLOT_MOVE_TYPE == 'REST':
+        # break and nan-pad x-axis
+        sign_bool, sign_x, _ = break_x_axis_psds_ticks(
+            tf_freqs=stat_df.index,
+            PSD=stat_values[0], # sign-bool vs <30 AND all
+            x_break = (35, 60), nan_pad = 5
+        )
+        axes[axrow, axcol].fill_between(
+            y1=ymin, y2=ymax, x=sign_x,
+            where=sign_bool,  # get only sign-bool vs <30
+            facecolor='None', edgecolor='gray', hatch='//',
+            label=split_labels[0], alpha=.5,
+        )
+
+    return axes
