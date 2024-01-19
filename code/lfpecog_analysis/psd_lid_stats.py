@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import json
 import os
+from itertools import compress
 # from statsmodels.formula.api import mixedlm
 import matplotlib.pyplot as plt
 # import own functions
@@ -25,6 +26,7 @@ def calc_lmem_freqCoeffs(temp_values,
                          VALUES_GIVEN_GROUPED=False,
                          GROUP_LABELS=None,
                          STATS_PER_LID_CAT: bool = False,
+                         STATS_VERSION='',
                          verbose: bool = False,):
     """
     temp_values:
@@ -46,6 +48,8 @@ def calc_lmem_freqCoeffs(temp_values,
 
     # correct alpha for multiple comparisons
     ALPHA = ALPHA / sum(f_sel)
+    if STATS_VERSION == '2Hz':
+        ALPHA = ALPHA * 2  # half of the freqs-length due to 2-Hz blocks
     RETURN_GRAD, RETURN_CI = False, False
 
     if VALUES_GIVEN_GROUPED and any(GROUP_LABELS != None):
@@ -73,15 +77,21 @@ def calc_lmem_freqCoeffs(temp_values,
         sign_freqs = {c: [] for c in CAT_CODING.values()}
     
     # calculate coeffs and pvalues per frequency bin
+    res_freqs = []  # to prevent double calculating if freq-bin is larger than 1
+
     for i_f, f in enumerate(temp_freqs):
         # skip irrelevant freqs
         if not f in temp_freqs[f_sel]:
             if verbose: print(f'...skip freq {f} Hz in STATs')
             continue
+        if f in res_freqs:
+            print(f'...skip {f} Hz (already done before)')
+            continue
         
         assert sum(stat_labels == 0) > 0, f'NO BASELINE found in LMM calc ({f} Hz)'
 
         ### calculate each category separately
+        res_freqs.append(f)
         if STATS_PER_LID_CAT: 
             # loop over LID-categories, always same baseline (coded as 0)
             for CAT in CAT_CODING:  # corr to mild-moderate-severe (0: NO-LID is skipped)
@@ -89,6 +99,10 @@ def calc_lmem_freqCoeffs(temp_values,
                 cat_sel = np.logical_or(stat_labels == 0,
                                         stat_labels == CAT)
                 cat_values = stat_values[cat_sel, i_f]
+                # take mean of both freqs (except for last)
+                if STATS_VERSION == '2Hz' and i_f + 1 != stat_values.shape[1]:
+                    cat_values = np.mean([cat_values, stat_values[cat_sel, i_f + 1]], axis=0)
+                    res_freqs.append(temp_freqs[i_f + 1])
                 cat_labels = stat_labels[cat_sel]
                 cat_ids = stat_ids[cat_sel]
                 # calculate difference versus 0
@@ -118,11 +132,26 @@ def calc_lmem_freqCoeffs(temp_values,
                 fixEff_cf, pval = result_list[:2]
                 coeffs_freqs[CAT_CODING[CAT]].append(fixEff_cf)
                 sign_freqs[CAT_CODING[CAT]].append(pval < ALPHA)
+                # add double for 2Hz blocks
+                if STATS_VERSION == '2Hz' and i_f + 1 != stat_values.shape[1]:
+                    coeffs_freqs[CAT_CODING[CAT]].append(fixEff_cf)
+                    sign_freqs[CAT_CODING[CAT]].append(pval < ALPHA)
+                
+                # check where lengths go off
+                assert len(coeffs_freqs[CAT_CODING[CAT]]) == len(np.unique(res_freqs)), (
+                    f'cfs-l: {len(coeffs_freqs[CAT_CODING[CAT]])}, '
+                    f'res-f-l: {len(np.unique(res_freqs))}\nAFTER FREQ {f} Hz'
+                )
 
         else:  # NONE-CATEGORICAL STATISTICS
             # calculate coeffs for med-effect on values (random slopes for subjects)
+            temp_values = stat_values[:, i_f]
+            # take mean of both freqs
+            if STATS_VERSION == '2Hz' and i_f + 1 != stat_values.shape[1]:
+                temp_values = np.mean([temp_values, stat_values[:, i_f + 1]])
+                res_freqs.append(temp_freqs[i_f + 1])
             result_list = run_mixEff_wGroups(
-                dep_var=stat_values[:, i_f],
+                dep_var=temp_values,
                 indep_var=stat_labels,
                 groups=stat_ids,
                 TO_ZSCORE=False,
@@ -155,6 +184,19 @@ def calc_lmem_freqCoeffs(temp_values,
             # add values to lists
             coeffs_freqs.append(fixEff_cf)
             sign_freqs.append(sig_bool)
+            # add double for 2Hz blocks
+            if STATS_VERSION == '2Hz' and i_f + 1 != stat_values.shape[1]:
+                coeffs_freqs.append(fixEff_cf)
+                sign_freqs.append(sig_bool)
+
+    if len(STATS_VERSION) > 1:
+        # delete double 2 Hz freqs and keep only freq-selected (4-35, 60-90)
+        res_freqs = np.sort(np.unique(res_freqs))
+        valid_fs = np.isin(res_freqs, temp_freqs[f_sel], assume_unique=True)
+        res_freqs = res_freqs[valid_fs]
+        for k in coeffs_freqs.keys():
+            coeffs_freqs[k] = np.array(coeffs_freqs[k])[valid_fs]
+            sign_freqs[k] = np.array(sign_freqs[k])[valid_fs]
         
     if not STATS_PER_LID_CAT:
         coeffs_freqs = np.array(coeffs_freqs)
@@ -165,9 +207,9 @@ def calc_lmem_freqCoeffs(temp_values,
 
     if RETURN_CI: print('fix result_list output with CI')
 
-    if not RETURN_GRAD: return (coeffs_freqs, sign_freqs), temp_freqs[f_sel]
+    if not RETURN_GRAD: return (coeffs_freqs, sign_freqs), np.array(res_freqs)
 
-    elif RETURN_GRAD: return (coeffs_freqs, sign_freqs, grads), temp_freqs[f_sel]
+    elif RETURN_GRAD: return (coeffs_freqs, sign_freqs, grads), np.array(res_freqs)
 
 
 def run_mixEff_wGroups(dep_var, indep_var,
@@ -305,65 +347,65 @@ def process_mean_stats(
             print(f'df for {f_hz} Hz saved')
 
 
-def get_binary_p_perHz(datatype, save_date='0000',
-                       DATA_VERSION='v4.0', FT_VERSION='v4',
-                       load_data=False,
-                       save_ps=True, return_ps=False,
-                       return_full_dict=False,):
+# def get_binary_p_perHz(datatype, save_date='0000',
+#                        DATA_VERSION='v4.0', FT_VERSION='v4',
+#                        load_data=False,
+#                        save_ps=True, return_ps=False,
+#                        return_full_dict=False,):
     
-    store_path = os.path.join(get_project_path('results'), 'stats',
-                              f'data_{DATA_VERSION}_ft_{FT_VERSION}',
-                              f'{datatype}_LMM_noLID_vs_LID')
-    assert os.path.exists(store_path), 'incorrect path'
+#     store_path = os.path.join(get_project_path('results'), 'stats',
+#                               f'data_{DATA_VERSION}_ft_{FT_VERSION}',
+#                               f'{datatype}_LMM_noLID_vs_LID')
+#     assert os.path.exists(store_path), 'incorrect path'
 
-    freqs = np.arange(4, 91)
+#     freqs = np.arange(4, 91)
 
-    if load_data and (return_ps or return_full_dict):
-        try:
-            with open(os.path.join(
-                store_path, f'{datatype}_LMM_results_'
-                f'pvalues_{save_date}.json'
-            ), 'r') as json_file:
-                store_json = json.load(json_file)
+#     if load_data and (return_ps or return_full_dict):
+#         try:
+#             with open(os.path.join(
+#                 store_path, f'{datatype}_LMM_results_'
+#                 f'pvalues_{save_date}.json'
+#             ), 'r') as json_file:
+#                 store_json = json.load(json_file)
             
-            if return_full_dict:
-                return store_json
-            elif return_ps:
-                p_list = store_json['p_values']
-                return p_list
+#             if return_full_dict:
+#                 return store_json
+#             elif return_ps:
+#                 p_list = store_json['p_values']
+#                 return p_list
 
     
-        except:
-            print('calculate p-values based on saved data')
+#         except:
+#             print('calculate p-values based on saved data')
     
-    p_list = []
+#     p_list = []
 
-    for i_f, f_hz in enumerate(freqs):
-        print(f'START {f_hz} Hz')
-        if f_hz > 35 and f_hz < 60:
-            p_list.append(np.nan)
-            continue
+#     for i_f, f_hz in enumerate(freqs):
+#         print(f'START {f_hz} Hz')
+#         if f_hz > 35 and f_hz < 60:
+#             p_list.append(np.nan)
+#             continue
 
-        lm_data = pd.read_csv(os.path.join(store_path,
-                                           f'{datatype}_LMM_LID_PSD_{f_hz}Hz_df.xlsx'),
-                            index_col=0, header=0, )
+#         lm_data = pd.read_csv(os.path.join(store_path,
+#                                            f'{datatype}_LMM_LID_PSD_{f_hz}Hz_df.xlsx'),
+#                             index_col=0, header=0, )
         
-        model = mixedlm("mean_power ~ LID", lm_data,
-                        groups=lm_data["sub"])
-        result = model.fit(method='lbfgs')
+#         model = mixedlm("mean_power ~ LID", lm_data,
+#                         groups=lm_data["sub"])
+#         result = model.fit(method='lbfgs')
 
-        # Extract the p-value for the Condition variable
-        p_list.append(result.pvalues['LID'])
+#         # Extract the p-value for the Condition variable
+#         p_list.append(result.pvalues['LID'])
 
-    if save_ps:
-        store_json = {'p_values': p_list, 'freqs': list(freqs)}
+#     if save_ps:
+#         store_json = {'p_values': p_list, 'freqs': list(freqs)}
 
-        store_json = make_object_jsonable(store_json)
+#         store_json = make_object_jsonable(store_json)
 
-        with open(os.path.join(store_path,
-                               f'{datatype}_LMM_results_pvalues_{save_date}.json'),
-                  'w') as json_file:
-            json.dump(store_json, json_file)
+#         with open(os.path.join(store_path,
+#                                f'{datatype}_LMM_results_pvalues_{save_date}.json'),
+#                   'w') as json_file:
+#             json.dump(store_json, json_file)
     
-    if return_ps: return p_list
-    elif return_full_dict: return store_json
+#     if return_ps: return p_list
+#     elif return_full_dict: return store_json

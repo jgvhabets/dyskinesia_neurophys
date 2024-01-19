@@ -25,7 +25,8 @@ from utils.utils_fileManagement import (get_project_path,
                                         load_class_pickle)
 from lfpecog_plotting.plotHelpers import remove_duplicate_legend
 from lfpecog_analysis.psd_lid_stats import (
-    process_mean_stats, get_binary_p_perHz
+    process_mean_stats,
+    # get_binary_p_perHz
 )
 from lfpecog_analysis.get_acc_task_derivs import(
     select_tf_on_movement

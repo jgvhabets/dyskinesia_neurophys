@@ -80,7 +80,7 @@ def get_REST_stat_grouped_data(
         PSD_DICT=PSD_DICT,
         BASELINE=BL_class,
         RETURN_IDS=True,
-        MERGE_REST_STNS=MERGE_STNs,)
+        MERGED_STNS=MERGE_STNs,)
 
     src_psd = psd_arrs[SRC]
     src_subs = psd_subs[SRC]
@@ -157,13 +157,18 @@ def get_MOVE_stat_grouped_data(
                         1: ['mildlid'], 2: ['moderatelid'], 3: ['severelid']}
     
     # GET PSD ARRAYS (move states are dependent on move_cond)
+    if 'FREE' in MOVE_COND: MERGE_STN = True
+    else: MERGE_STN = False
+
+    print(f'...prep MOVEMENT spec psds for {MOVE_COND}')
     (psd_arrs,
      psd_freqs,
      psd_subs) = prep_MOVEMENT_spec_psds(
         PLOT_MOVE=MOVE_COND,
         PSD_DICT=PSD_DICT,
         BASELINE=BL_class,
-        RETURN_IDS=True)
+        RETURN_IDS=True,
+        MERGED_STNS=MERGE_STN)
     src_psd = psd_arrs[SRC]  # contains INVOLUNT/TAP_CONTRA/IPSI/BILAT
     src_subs = psd_subs[SRC]
 
@@ -175,14 +180,13 @@ def get_MOVE_stat_grouped_data(
                   for m in MOVE_STATES}
 
     # put data from diff LID-states in correct groups
-    
     for MOV, group in product(MOVE_STATES, group_states):
+        print(f'...MOV: {MOV}, group: {group} ({group_states[group]})')
         # loops over LID states within the lists (i.e. mildlid)
         for lid_stat in group_states[group]:
-            # print(f'...lid label: {lid_stat}')
-
             temp_psd = np.array(src_psd[MOV][lid_stat], dtype='object',)  # array with lists/arrays
             temp_subs = src_subs[MOV][lid_stat]
+            print(f'psd shape: {temp_psd.shape}, n-subs: {len(temp_subs)}')
 
             assert temp_psd.shape[0] == len(temp_subs), (
                 f'group-{group}, {MOV}, {lid_stat}: psd_arrs and psd_subs DONT MATCH'
@@ -299,6 +303,7 @@ def get_stats_REST_psds(
                 VALUES_GIVEN_GROUPED=True,
                 GROUP_LABELS=stat_labels,
                 STATS_PER_LID_CAT=STAT_PER_LID_CAT,
+                STATS_VERSION=STATS_VERSION,
             )
             if not STAT_PER_LID_CAT:
                 sign_bools.append(sign_freqs)
@@ -365,8 +370,6 @@ def get_stat_folder(STAT_LID_COMPARE: str,
         stat_dir = (get_project_path('data'),
                     'windowed_data_classes_10s_0.5overlap/psdStateStats')
 
-    if len (STATS_VERSION) > 1: stat_dir += f'_{STATS_VERSION}'
-
     assert STAT_LID_COMPARE in ['binary', 'linear', 'categs'], (
         f'STAT_LID_COMPARE ({STAT_LID_COMPARE}) should be linear / binary / categs'
     )
@@ -374,6 +377,8 @@ def get_stat_folder(STAT_LID_COMPARE: str,
         stat_dir += f'_lidCategs'
     else:      
         stat_dir += f'_lid{STAT_LID_COMPARE.capitalize()}'  # add Linear or Binary
+
+    if len (STATS_VERSION) > 1: stat_dir += f'_{STATS_VERSION}'
 
     return stat_dir
 
@@ -385,6 +390,8 @@ def get_stats_MOVE_psds(
     STATS_VERSION: str = '',
     STAT_PER_LID_CAT: bool = False,
     REST_BASELINE: bool = True,
+    SKIP_MOVES: list = [],
+    MERGE_DYSK_SIDES: bool = False,
 ):
     """
     Get statistical difference between movement
@@ -396,7 +403,12 @@ def get_stats_MOVE_psds(
             are compared against same move-no-LID
     """
     SOURCES = ['lfp', 'ecog']
-    SIDES = ['CONTRA', 'IPSI', 'BILAT']
+    
+    # bools to prevent unnecessary loading
+    incl_tap, incl_free, incl_dysk = True, True, True
+    if 'TAP' in SKIP_MOVES: incl_tap = False
+    if 'INVOLUNT' in SKIP_MOVES: incl_dysk = False
+    if 'FREE' in SKIP_MOVES: incl_free = False
 
     CLASSES_LOADED = False  # bool to only load classes once during creation
 
@@ -408,11 +420,16 @@ def get_stats_MOVE_psds(
                                STATS_VERSION=STATS_VERSION,)
 
     
-    for MOV in ['TAP', 'INVOLUNT']:
+    for MOV in ['TAP', 'INVOLUNT', 'FREEMOVE', 'FREENOMOVE']:
+        if MOV in SKIP_MOVES: continue
     
         if STAT_LID_COMPARE == 'binary' and MOV == 'INVOLUNT':
             print(f'SKIP binary comparison for dyskinetic movement')
             continue
+
+        if MERGE_DYSK_SIDES and MOV in ['INVOLUNT', 'FREEMOVE', 'FREENOMOVE']:
+            SIDES = ['MERGED']
+        else: SIDES = ['CONTRA', 'IPSI', 'BILAT']
 
         print(f'\n######### START {MOV}  get_stats_MOVE_psds()\n')
 
@@ -437,7 +454,11 @@ def get_stats_MOVE_psds(
             # load PSD classes (1sec arrays) only once
             if not CLASSES_LOADED:
                 print('...load get_allSpecStates_Psds() to calc stat-psds')
-                PSDs, BLs = get_allSpecStates_Psds(RETURN_PSD_1sec=True)
+                print(f'incl free: {incl_free}')
+                PSDs, BLs = get_allSpecStates_Psds(RETURN_PSD_1sec=True,
+                                                    incl_free=incl_free,
+                                                    incl_tap=incl_tap,
+                                                    incl_lidmove=incl_dysk)
                 CLASSES_LOADED = True
             
             # get stat-data (if STAT_LID_COMPARE == categs, stat_labels are coded 0: no, 1: mild, 2: moderate, 3: severe
@@ -449,18 +470,27 @@ def get_stats_MOVE_psds(
                 PSD_DICT=PSDs, BL_class=BLs,  # USE 1-SEC CLASSES FOR STATISTICS
                 PSD_1s_windows=True,
             )
-            print(f'keys of received stat_values: {stat_values.keys()}, search {SIDE}')
+
             # adjust SIDE to keys, i.e., 'INVOLUNT_CONTRA', 'INVOLUNT_IPSI', 'INVOLUNT_BILAT'
             if f'{MOV}_{SIDE}' in list(stat_values.keys()):
                 SIDE = f'{MOV}_{SIDE}'
+                stat_values = stat_values[SIDE]
+                stat_labels = stat_labels[SIDE]
+                stat_ids = stat_ids[SIDE]
+
+            elif (MOV == 'INVOLUNT' or 'FREE' in MOV) and SIDE == 'MERGED':
+                stat_values = np.concatenate([arr for arr in stat_values.values()],
+                                             axis=0)
+                stat_labels = np.concatenate([arr for arr in stat_labels.values()],
+                                             axis=0)
+                stat_ids = np.concatenate([arr for arr in stat_ids.values()],
+                                             axis=0)
+
             else:
                 print(f'no matching SIDE VALUES for')
                 continue
 
-            stat_values = stat_values[SIDE]
-            stat_labels = stat_labels[SIDE]
-            stat_ids = stat_ids[SIDE]
-
+            
             # COMPARE WITH all REST WITHOUT MOVEMENT (labels all 0)
             if REST_BASELINE:
                 print('...load rest psds as baseline for movement')
@@ -490,8 +520,10 @@ def get_stats_MOVE_psds(
                 temp_freqs=value_freqs,
                 VALUES_GIVEN_GROUPED=True,
                 GROUP_LABELS=stat_labels,
-                STATS_PER_LID_CAT=STAT_PER_LID_CAT
+                STATS_PER_LID_CAT=STAT_PER_LID_CAT,
+                STATS_VERSION=STATS_VERSION,
             )
+            
             # CALC and SAVE STATS in dataframes separate per MOV / SRC / SIDE
             if not STAT_PER_LID_CAT:
                 stat_df = pd.DataFrame(

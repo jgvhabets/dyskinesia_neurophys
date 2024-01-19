@@ -27,7 +27,11 @@ from lfpecog_preproc.preproc_import_scores_annotations import (
 )
 
 def get_allSpecStates_Psds(
-    RETURN_PSD_1sec = True
+    RETURN_PSD_1sec = True,
+    incl_rest: bool = True,
+    incl_tap: bool = True,
+    incl_lidmove: bool = True,
+    incl_free: bool = True,
 ):
     """
     
@@ -52,7 +56,17 @@ def get_allSpecStates_Psds(
         product(['left', 'right'], lid_states)
     ] + [f'dyskmoveboth_{l}lid' for l in lid_states]
 
-    conditions = rest_conditions + tap_conditions + lidmove_conditions
+    free_conditions = [
+        f'freemove{s}only_{l}lid' for s, l in
+        product(['Left', 'Right'], lid_states)
+    ] + [f'free{s}_{l}lid' for s, l in
+         product(['moveboth', 'nomove'], lid_states)]
+
+    conditions = []
+    if incl_rest: conditions += rest_conditions
+    if incl_tap: conditions += tap_conditions
+    if incl_lidmove: conditions += lidmove_conditions
+    if incl_free: conditions += free_conditions
 
     # get baselines
     BLs = get_selectedEphys(
@@ -70,6 +84,7 @@ def get_allSpecStates_Psds(
             USE_EXT_HD=True,
             PREVENT_NEW_CREATION=False,
             RETURN_PSD_1sec=RETURN_PSD_1sec,
+            # EXTRACT_FREE=EXTRACT_FREE,
         ) for cond in conditions
     }
 

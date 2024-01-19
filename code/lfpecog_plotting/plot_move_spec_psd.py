@@ -12,9 +12,7 @@ from pandas import read_csv
 from utils.utils_fileManagement import get_project_path
 from lfpecog_plotting.plot_descriptive_SSD_PSDs import break_x_axis_psds_ticks
 from lfpecog_analysis.specific_ephys_selection import get_hemisphere_movement_location
-from lfpecog_analysis.prep_stats_movLidspecPsd import (
-    get_stat_folder
-)
+
 
 cond_colors = {
     'nolid': 'green',
@@ -34,23 +32,48 @@ def prep_and_plot_moveSpecPsd(
     STATS_VERSION: str = '',
     STAT_LID_COMPARE: str = 'binary',
     MERGE_REST_STNS: bool = False,
+    MERGE_FREE_STNS: bool = False,
+    MERGED_DYSK: bool = False,
     ADD_TO_FIG_NAME = False,
 ):
     # define correct prep function
     if PLOT_CONDITION == 'REST':
         prep_func = prep_REST_spec_psds
-    elif PLOT_CONDITION in ['TAP', 'INVOLUNT']:
+        MERGE_STN = MERGE_REST_STNS
+    elif PLOT_CONDITION in ['TAP', 'INVOLUNT', 'FREE']:
         prep_func = prep_MOVEMENT_spec_psds
+        if PLOT_CONDITION == 'TAP':
+            MERGE_STN = False
+        elif PLOT_CONDITION == 'FREE':
+            MERGE_STN = MERGE_FREE_STNS
+            PLOT_CONDITION = ['FREENOMOVE', 'FREEMOVE']
+        elif PLOT_CONDITION == 'INVOLUNT':
+            MERGE_STN = MERGED_DYSK  # new plotting dysk_move
     # execute prep function
-    psd_arrs, psd_freqs = prep_func(
-        PLOT_MOVE=PLOT_CONDITION,
-        PSD_DICT=PSD_DICT,
-        BASELINE=BASELINE,
-        MERGE_REST_STNS=MERGE_REST_STNS,
-    )
+    if isinstance(PLOT_CONDITION, str):
+        psd_arrs, psd_freqs, psd_subs = prep_func(
+            PLOT_MOVE=PLOT_CONDITION,
+            PSD_DICT=PSD_DICT,
+            BASELINE=BASELINE,
+            MERGED_STNS=MERGE_STN,
+            RETURN_IDS=True,
+        )
+    elif isinstance(PLOT_CONDITION, list):
+        psd_arrs, psd_subs = {}, {}
+        for FREE_COND in PLOT_CONDITION:
+            temp_arrs, psd_freqs, temp_subs = prep_func(
+                PLOT_MOVE=FREE_COND,
+                PSD_DICT=PSD_DICT,
+                BASELINE=BASELINE,
+                MERGED_STNS=MERGE_STN,
+                RETURN_IDS=True,
+            )
+            psd_arrs[FREE_COND] = temp_arrs
+            psd_subs[FREE_COND] = temp_subs
+
     # plot
     plot_moveLidSpec_PSDs(
-        psd_arrs, psd_freqs=psd_freqs,
+        psd_arrs, psd_freqs=psd_freqs, psd_subs=psd_subs,
         PLOT_MOVE_TYPE=PLOT_CONDITION,
         SAVE_PLOT=SAVE_PLOT,
         SHOW_PLOT=SHOW_PLOT,
@@ -58,13 +81,13 @@ def prep_and_plot_moveSpecPsd(
         STAT_PER_LID_CAT=STAT_PER_LID_CAT,
         STATS_VERSION=STATS_VERSION,
         STAT_LID_COMPARE=STAT_LID_COMPARE,
-        MERGED_STNS=MERGE_REST_STNS,
+        MERGED_STNS=MERGE_STN,
         ADD_TO_FIG_NAME=ADD_TO_FIG_NAME,
     )
 
 
 def plot_moveLidSpec_PSDs(
-    psd_arrs, psd_freqs, PLOT_MOVE_TYPE,
+    psd_arrs, psd_freqs, psd_subs, PLOT_MOVE_TYPE,
     SAVE_PLOT: bool = False,
     SHOW_PLOT: bool = True,
     INCL_STATS: bool = False,
@@ -78,11 +101,28 @@ def plot_moveLidSpec_PSDs(
     """
     Plots first keys as rows (LFP-ECoG), second keys as cols (CONTRA/IPSI lat)
     """
+    print(f'######### START PLOTTING {PLOT_MOVE_TYPE}')
     # add extra dimension for rest (no movement differences on columns)
     # (movement has double hierarchy already (lfp/ecog, sides))
     if PLOT_MOVE_TYPE == 'REST':
         psd_arrs = {'rest': psd_arrs}
-
+    elif PLOT_MOVE_TYPE == 'INVOLUNT' and MERGED_STNS:
+        psd_arrs = {'dysk': psd_arrs}  # one row (dysk), two columns (lfp, ecog)
+    elif 'FREE' in PLOT_MOVE_TYPE or any(['FREE' in s for s in PLOT_MOVE_TYPE]):
+        # ravel dicts with arrays
+        lfp = {m: psd_arrs[m]['lfp'][m] for m in PLOT_MOVE_TYPE}
+        ecog = {m: psd_arrs[m]['ecog'][m] for m in PLOT_MOVE_TYPE}
+        psd_arrs = {'lfp': lfp, 'ecog': ecog}
+        # also ravel subs
+        lfp = {m: psd_subs[m]['lfp'][m] for m in PLOT_MOVE_TYPE}
+        ecog = {m: psd_subs[m]['ecog'][m] for m in PLOT_MOVE_TYPE}
+        psd_subs = {'lfp': lfp, 'ecog': ecog}
+        # set defaults
+        PLOT_MOVE_TYPE = 'FREE'
+        MERGED_STNS = True
+        
+    # prevent circular import
+    from lfpecog_analysis.prep_stats_movLidspecPsd import get_stat_folder
     stat_dir = get_stat_folder(STAT_LID_COMPARE=STAT_LID_COMPARE,
                                 STAT_PER_LID_CAT=STAT_PER_LID_CAT,
                                 STAT_DATA_EXT_PATH=STAT_DATA_EXT_PATH,
@@ -108,16 +148,27 @@ def plot_moveLidSpec_PSDs(
 
     for axrow, src in enumerate(ax_row_keys):
         # DURING REST: src is here also rest (only 1 row); DURING MOVE: lfp/ecog
+        # during merged DYSK -> src is free
 
         for axcol, mov in enumerate(ax_col_keys):
-            # DURING REST: mov is source; during MOVE: contra/ipsi/bi
+            # DURING REST: mov is source; during MOVE: contra/ipsi/bi; during FREE: MOVE/ NOMOVE
+            # during merged DYSK -> mov is lfp/ecog
 
             # get STAT dataframe
             if INCL_STATS:
+                
                 if PLOT_MOVE_TYPE.lower() == 'rest':
                     dfname = f'PsdStateStats_1secWins_REST_{mov}.csv'  # mov is source
-                else:  # no rest
-                    dfname = f'PsdStateStats_1secWins_{PLOT_MOVE_TYPE}_{src}_{mov.split("_")[1]}.csv'
+                
+                elif PLOT_MOVE_TYPE == 'FREE':
+                    dfname = f'PsdStateStats_1secWins_{mov}_{src}_MERGED.csv'
+                
+                elif PLOT_MOVE_TYPE == 'INVOLUNT' and MERGED_STNS:
+                    dfname = f'PsdStateStats_1secWins_{PLOT_MOVE_TYPE}_{mov}_MERGED.csv'
+                
+                else:  # tap and involunt (2x2 or 2x3)
+                    dfname = f'PsdStateStats_1secWins_{PLOT_MOVE_TYPE}_{src}_{mov}.csv'
+                
                 stat_df = os.path.join(stat_dir, dfname)
                 if os.path.exists(stat_df):
                     print(f'...stats df loading: {stat_df}')
@@ -125,8 +176,8 @@ def plot_moveLidSpec_PSDs(
                 else:
                     raise FileNotFoundError(f'STAT DF not existing ({stat_df}), PM: '
                                             'create with prep_specStats.get_stats_MOVE_psds()')
+            
             # LOOP OVER LID-CATEGORIES/ GROUPS
-            print(f'\nPRESENT LID CATEGS {psd_arrs[src][mov].keys()}')
             for lid in psd_arrs[src][mov].keys():
                 # get and average correct PSDs
                 # check whether psds are means or not 1-sec windows
@@ -134,7 +185,13 @@ def plot_moveLidSpec_PSDs(
                     temp_psds = np.array([np.mean(a, axis=0) for a in psd_arrs[src][mov][lid]])
                 else:  # given as subject mean PSDs
                     temp_psds = np.array(psd_arrs[src][mov][lid])
-                n_subs = len(temp_psds)
+                # define subs (and correct for double hemisferes due to merging (left/right; moveUni/Bilat))
+                if MERGED_STNS and PLOT_MOVE_TYPE == 'INVOLUNT':
+                    n_subs = len(np.unique(psd_subs[mov][lid]))
+                elif MERGED_STNS and PLOT_MOVE_TYPE == 'FREE':
+                    n_subs = len(np.unique(psd_subs[src][mov][lid]))
+                else:
+                    n_subs = len(temp_psds)
                 if n_subs == 0:
                     print(f'no psds for {src, mov, lid}')
                     continue
@@ -153,7 +210,7 @@ def plot_moveLidSpec_PSDs(
                 lab = lab.replace('over30', ' > 30min')
                 # plot mean line of LID severity
                 axes[axrow, axcol].plot(
-                    x_plot, m, # PSDs[cond].freqs, m,
+                    x_plot, m,
                     color=cond_colors[lid], alpha=.8, ls=ls,
                     label=f"{lab} (n={n_subs})",
                 )
@@ -181,14 +238,22 @@ def plot_moveLidSpec_PSDs(
                     
 
             # add title (once per AX)
-            if PLOT_MOVE_TYPE != 'REST':
+            if PLOT_MOVE_TYPE == 'INVOLUNT' and MERGED_STNS:
+                ax_title = (f'{mov.upper()} during dyskinetic (invol.) movement')
+
+            elif PLOT_MOVE_TYPE == 'FREE':
+                ax_title = (f'{src.upper()}: unscripted FREE-task: {mov.split("FREE")[1]}MENT')
+            
+            elif PLOT_MOVE_TYPE != 'REST':
                 ax_title = (f'{src.upper()} during '
                             f'{mov.split("_")[1]}-lateral'
                             f' {mov.split("_")[0]}-movement')
                 ax_title = ax_title.replace('INVOLUNT', 'DYSK')
                 ax_title = ax_title.replace('BILAT', 'BI')
+            
             else:
                 ax_title = (f'{mov.upper()} during REST (no movement)')
+            
             axes[axrow, axcol].set_title(ax_title, weight='bold',
                                             size=FS,)
 
@@ -213,18 +278,16 @@ def plot_moveLidSpec_PSDs(
         ax.set_xlabel('Frequency (Hz)', size=FS, weight='bold',)
     for ax in axes[:, 0]:
         ax.set_ylabel('Spectral Power, %-change\n'
-                    '(vs Med-OFF, no LID)', size=FS, weight='bold',)
+                      '(vs Med-OFF, no LID)', size=FS, weight='bold',)
 
     plt.tight_layout()
 
     if SAVE_PLOT:
-        if PLOT_MOVE_TYPE == 'REST':
-            FIG_NAME = f'PSDs_{PLOT_MOVE_TYPE}_lidCategs'
-        else:
-            FIG_NAME = f'PSDs_{PLOT_MOVE_TYPE}contraIpsi_lidCategs'
+        FIG_NAME = f'PSDs_{PLOT_MOVE_TYPE}'
         if MERGED_STNS: FIG_NAME += '_mergedSTNs'
         if INCL_STATS:
             FIG_NAME += f'_stats{STAT_LID_COMPARE}'
+            if len(STATS_VERSION) > 1: FIG_NAME += STATS_VERSION
         if ADD_TO_FIG_NAME:
             FIG_NAME = ADD_TO_FIG_NAME + FIG_NAME
         FIG_PATH = os.path.join(get_project_path('figures'),
@@ -245,7 +308,7 @@ def plot_moveLidSpec_PSDs(
 def prep_MOVEMENT_spec_psds(PLOT_MOVE, PSD_DICT, BASELINE,
                             RETURN_IDS: bool = False,
                             RETURN_STATE_ARRAYS: bool = False,
-                            MERGE_REST_STNS: bool = False,):
+                            MERGED_STNS: bool = False,):
     """
 
     Arguments:
@@ -261,19 +324,25 @@ def prep_MOVEMENT_spec_psds(PLOT_MOVE, PSD_DICT, BASELINE,
             psd-arrays, organized in LFP/ECoG (axrows), and
             CONTRA/IPSI-lateral movements (axcols)
     """
-    assert PLOT_MOVE in ['INVOLUNT', 'TAP']
+    print(f'start prep MOVEMENT spec psdsPLOTMOVE: {PLOT_MOVE}')
+    assert PLOT_MOVE in ['INVOLUNT', 'TAP', 'FREE', 'FREEMOVE', 'FREENOMOVE']
 
-    if PLOT_MOVE == 'TAP': ATTR_CODE = 'TAP'
-    elif PLOT_MOVE == 'INVOLUNT': ATTR_CODE = 'DYSKMOVE'
+    if PLOT_MOVE == 'INVOLUNT': ATTR_CODE = 'DYSKMOVE'
+    else: ATTR_CODE = PLOT_MOVE
 
     sources = ['lfp_left', 'lfp_right', 'ecog']
     lid_states = ['no', 'mild', 'moderate', 'severe']
     move_axes = [f'{PLOT_MOVE}_CONTRA', f'{PLOT_MOVE}_IPSI']
-    if PLOT_MOVE == 'INVOLUNT': move_axes.append('INVOLUNT_BILAT')
+    
+    if PLOT_MOVE == 'INVOLUNT' and not MERGED_STNS:
+        move_axes.append('INVOLUNT_BILAT')
+    
+    if 'FREE' in PLOT_MOVE: move_axes = [PLOT_MOVE]
+    if MERGED_STNS: sources = ['lfp', 'ecog']
 
+    # create dicts to store psds
     psd_arrs = {'lfp': {d: [] for d in move_axes},
                 'ecog': {d: [] for d in move_axes}}  # store all psds for move axes
-    
     # store IDs parallel to psds
     if RETURN_IDS: sub_arrs = {'lfp': {d: [] for d in move_axes},
                                'ecog': {d: [] for d in move_axes}}
@@ -282,53 +351,92 @@ def prep_MOVEMENT_spec_psds(PLOT_MOVE, PSD_DICT, BASELINE,
     for s, m in product(psd_arrs.keys(), move_axes):
         psd_arrs[s][m] = {f'{l}lid': [] for l in lid_states}
         if RETURN_IDS: sub_arrs[s][m] = {f'{l}lid': [] for l in lid_states}
+    
+    if PLOT_MOVE == 'INVOLUNT' and MERGED_STNS:
+        psd_arrs = {'lfp': {f'{l}lid': [] for l in lid_states},
+                    'ecog': {f'{l}lid': [] for l in lid_states}}
+        if RETURN_IDS:
+            sub_arrs['lfp'] = {f'{l}lid': [] for l in lid_states}
+            sub_arrs['ecog'] = {f'{l}lid': [] for l in lid_states}
 
     # categorize, average, baseline-corr all conditions
     for SRC, cond in product(sources, PSD_DICT.keys()):
-        
+        # print(f'...{SRC}, {cond}, {ATTR_CODE}')
         if not ATTR_CODE in cond.upper(): continue
         # loop and add subjects
         for attr in vars(PSD_DICT[cond]).keys():
+            # print(f'.......{attr}')
             # skip irelevant attr
             if not ATTR_CODE in attr.upper(): continue
             if SRC not in attr: continue
-            sub = attr.split(f'{SRC}_')[1][:3]
+            # print(f'...selected attr (prep move spec psds): {attr}')
+            # select on sub
+            if 'lfp' in SRC: sub = attr.split('_')[2]  # exclude lfp side
+            elif SRC == 'ecog': sub = attr.split('_')[1]  # exclude lfp side
             if not sub.startswith('0') and not sub.startswith('1'): continue
-
             # get psd arr and correct for baseline
             temp_psd = getattr(PSD_DICT[cond], attr)
-
-            try:
-                bl = getattr(BASELINE, f'{SRC}_{sub}_baseline')
-                # take mean baseline if 1-sec windows are given
-                if len(bl.shape) == 2: bl = bl.mean(axis=0)
-            except:
-                print(f'### WARNING: no baseline found for {sub}: {SRC}, skipped')
-                continue
+            # print(f'...SHAPE temp psd {temp_psd.shape}')
+            if SRC == 'lfp' and MERGED_STNS:
+                try:
+                    if 'FREE' in PLOT_MOVE: bl_attr = f'lfp_{attr.split("_")[1]}_{sub}_baseline'
+                    else: bl_attr = f'lfp_right_{sub}_baseline'  # for merged taps/dysk
+                    bl = getattr(BASELINE, bl_attr)
+                    if len(bl.shape) == 2: bl = bl.mean(axis=0)
+                    if not 'FREE' in PLOT_MOVE:  # for merged stns takes mean baseline
+                        bl2 = getattr(BASELINE, f'lfp_left_{sub}_baseline')
+                        if len(bl2.shape) == 2: bl2 = bl2.mean(axis=0)
+                        bl = np.mean([bl, bl2], axis=0)
+                except:
+                    print(f'### WARNING no merged-STN-baseline sub {sub}')
+                    continue
+            else:
+                try:
+                    bl = getattr(BASELINE, f'{SRC}_{sub}_baseline')
+                    # take mean baseline if 1-sec windows are given
+                    if len(bl.shape) == 2: bl = bl.mean(axis=0)
+                except:
+                    print(f'### WARNING: no baseline found for {sub}: {SRC}, skipped')
+                    continue
 
             temp_psd = ((temp_psd - bl) / bl) * 100
             if RETURN_STATE_ARRAYS: print(f'...arr shape {attr}: {temp_psd.shape}')
 
             # add to LFP or ECOG and correct move-dict
                 # define hemisphere location to movement
-            HEM_LOC, MOV_TYPE = get_hemisphere_movement_location(
-                SRC=SRC, cond=cond, sub=sub,
-                ecog_sides=PSD_DICT[cond].ecog_sides,
-            )
-            # psd_arrs[SRC.split('_')[0]][f'{MOV_TYPE} {HEM_LOC}'].append(temp_psd)
+            if not (PLOT_MOVE == 'INVOLUNT' and MERGED_STNS) and (
+                'FREE' not in PLOT_MOVE
+            ):
+                HEM_LOC, MOV_TYPE = get_hemisphere_movement_location(
+                    SRC=SRC, cond=cond, sub=sub,
+                    ecog_sides=PSD_DICT[cond].ecog_sides,
+                )
+
             # include LID-state:
             temp_lid = attr.split('_')[-1]
-            psd_arrs[
-                SRC.split('_')[0]][f'{MOV_TYPE}_{HEM_LOC}'
-            ][temp_lid].append(temp_psd)
-
-            # add subject ID to list
-            if RETURN_IDS: sub_arrs[
-                SRC.split('_')[0]][f'{MOV_TYPE}_{HEM_LOC}'
-            ][temp_lid].append(sub)
+            if PLOT_MOVE == 'INVOLUNT' and MERGED_STNS:
+                psd_arrs[SRC.split('_')[0]][temp_lid].append(temp_psd)
+                # add subject ID to list
+                if RETURN_IDS: sub_arrs[
+                    SRC.split('_')[0]][temp_lid
+                ].append(sub)                
             
-            # print(f'added {attr} to {SRC}, {MOV_TYPE} {HEM_LOC} {temp_lid}')
-
+            elif PLOT_MOVE in ['INVOLUNT', 'TAP']:
+                psd_arrs[
+                    SRC.split('_')[0]][f'{MOV_TYPE}_{HEM_LOC}'
+                ][temp_lid].append(temp_psd)
+                # add subject ID to list
+                if RETURN_IDS: sub_arrs[
+                    SRC.split('_')[0]][f'{MOV_TYPE}_{HEM_LOC}'
+                ][temp_lid].append(sub)
+                    
+            elif 'FREE' in PLOT_MOVE:
+                # print(f'...add to psd_arrs {PLOT_MOVE}, {temp_lid} --> {temp_psd.shape}')
+                psd_arrs[SRC.split('_')[0]][PLOT_MOVE][temp_lid].append(temp_psd)
+                # add subject ID to list
+                if RETURN_IDS:
+                    sub_arrs[SRC.split('_')[0]][PLOT_MOVE][temp_lid].append(sub)
+            
     psd_freqs = PSD_DICT[cond].freqs
 
     if not RETURN_IDS: return psd_arrs, psd_freqs
@@ -339,7 +447,7 @@ def prep_MOVEMENT_spec_psds(PLOT_MOVE, PSD_DICT, BASELINE,
 def prep_REST_spec_psds(PSD_DICT, BASELINE,
                         PLOT_MOVE: str = 'REST',
                         RETURN_IDS: bool = False,
-                        MERGE_REST_STNS: bool = False,):
+                        MERGED_STNS: bool = False,):
     """
 
     Arguments:
@@ -394,7 +502,7 @@ def prep_REST_spec_psds(PSD_DICT, BASELINE,
             if RETURN_IDS: sub_arrs[SRC][temp_lid].append(sub)
 
     # merge both STNs if defined
-    if MERGE_REST_STNS:
+    if MERGED_STNS:
         stn_arrs = {s: [] for s in psd_arrs['lfp_left'].keys()}
         if RETURN_IDS: stn_subs = {s: [] for s in sub_arrs['lfp_left'].keys()}
         for side in ['left', 'right']:
