@@ -1245,10 +1245,7 @@ def break_x_axis_psds_ticks(tf_freqs, PSD, PSD_sd=False,
     # correct missing NaNs (necessary during sign True/False arras)
     if not np.isnan(PSD).any():
         for i, lab in enumerate(xlabels):
-            if lab == '' and PSD[i] == True:
-                print(f'...(break_xaxis) corrected label {i} ({lab}) from {PSD[i]} to False')
-                PSD[i] = False
-                
+            if lab == '' and PSD[i] == True: PSD[i] = False
 
     if isinstance(PSD, dict): return PSD, xticks, xlabels
     elif isinstance(PSD, np.ndarray):

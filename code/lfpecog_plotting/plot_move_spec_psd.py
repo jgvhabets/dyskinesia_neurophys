@@ -125,7 +125,8 @@ def plot_moveLidSpec_PSDs(
                 else:
                     raise FileNotFoundError(f'STAT DF not existing ({stat_df}), PM: '
                                             'create with prep_specStats.get_stats_MOVE_psds()')
-            print(f'STAT DF KEYS: {stat_df.keys()}')
+            # LOOP OVER LID-CATEGORIES/ GROUPS
+            print(f'\nPRESENT LID CATEGS {psd_arrs[src][mov].keys()}')
             for lid in psd_arrs[src][mov].keys():
                 # get and average correct PSDs
                 # check whether psds are means or not 1-sec windows
@@ -173,7 +174,10 @@ def plot_moveLidSpec_PSDs(
                         axrow=axrow, axcol=axcol
                     )
                 if STAT_PER_LID_CAT:
-                    axes = plot_stats_categ()
+                    axes = plot_stats_categs(
+                        stat_df, axes, PLOT_MOVE_TYPE,
+                        axrow, axcol
+                    )
                     
 
             # add title (once per AX)
@@ -198,8 +202,8 @@ def plot_moveLidSpec_PSDs(
         ax.axhline(0, xmin=0, xmax=1, color='gray', alpha=.3,)
         ax.set_xticks(xticks)
         ax.set_xticklabels(xlabs, fontsize=FS,)
-        ax.set_ylim(-75, 275)
-        ax.legend(fontsize=FS, frameon=False,)
+        ax.set_ylim(-75, 250)
+        ax.legend(fontsize=FS-2, frameon=False, ncol=2,)
         ax.tick_params(size=FS, labelsize=FS,)
         for s in ['right', 'top']: ax.spines[s].set_visible(False)
         ax.text(x=xticks[len(xticks) // 2] + 2, y=-73, s='//', size=16, color='k')
@@ -567,45 +571,65 @@ def plot_summary_stats(stat_df, axes, PLOT_MOVE_TYPE,
 
 
 def plot_stats_categs(stat_df, axes, PLOT_MOVE_TYPE,
-                       STAT_LID_COMPARE, axrow, axcol):
-    if PLOT_MOVE_TYPE == 'REST':    
-        stat_values = [stat_df.iloc[:, 1].values,
-                        np.logical_and(stat_df.iloc[:, 1],
-                                        stat_df.iloc[:, 3]).values]
-    else:
-        stat_values = [stat_df.iloc[:, 1].values,]
-    if STAT_LID_COMPARE == 'binary':
-        split_labels = ['no-LID (<30) vs all-LID',
-                        'no-LID (all) vs all-LID']
-    elif STAT_LID_COMPARE == 'linear':
-        split_labels = ['sign linear LID coeff',]
+                      axrow, axcol, lw=8,):
+    sign_bools = {}
 
-    
-    ymin, ymax = axes[axrow, axcol].get_ylim()
-    # break and nan-pad x-axis
-    sign_bool, sign_x, sign_xlabs = break_x_axis_psds_ticks(
-        tf_freqs=stat_df.index,
-        PSD=stat_values[-1],
-        x_break = (35, 60), nan_pad = 5
-    )
-    axes[axrow, axcol].fill_between(
-        y1=ymin, y2=ymax, x=sign_x,
-        where=sign_bool,
-        color='gray', alpha=.2,
-        label=split_labels[-1],
-    )
     if PLOT_MOVE_TYPE == 'REST':
+        # get groups
+        stat_groups = [k.split('_')[1].split(' vs ')
+                       for k in stat_df.keys()]
+        groups_lid = np.unique([g[1] for g in stat_groups])  # tested groups
+        Y_BASE = 175
+    else:
+        groups_lid = list(np.unique([g.split("_")[1] for g in stat_df.keys()]))
+        Y_BASE = 200
+        if 'nolid' in groups_lid:  # put nolid in first position
+            groups_lid.remove('nolid')
+            groups_lid = ['nolid'] + groups_lid
+
+    for i_cat, cat in enumerate(groups_lid):  # loop over CATEGs to show
+        # signs for full and only compared to <30
+        if PLOT_MOVE_TYPE == 'REST':
+            sign_bools['full'] = stat_df[f'sig_no-LID vs {cat}']
+            sign_bools['u30'] = stat_df[f'sig_no-LID (<30) vs {cat}']
+            sign_bools['u30'] = np.logical_and(sign_bools['u30'], ~sign_bools['full'])
+            cat = cat.split("-")[1]
+        else:
+            sign_bools['full'] = stat_df[f'sig_{cat}']
+            cat = cat.split('lid')[0]
+
         # break and nan-pad x-axis
-        sign_bool, sign_x, _ = break_x_axis_psds_ticks(
-            tf_freqs=stat_df.index,
-            PSD=stat_values[0], # sign-bool vs <30 AND all
-            x_break = (35, 60), nan_pad = 5
-        )
+        for k in sign_bools:
+            sign_bools[k], sign_x, _ = break_x_axis_psds_ticks(
+                tf_freqs=sign_bools[k].index,
+                PSD=sign_bools[k].values,
+                x_break = (35, 60), nan_pad = 5
+            )
+        # first plot baseline for color background
         axes[axrow, axcol].fill_between(
-            y1=ymin, y2=ymax, x=sign_x,
-            where=sign_bool,  # get only sign-bool vs <30
-            facecolor='None', edgecolor='gray', hatch='//',
-            label=split_labels[0], alpha=.5,
+            sign_x, y1=Y_BASE - ((i_cat + 1) * lw),
+            y2=Y_BASE - (i_cat * lw),
+            color=cond_colors[f'{cat}lid'],
+            alpha=.05,
         )
+        # plot dashed for only sign vs below30
+        if 'u30' in list(sign_bools.keys()):
+            axes[axrow, axcol].fill_between(
+                sign_x, where=sign_bools['u30'] == 1,
+                y1=Y_BASE - ((i_cat + 1) * lw),
+                y2=Y_BASE - (i_cat * lw),
+                hatch='//', facecolor='None',
+                edgecolor=cond_colors[f'{cat}lid'], alpha=.8,
+            )
+        # plot full color for full signs
+        axes[axrow, axcol].fill_between(
+            sign_x, where=sign_bools['full'] == 1,
+            y1=Y_BASE - ((i_cat + 1) * lw),
+            y2=Y_BASE - (i_cat * lw),
+            color=cond_colors[f'{cat}lid'], alpha=.5,
+        )
+
+
+
 
     return axes

@@ -24,7 +24,8 @@ def calc_lmem_freqCoeffs(temp_values,
                          ALPHA: float = .05,
                          VALUES_GIVEN_GROUPED=False,
                          GROUP_LABELS=None,
-                         STATS_PER_LID_CAT: bool = False,):
+                         STATS_PER_LID_CAT: bool = False,
+                         verbose: bool = False,):
     """
     temp_values:
     temp_ids: array corresponding to values
@@ -45,7 +46,6 @@ def calc_lmem_freqCoeffs(temp_values,
 
     # correct alpha for multiple comparisons
     ALPHA = ALPHA / sum(f_sel)
-    print(f'multi-comp (n={sum(f_sel)}) corr-ALPHA: {round(ALPHA, 5)}')
     RETURN_GRAD, RETURN_CI = False, False
 
     if VALUES_GIVEN_GROUPED and any(GROUP_LABELS != None):
@@ -54,6 +54,7 @@ def calc_lmem_freqCoeffs(temp_values,
         stat_ids = temp_ids
 
     elif not VALUES_GIVEN_GROUPED:
+        print('data not given grouped, execute get_stats_arrays()')
         # organize long arrays with all values, labels and sub-ids
         (stat_values,
          stat_labels,
@@ -75,14 +76,16 @@ def calc_lmem_freqCoeffs(temp_values,
     for i_f, f in enumerate(temp_freqs):
         # skip irrelevant freqs
         if not f in temp_freqs[f_sel]:
-            print(f'...skip freq {f} Hz in STATs')
+            if verbose: print(f'...skip freq {f} Hz in STATs')
             continue
         
+        assert sum(stat_labels == 0) > 0, f'NO BASELINE found in LMM calc ({f} Hz)'
+
         ### calculate each category separately
         if STATS_PER_LID_CAT: 
             # loop over LID-categories, always same baseline (coded as 0)
             for CAT in CAT_CODING:  # corr to mild-moderate-severe (0: NO-LID is skipped)
-                print(f'...start STAT calc for LID CAT: {CAT}, {CAT_CODING[CAT]} ({f} Hz)')
+                if verbose: print(f'...start STAT calc for LID CAT: {CAT}, {CAT_CODING[CAT]} ({f} Hz)')
                 cat_sel = np.logical_or(stat_labels == 0,
                                         stat_labels == CAT)
                 cat_values = stat_values[cat_sel, i_f]

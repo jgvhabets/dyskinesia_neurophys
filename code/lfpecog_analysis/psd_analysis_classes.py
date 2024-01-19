@@ -53,7 +53,6 @@ def get_allSpecStates_Psds(
     ] + [f'dyskmoveboth_{l}lid' for l in lid_states]
 
     conditions = rest_conditions + tap_conditions + lidmove_conditions
-    print(f'EXTRACT classes for specific Conditions: {conditions}')
 
     # get baselines
     BLs = get_selectedEphys(
@@ -139,7 +138,7 @@ class get_selectedEphys:
         
         ### INCLUDE FREE
         if self.EXTRACT_FREE:
-            print(f'\n#### ADDED _FREE to FOLDERNAMES')
+            if self.verbose: print(f'\n#### ADDED _FREE to FOLDERNAMES')
             picklepath += '_FREE'
             states_picklepath += '_FREE'
         # print(f'\n#### (no FREE folder) TODO: calculate selectedPsdState (MEANS) incl FREE')
@@ -152,13 +151,13 @@ class get_selectedEphys:
         for sub in self.SETTINGS['TOTAL_SUBS']:
             # try to load existing states instead of creating/loading full large array files
             if not self.FORCE_CALC_PSDs:
-                print(f'...trying to load {self.STATE_SEL, sub} from {states_picklepath}')
+                if self.verbose: print(f'...trying to load {self.STATE_SEL, sub} from {states_picklepath}')
                 LOADED_BOOL, sub_state_tups = load_sub_states(
                     self.STATE_SEL, sub, states_picklepath,
                     verbose=self.verbose
                 )
                 if LOADED_BOOL:
-                    print(f'...sub class ({sub}) loaded successful')
+                    if self.verbose: (f'...sub class ({sub}) loaded successful')
                     # if succesful, list contains tuples with source, array
                     for src, arr in sub_state_tups:
                         # add adjusted class to current main class
@@ -194,7 +193,7 @@ class get_selectedEphys:
             else:
                 if self.verbose: print(f'{picklename} NOT AVAILABLE IN {picklepath}')
                 if self.PREVENT_NEW_CREATION: continue  # 
-                print(f'...create new PSD_vs_Move_sub class ({picklename})')
+                if self.verbose: print(f'...create new PSD_vs_Move_sub class ({picklename})')
                 sub_class = PSD_vs_Move_sub(sub=sub,
                                             PLOT_SELECTION_DATA=self.PLOT_SEL_DATA_PROCESS,
                                             SKIP_NEW_CREATION=self.SKIP_NEW_CREATION,  # (currently: create separate FREE files) classes ideally contain ALL; only give list here for debugging
@@ -209,7 +208,7 @@ class get_selectedEphys:
                     save_class_pickle(sub_class,
                                       path=picklepath,
                                       filename=picklename)
-                    print(f'...saved new Class {picklename}')
+                    if self.verbose: print(f'...saved new Class {picklename}')
 
 
             ### calculate condition-PSDs with loaded SUB_CLASS

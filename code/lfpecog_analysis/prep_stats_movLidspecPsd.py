@@ -168,7 +168,6 @@ def get_MOVE_stat_grouped_data(
     src_subs = psd_subs[SRC]
 
     MOVE_STATES = list(src_psd.keys())  # contains both TAP_CONTRA e.g.
-    print(f'extracted MOVE_STATES in get_MOVE_grouped_data: {MOVE_STATES}')
     
     group_subs = {m : {i: [] for i in group_states.keys()}
                   for m in MOVE_STATES}
@@ -177,9 +176,9 @@ def get_MOVE_stat_grouped_data(
 
     # put data from diff LID-states in correct groups
     
-    for MOV, group in product(MOVE_STATES, group_states):  # 
-        print(f'START group {group} for movement: {MOV}')
-        for lid_stat in group_states[group]:  # loops over LID states within the lists (i.e. mildlid)
+    for MOV, group in product(MOVE_STATES, group_states):
+        # loops over LID states within the lists (i.e. mildlid)
+        for lid_stat in group_states[group]:
             # print(f'...lid label: {lid_stat}')
 
             temp_psd = np.array(src_psd[MOV][lid_stat], dtype='object',)  # array with lists/arrays
@@ -199,7 +198,6 @@ def get_MOVE_stat_grouped_data(
         
         # check whether resulting psd array is n-subs x n-freqs
         if len(group_psds[MOV][group]) == 0:
-            print(f'DELETE empty psd for {MOV} group: {group}')
             del group_psds[MOV][group]
             continue
 
@@ -261,7 +259,7 @@ def get_stats_REST_psds(
     stat_dfs = {}
 
     for i_src, SRC in enumerate(sources):
-        print(f'#### START {SRC}')
+        print(f'#### START REST stat psds extraction: {SRC}')
         # for binary LID comparisons
         df_name = f'PsdStateStats_1secWins_REST_{SRC}.csv'
         stat_path = os.path.join(stat_dir, df_name)
@@ -416,13 +414,14 @@ def get_stats_MOVE_psds(
             print(f'SKIP binary comparison for dyskinetic movement')
             continue
 
-        print(f'\nSTART {MOV}\n')
+        print(f'\n######### START {MOV}  get_stats_MOVE_psds()\n')
 
         stat_dfs = {}
 
         for i_src, (SRC, SIDE) in enumerate(
             product(SOURCES, SIDES)
         ):
+            if MOV == 'TAP' and SIDE == 'BILAT': continue
             print(f'({MOV}) START-{i_src}: {SRC} x {SIDE}')
             df_name = f'PsdStateStats_1secWins_{MOV}_{SRC}_{SIDE}.csv'
             stat_path = os.path.join(stat_dir, df_name)
@@ -437,6 +436,7 @@ def get_stats_MOVE_psds(
 
             # load PSD classes (1sec arrays) only once
             if not CLASSES_LOADED:
+                print('...load get_allSpecStates_Psds() to calc stat-psds')
                 PSDs, BLs = get_allSpecStates_Psds(RETURN_PSD_1sec=True)
                 CLASSES_LOADED = True
             
@@ -463,6 +463,7 @@ def get_stats_MOVE_psds(
 
             # COMPARE WITH all REST WITHOUT MOVEMENT (labels all 0)
             if REST_BASELINE:
+                print('...load rest psds as baseline for movement')
                 (
                     bl_values, bl_labels, bl_ids, value_freqs
                 ) = get_REST_stat_grouped_data(
@@ -472,16 +473,13 @@ def get_stats_MOVE_psds(
                     PSD_1s_windows=True,
                     MERGE_STNs=True,  # merge STNs to get src lfp
                 )
-                print(f'({MOV}) unique labels before baseline: {np.unique(stat_labels)}')
                 if MOV == 'TAP':
                     stat_labels += 1  # increase labels to create 0 for baseline
-                    print(f'unique labels after ADDING: {np.unique(stat_labels)}')
-                    stat_values = np.concatenate([stat_values, bl_values])
-                    stat_labels = np.concatenate([stat_labels, bl_labels])
-                    stat_ids = np.concatenate([stat_ids, bl_ids])
-                    print(f'unique labels incl BASELINE: {np.unique(stat_labels)}')
-
-
+                # add baseline values to stat values
+                stat_values = np.concatenate([stat_values, bl_values])
+                stat_labels = np.concatenate([stat_labels, bl_labels])
+                stat_ids = np.concatenate([stat_ids, bl_ids])
+                
             # get STATS (coeffs, sign-bools) based on grouped data
             # internal dealing with LID categories if necessary
             (
@@ -521,4 +519,4 @@ def get_stats_MOVE_psds(
         # PLOT
         if PLOT_STATS and not STAT_PER_LID_CAT:
             plot_move_lmm(MOV, stat_dfs, SAVE_FIG=True,
-                          FIGNAME=f'1601_LMMcoeffs_{MOV}_{STAT_LID_COMPARE}')
+                          FIGNAME=f'1901_LMMcoeffs_{MOV}_{STAT_LID_COMPARE}')
