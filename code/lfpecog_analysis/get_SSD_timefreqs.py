@@ -14,9 +14,9 @@ from utils.utils_fileManagement import (
     get_project_path, make_object_jsonable
 )
 from lfpecog_features.get_ssd_data import get_subject_SSDs
-from lfpecog_analysis.process_connectivity import (
-    get_conn_values_sub_side
-)
+# from lfpecog_analysis.process_connectivity import (
+#     get_conn_values_sub_side
+# )   # necessary for GET_CONNECTIVITY = True in get_all_sdd_timeFreqs()
 
 
 def get_all_ssd_timeFreqs(

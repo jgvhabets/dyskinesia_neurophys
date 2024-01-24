@@ -167,7 +167,15 @@ def plot_moveLidSpec_PSDs(
                     dfname = f'PsdStateStats_1secWins_{PLOT_MOVE_TYPE}_{mov}_MERGED.csv'
                 
                 else:  # tap and involunt (2x2 or 2x3)
-                    dfname = f'PsdStateStats_1secWins_{PLOT_MOVE_TYPE}_{src}_{mov}.csv'
+                    if mov.lower() in ['tap_contra', 'tap_ipsi']:
+                        mov_side = mov.split('_')[1]
+                        dfname = f'PsdStateStats_1secWins_{PLOT_MOVE_TYPE}_{src}_{mov_side}.csv'
+                
+                    # print(f'plotmovetype: {PLOT_MOVE_TYPE}')
+                    # print(f'src: {src}')
+                    # print(f'mov: {mov}')
+                    else:
+                        dfname = f'PsdStateStats_1secWins_{PLOT_MOVE_TYPE}_{src}_{mov}.csv'
                 
                 stat_df = os.path.join(stat_dir, dfname)
                 if os.path.exists(stat_df):
@@ -268,7 +276,9 @@ def plot_moveLidSpec_PSDs(
         ax.set_xticks(xticks)
         ax.set_xticklabels(xlabs, fontsize=FS,)
         ax.set_ylim(-75, 250)
-        ax.legend(fontsize=FS-2, frameon=False, ncol=2,)
+        if AX_WIDTH == 8: leg_fs = FS - 2
+        elif AX_WIDTH == 6: leg_fs = FS - 4
+        ax.legend(fontsize=leg_fs, frameon=False, ncol=2,)
         ax.tick_params(size=FS, labelsize=FS,)
         for s in ['right', 'top']: ax.spines[s].set_visible(False)
         ax.text(x=xticks[len(xticks) // 2] + 2, y=-73, s='//', size=16, color='k')

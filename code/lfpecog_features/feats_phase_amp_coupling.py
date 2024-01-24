@@ -11,7 +11,7 @@ Based on results by:
 # Import general packages and functions
 import numpy as np
 from pandas import isna
-# from tensorpac import Pac
+from tensorpac import Pac
 
 
 

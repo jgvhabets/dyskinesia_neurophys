@@ -221,6 +221,10 @@ def run_mixEff_wGroups(dep_var, indep_var,
     # tests sign effect of LID on ephys
     # Model: https://www.statsmodels.org/stable/generated/statsmodels.regression.mixed_linear_model.MixedLM.html
     # Results: https://www.statsmodels.org/stable/generated/statsmodels.regression.mixed_linear_model.MixedLMResults.html
+
+    Returns:
+        - output_list: contains fixed-effect Coeff, pvalue,
+            if defined also Conf-Interv, coef-gradient
     """
 
     # z-score ephys values on group level for scaling

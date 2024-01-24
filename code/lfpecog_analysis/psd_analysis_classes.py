@@ -262,8 +262,9 @@ class get_selectedEphys:
                         ['below30', 'over30']
                     ):
                         # load 2d arr: n-samples, n-bands (only samples for selection)
+                        sel_sig = getattr(sub_class, sel).ephys_2d_arr[time_SEL.astype(bool), :]
                         ftemp, psdtemp = get_ssd_psd_from_array(
-                            ephys_arr=getattr(sub_class, sel).ephys_2d_arr[time_SEL.astype(bool), :],
+                            ephys_arr=sel_sig,
                             sfreq=sub_class.fs,
                             SETTINGS=self.SETTINGS,
                             band_names=sub_class.band_names,

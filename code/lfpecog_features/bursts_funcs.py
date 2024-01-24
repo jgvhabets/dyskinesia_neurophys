@@ -6,13 +6,13 @@ burst-dynamics
 # import public packages and functions
 import numpy as np
 import pandas as pd
-from scipy.signal import hilbert
+from scipy.signal import hilbert, butter, lfilter
 from scipy.stats import zscore
 from scipy.ndimage import uniform_filter1d
 from array import array
 from sklearn.decomposition import PCA
 # import own functions
-from lfpecog_features.feats_spectral_features import bandpass
+# from lfpecog_features.feats_spectral_features import bandpass   # local initiated to prevent circular import
 from lfpecog_features.feats_helper_funcs import (
     baseline_zscore, smoothing
 )
@@ -111,6 +111,33 @@ def find_data_blocks(sig):
         )
         
     return startBlocks, stopBlocks
+
+
+def bandpass(sig, freqs, fs, order=3,):
+    """
+    Bandpass filtering using FIR window (based on scipy
+    firwin bandpas filter documentation)
+    https://scipy-cookbook.readthedocs.io/items/ButterworthBandpass.html?highlight=bandpass%20firwin
+    
+    Input:
+        - sig: neurophys-signal to filter
+        - freqs: list or tuple with lower and upper freq
+        - fs: sampling freq
+        - order (int): n-order of filter
+        mentation -> equal to filtfilt, no direct difference
+        in test data
+        
+        Returns:
+        - filtsig (arr): filtered signal
+    """
+    # butter_bandpass
+    nyq = 0.5 * fs
+    low = freqs[0] / nyq
+    high = freqs[1] / nyq
+    b, a = butter(order, [low, high], btype='band')
+    filtsig = lfilter(b, a, sig)
+
+    return filtsig
 
 
 def get_envelop(

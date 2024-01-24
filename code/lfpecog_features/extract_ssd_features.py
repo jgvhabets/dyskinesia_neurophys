@@ -22,12 +22,280 @@ import matplotlib.pyplot as plt
 
 
 # import own functions
-from utils.utils_fileManagement import make_object_jsonable
+from utils.utils_fileManagement import (
+    make_object_jsonable, get_project_path,
+    get_avail_ssd_subs
+)
 import lfpecog_features.feats_spectral_features as specFeats
 from lfpecog_features.feats_helper_funcs import smoothing
 from lfpecog_features.bursts_funcs import (
-    get_burst_indices, calc_burst_profiles)
+    get_burst_indices, calc_burst_profiles
+)
+from lfpecog_analysis.ft_processing_helpers import (
+    categorical_CDRS
+)
+from lfpecog_predict.prepare_predict_arrays import (
+    get_move_selected_env_arrays
+)
 
+
+def get_moveSpec_predArrays(
+    MOV_SEL: str, FEAT_WIN_sec: int = 5,
+    FT_VERSION: str = 'v6', DATA_VERSION: str = 'v4.0',
+    LOAD_SOURCES=['STN', 'ECOG', 'CONN'],
+    INCL_ECOG: bool = False,
+):
+    """
+    Arguments:
+        - MOV_SEL: define movement dependency to extract
+    """
+    # try to LOAD
+    (
+        X_arr, y_arr, sub_arr, feat_names
+    ) = saveLoad_mov_spec_predArrays(
+        SAVELOAD='LOAD', MOV_SEL=MOV_SEL,
+        FEAT_WIN_sec=FEAT_WIN_sec,
+        LOAD_SOURCES=LOAD_SOURCES,
+    )
+
+    if isinstance(X_arr, bool):
+        # create if load not successful
+        print(f'CREATING {MOV_SEL} PRED ARRAYS ({FEAT_WIN_sec} sec)')
+
+        # get move-selected env arrays
+        DATA = {}
+        SUBS = get_avail_ssd_subs(DATA_VERSION=DATA_VERSION,
+                                  FT_VERSION=FT_VERSION,)
+
+        for sub in SUBS:
+            DATA[sub] = get_move_selected_env_arrays(
+                sub=sub, LOAD_SAVE=True
+            )
+        # create group arrays
+        (
+            X_arr, y_arr, sub_arr, feat_names
+        ) = create_pred_arrays_from_movSpec_envs(
+            env_dict=DATA, incl_ECOG=INCL_ECOG,
+            MOV_SEL=MOV_SEL, FEAT_WIN_sec=FEAT_WIN_sec,
+        )
+        # save afterwards
+        saveLoad_mov_spec_predArrays(
+            X_arr=X_arr, y_arr=y_arr,
+            sub_arr=sub_arr, feat_names=feat_names,
+            SAVELOAD='SAVE', MOV_SEL=MOV_SEL,
+            FEAT_WIN_sec=FEAT_WIN_sec,
+        )
+
+    else:
+        print(f'LOADED {MOV_SEL} PRED ARRAYS ({FEAT_WIN_sec} sec)')
+
+    return X_arr, y_arr, sub_arr, feat_names
+
+
+def create_pred_arrays_from_movSpec_envs(
+    env_dict: dict, MOV_SEL: str,
+    incl_ECOG: bool = False,
+    FEAT_WIN_sec: float = 1.0,
+    sfreq: int = 2048,
+    INCL_POWER: bool = True,
+    INCL_SPECVAR: bool = True,
+    INCL_COH_biSTN: bool = False,
+    INCL_COH_STNECOG: bool = False,
+    CATEG_CDRS: bool = True,
+    CDRS_cuts = [3.5, 7.5],
+):
+    """
+    Arguments:
+        - env_dict: dict with envelops per subject and source
+
+
+
+    Returns:
+        - X_arr
+        - y_arr: contains CDRS scores (default bilat incl axial)
+        - sub_arr: contains 
+    """
+    allowed_moves = ['DEPEND', 'INDEP', 'all']
+    assert MOV_SEL in allowed_moves, (f'MOV_SEL {MOV_SEL} not in'
+                                      f'{allowed_moves}')
+    
+
+    
+    win_samples = int(sfreq * FEAT_WIN_sec)
+
+    if ~ incl_ECOG: INCL_COH_STNECOG = False
+
+    bands = ['theta', 'alpha', 'lowbeta', 'highbeta', 'gamma']
+    ft_names = {'STN': [], 'ECOG': [], 'CONN': []}
+
+    if INCL_POWER:
+        ft_names['STN'].extend([f'STN_power_{b}' for b in bands])
+        if incl_ECOG: ft_names['ECOG'].extend([f'ECOG_{b}_power' for b in bands])
+
+    if INCL_SPECVAR:
+        ft_names['STN'].extend([f'STN_var_{b}' for b in bands])
+        if incl_ECOG: ft_names['ECOG'].extend([f'ECOG_{b}_var' for b in bands])
+        
+    if INCL_COH_biSTN:
+        ft_names['CONN'].extend([f'biSTN_coh_{b}' for b in bands])
+
+    if INCL_COH_STNECOG:
+        ft_names['CONN'].extend([f'STNECOG_coh_{b}' for b in bands])
+    
+    feat_funcs = {
+        'power': calc_power,
+        'var': calc_var
+    }
+
+    temp_feat_lists = {'STN': [], 'ECOG': [], 'CONN': []}
+    temp_cdrs_lists = {'STN': [], 'ECOG': [], 'CONN': []}
+    temp_sub_lists = {'STN': [], 'ECOG': [], 'CONN': []}
+
+    for sub in env_dict:
+        print(f'\n- start sub-{sub} move-specific ssd-feature extraction')
+
+        for src in env_dict[sub].keys():
+            # check for ecog incl and extract SRC for later feat naming
+            if 'ecog' in src and not incl_ECOG: continue
+            if 'ecog' in src: SRC = 'ECOG'
+            else: SRC = 'STN'
+            
+            # extract meta info
+            cdrs = env_dict[sub][src][-4, :]
+            time = env_dict[sub][src][-3, :]
+            move = env_dict[sub][src][-1, :]
+
+            # select on movement dependency
+            if MOV_SEL == 'INDEP': mov_sel = move == 0
+            if MOV_SEL == 'DEPEND': mov_sel = move == 1
+            if MOV_SEL == 'all': mov_sel = np.ones_like(move).astype(bool)
+            sig_arr = env_dict[sub][src][:len(bands), mov_sel]
+            cdrs = cdrs[mov_sel]
+
+            # categorize CDRS
+            cdrs_present = np.unique(cdrs)
+            if CATEG_CDRS:
+                cdrs = categorical_CDRS(cdrs, cutoff_mildModerate=CDRS_cuts[0],
+                                        cutoff_moderateSevere=CDRS_cuts[1],)
+                cdrs_present = np.unique(cdrs)
+            
+            for CAT in cdrs_present:
+                temp_sigs = sig_arr[:, cdrs == CAT]
+                full_wins = int(temp_sigs.shape[1] // (win_samples / 2))
+                samples_incl = int(full_wins * (win_samples / 2))
+                temp_sigs = temp_sigs[:, :samples_incl]  # cut to full 1/2-window length
+
+                if samples_incl < win_samples:
+                    print(f'...NOT ENOUGH DATA FOR FEATURE. {sub, src, CAT}')
+                    continue
+
+                # loop over available feature windows, and add features per window
+                for win_i0 in np.arange(0, temp_sigs.shape[1], win_samples*.5)[:-1]:
+                    win_sig = temp_sigs[:, int(win_i0):int(win_i0 + win_samples)]
+                    temp_win_fts = []
+                    # loop over src-features (always cmatching order)
+                    for ft in ft_names[SRC]:
+                        band = ft.split('_')[-1]
+                        i_band = np.where([b == band for b in bands])[0][0]
+                        ft_type = ft.split('_')[1]
+                        ft_func = feat_funcs[ft_type]
+                        temp_win_fts.append(ft_func(win_sig[i_band]))
+                    # ADDING FEATURES, SCORES, SUB-IDS
+                    temp_feat_lists[SRC].append(temp_win_fts)
+                    temp_cdrs_lists[SRC].append(CAT)
+                    temp_sub_lists[SRC].append(sub)
+
+
+    # when all subjects are added, convert to arrays
+    for d in [temp_feat_lists, temp_cdrs_lists, temp_sub_lists]:
+        for k in d.keys():
+            d[k] = np.array(d[k])
+    
+    return temp_feat_lists, temp_cdrs_lists, temp_sub_lists, ft_names
+
+
+def calc_power(sig_win):
+    
+    pow = np.nanmean(sig_win)
+
+    return pow
+
+def calc_var(sig_win):
+
+    var = variation(sig_win)
+
+    return var
+
+
+def saveLoad_mov_spec_predArrays(
+    MOV_SEL, FEAT_WIN_sec,
+    X_arr=None, y_arr=None, sub_arr=None,
+    feat_names=None, SAVELOAD: str = 'SAVE',
+    LOAD_SOURCES=['STN', 'ECOG', 'CONN'],
+):
+    ft_path = join(
+        get_project_path('results'),
+        'features', 'SSD_feats_broad_v6',
+        'v4.0', 'movement_specific'
+    )
+
+    if SAVELOAD == 'SAVE':
+    
+        for src in X_arr:
+            # general naming
+            name_base = (f'predArr_{src}_mov{MOV_SEL}_'
+                        f'{FEAT_WIN_sec}sWindows_')
+            
+            # save X_arr
+            np.save(join(ft_path, name_base + 'X.npy'),
+                    X_arr[src], allow_pickle=True)
+            # save y_arr
+            np.save(join(ft_path, name_base + 'y.npy'),
+                    y_arr[src], allow_pickle=True)
+            # save sub_arr
+            np.save(join(ft_path, name_base + 'subs.npy'),
+                    sub_arr[src], allow_pickle=True)
+            # save feat_names
+            with open(
+                join(ft_path, name_base + 'ftnames.json'),
+                'w'
+            ) as f:
+                json.dump(feat_names[src], f)
+        
+        return print('SAVED ALL ARRAYS and JSONs')
+
+
+    elif SAVELOAD == 'LOAD':
+        X_arr, y_arr, sub_arr, feat_names = {}, {}, {}, {}
+
+        for src in LOAD_SOURCES:
+            name_base = (f'predArr_{src}_mov{MOV_SEL}_'
+                         f'{FEAT_WIN_sec}sWindows_')
+            try:
+                # load arrays and names
+                X_arr[src] = np.load(
+                    join(ft_path, name_base + 'X.npy'),
+                    allow_pickle=True
+                )
+                # save y_arr
+                y_arr[src] = np.load(
+                    join(ft_path, name_base + 'y.npy'),
+                    allow_pickle=True
+                )
+                # save sub_arr
+                sub_arr[src] = np.load(
+                    join(ft_path, name_base + 'subs.npy'),
+                    allow_pickle=True)
+                # save feat_names
+                with open(join(ft_path, name_base +
+                                    'ftnames.json'), 'r') as f:
+                    feat_names[src] = json.load(f)
+            except FileNotFoundError:
+                print(f'files not found ({name_base})')
+                return [False] * 4
+
+        return X_arr, y_arr, sub_arr, feat_names
+    
 
 
 @dataclass(init=True, repr=True, )
@@ -49,7 +317,6 @@ class extract_local_SSD_powers():
         # loop over possible datatypes
         for dType in self.sub_SSD.ephys_sources:
             print(f'\n\tstart ({dType}) extracting local SSD powers')
-            data = getattr(self.sub_SSD, dType)  # assign datatype data
             # check if features already exist
             feat_fname = f'SSDfeats_{self.sub_SSD.sub}_{dType}_local_spectralFeatures.csv'
 
@@ -71,7 +338,9 @@ class extract_local_SSD_powers():
                         feat_names.append(f'{band}_{ft_name[4:]}')
                         n_spec_feats += 1
             
-            # loop over windows
+            # get data and loop over windows
+            data = getattr(self.sub_SSD, dType)  # assign datatype data
+
             for i_w, t in enumerate(data.times):
                 # temporary list to store features of current window
                 feats_win = []

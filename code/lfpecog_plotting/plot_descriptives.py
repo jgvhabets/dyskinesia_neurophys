@@ -1,5 +1,7 @@
 """
 plot general descriptives
+
+Call (WIN): from REPO/code: python -m  lfpecog_plotting.plot_descriptives
 """
 
 import matplotlib.pyplot as plt
@@ -19,12 +21,16 @@ from utils.utils_fileManagement import (
 def plot_CDRS_distributions():
 
     SUBS = get_avail_ssd_subs(DATA_VERSION='v4.0', FT_VERSION='v6',)
+    print(f'SUBS: {SUBS}')
+    sub_sort = np.argsort([int(s) for s in SUBS])
+    SUBS = np.array(SUBS)[sub_sort]
+    print(f'sorted: {SUBS}')
 
     CAT = False
     time_dummy =np.arange(0, 90, 5)
     cat_scores = [[0], [1,2,3], [4, 5, 6, 7],
                 [8, 9, 10, 11, 12, 13, 14]]
-    cat_colors = ['green', 'orange', 'blue', 'purple']
+    cat_colors = ['green', 'orange', 'red', 'purple']
     leg_content = [[], []]
     
     fig, axes = plt.subplots(len(SUBS), 1, figsize=(4, 6),)
@@ -47,14 +53,14 @@ def plot_CDRS_distributions():
         # print(sub, uniq_cdrs, cdrs_counts, sum(cdrs_counts))
 
         for i_cat, cat in enumerate(['None', 'Mild',
-                                    'Moderate', 'Severe']):
+                                     'Moderate', 'Severe']):
             cat_sel = [s in cat_scores[i_cat] for s in uniq_cdrs]
             if sum(cat_sel) == 0: continue
             axes[i_s].bar(x=uniq_cdrs[cat_sel] + 1,
                         height=cdrs_counts[cat_sel],  # plus one only for plotting (x-axis) reasons
                         align='center', width=1,
                         color=cat_colors[i_cat],
-                        label=cat,)
+                        label=cat, alpha=.8,)
         axes[i_s].set_xticks([])
         axes[i_s].set_yticks([.5])
         axes[i_s].set_yticklabels([sub], rotation=0, size=FS,)
@@ -86,7 +92,12 @@ def plot_CDRS_distributions():
 
     plt.savefig(os.path.join(get_project_path('figures'),
                              'clinical_scores',
-                            'CDRS_score_distribution'),
+                             'CDRS_score_distribution'),
                 dpi=300, facecolor='w',)
 
     plt.show()
+
+
+if __name__ == '__main__':
+
+    plot_CDRS_distributions()

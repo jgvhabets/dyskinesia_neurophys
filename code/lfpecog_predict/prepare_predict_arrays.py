@@ -7,7 +7,10 @@ dyskinesia scores
 # import public functions
 import numpy as np
 from pandas import DataFrame, concat
-from itertools import compress
+from itertools import compress, product
+from scipy.stats import variation
+from os.path import exists, join
+from os import listdir
 
 # import own custom functions
 from lfpecog_plotting.plot_pred_preparation import (
@@ -16,6 +19,12 @@ from lfpecog_plotting.plot_pred_preparation import (
 from lfpecog_analysis.ft_processing_helpers import (
     categorical_CDRS
 )
+from lfpecog_features.bursts_funcs import get_envelop
+from utils.utils_fileManagement import (
+    get_project_path, load_ft_ext_cfg,
+    load_class_pickle, get_avail_ssd_subs
+)
+
 
 def get_group_arrays_for_prediction(
     feat_dict, label_dict, CDRS_THRESHOLD=.1,
@@ -182,3 +191,227 @@ def merge_group_arrays(X_total, y_total_binary,
         f' ({round(sum(y_all_binary > 0) / len(y_all_binary) * 100, 1)} %)')
     
     return X_all, y_all_binary, y_all_scale, sub_ids, ft_times_all
+
+
+
+def get_movement_selected_arrays(
+    sub_class,
+    FT_MOVE_SELs = {'MOVE_INDEP': ['REST',],
+                    'MOVE_DEPEND': ['INVOLUNT', 'VOLUNTARY']},
+
+):
+    """
+    get arrays selected on movement state for feature
+    calculation and prediction. Takes several acc-selected
+    states from subclass (ephys_selections_SUB.P).
+    creates per subject an array with n-samples long and
+    11-columns  (7 bands, cdrs, time, task, move-code),
+    containing all non-movement or all movement selections,
+    default move-coding: no free, no rest in between taps.
+
+    Arguments:
+        - subclass: (ephys_selections_SUB.P)
+        - FT_MOVE_SELS: default selection of movement
+            dependent vs independent selections
+
+    Returns:
+        - sub_arrs (dict), containing first all ephys_sources,
+            then MOVE_INDEP/MOVE_DEPEND with lists with all
+            arrays from selections ()
+    """
+    # execute per subject
+    sub_arrs = {src: {m: [] for m in FT_MOVE_SELs.keys()}
+                for src in sub_class.ephys_sources}
+
+    for src, sel in product(sub_class.ephys_sources,
+                            sub_class.incl_selections):
+        # select only source selections
+        if src not in sel: continue
+        if 'lidall' in sel: continue
+        # if src != 'lfp_right': continue
+
+        # continue with correct source and movement states
+        temp_arr = getattr(sub_class, sel).ephys_2d_arr
+        temp_arr = np.concatenate(
+            [temp_arr, np.atleast_2d(getattr(sub_class, sel).cdrs_arr).T],
+            axis=1)  # add CDRS
+        temp_arr = np.concatenate(
+            [temp_arr, np.atleast_2d(getattr(sub_class, sel).time_arr).T],
+            axis=1)  # add timestamps
+        temp_arr = np.concatenate(
+            [temp_arr, np.atleast_2d(getattr(sub_class, sel).task_arr).T],
+            axis=1)  # add exp-task
+        # find movement dep group
+        for i_mov, mov in enumerate(FT_MOVE_SELs):  # 0 is mov INDEP, 1 is move DEPEND
+            if any([m in sel for m in FT_MOVE_SELs[mov]]):
+                # add last array coding for movement dependency
+                temp_arr = np.concatenate(
+                    [temp_arr, np.atleast_2d([i_mov] * temp_arr.shape[0]).T],
+                    axis=1)  # add movement coding
+                sub_arrs[src][mov].append(temp_arr)
+    
+    print(f'return arrays for {sub_class.sub}: {sub_arrs.keys()}')
+
+    return sub_arrs
+
+
+def get_move_selected_env_arrays(
+    sub, LOAD_SAVE: bool = True,
+    FT_VERSION = 'v6', GAMMA_WIDTH = 4,
+):
+    """
+    Takes the lists with arrays selected on
+    movement dependency (created in get_movement_selected_arrays())
+    and returns freq-band envelop arrays.
+    only takes indiv-source-gamma-peak-freq (based on variation).
+    Loads sub_classes for extraction from external HD (hardcoded).
+
+    Arguments:
+        - sub_class (ephys_elections)
+        - sub_arrs (from get_movement_selected_arrays())
+        - LOAD_SAVE: if True tries to load and saves if
+            newly created
+        - GAMMA_WIDTH: freq-bin width for indiv gamma peak finding
+
+    Returns:
+        - env_arr (dict): dict containing per ephys-source
+            one array with rows: freq-bands, CDRS, timestamps,
+            tasks, mov-coding; eavh row n-samples (ALL)
+    """
+    env_arr = {}  # dict to fill and return
+
+    # get settings for variables
+    FT_VERSION='v6'
+    SETTINGS = load_ft_ext_cfg(FT_VERSION=FT_VERSION)
+
+    # check available data
+    data_v = SETTINGS['DATA_VERSION']
+    win_len = SETTINGS['WIN_LEN_sec']
+    win_overlap = SETTINGS['WIN_OVERLAP_part']
+    data_path = join(get_project_path('data'),
+                     f'windowed_data_classes_{win_len}s'
+                     f'_{win_overlap}overlap', data_v,)
+    files = listdir(join(data_path, 'movement_feature_arrays'))
+
+    # check subject files
+    if sum([sub in f for f in files]) >= 2 and LOAD_SAVE:
+        # load present data
+        for f in [f for f in files if sub in f ]:
+            src = f"{f.split('_')[1]}_{f.split('_')[2]}"
+            env_arr[src] = np.load(
+                join(data_path, 'movement_feature_arrays',f),
+                allow_pickle=True
+            )
+            print(f'- LOADED {src}: {f}')
+        
+        return env_arr
+ 
+    # only load piclke with all selections if not loaded
+    ext_subclass_path = join(
+        'D://Research/CHARITE/projects/dyskinesia_neurophys/data/',
+        'windowed_data_classes_10s_0.5overlap',
+        'selected_ephys_classes_all'
+    )
+    print(f'...({sub}) new extraction, loading selections pickle')
+    sub_class = load_class_pickle(join(ext_subclass_path,
+                                       f'ephys_selections_{sub}.P'),
+                                  convert_float_np64=True)
+    # get subject arrays
+    sub_arrs = get_movement_selected_arrays(sub_class=sub_class)
+    
+    # get (new) bands names
+    bands = sub_class.SETTINGS['SPECTRAL_BANDS'].copy()
+    bands = {'theta' if k == 'delta' else k: v for k, v in bands.items()}
+    # take band freq names and reduce to one gamma
+    env_bands = list(bands.keys()).copy()[:-3]
+    env_bands.append('gamma')
+
+    # calculate full env arrays per source
+    for src in sub_class.ephys_sources:
+        f_sel = [sub_class.sub in f and src in f for f in files]  # creates bool
+        if sum(f_sel) == 1 and LOAD_SAVE:
+            src_file = np.array(files)[f_sel]
+            env_arr[src] = np.load(join(data_path, src_file), allow_pickle=True)
+            print(f'- LOADED: {src_file}')
+            continue
+        # if not existing or LOAD_SAVE is false
+        print(f'- START {src.upper()} (sub-{sub_class.sub})')
+        src_arrs = sub_arrs[src]  # take dict with MOV DEP/INDEP arrays per source
+        n_all_samples = sum([a.shape[0] for m in src_arrs.values() for a in m])  # sum all arrays up
+        env_arr[src] = np.zeros((len(env_bands), n_all_samples))  # new arr to fill with band-envelops
+
+        src_max_gamma_var = 0  # set at source-beginning for gamma peak finding
+
+        # ravel lists in dicts to single-channel arrays (MOV - DEP+INDEP)
+        for i_ch, (band, f_range) in enumerate(bands.items()):
+            print(src, band)
+            
+            if 'gamma' in band:
+                # loop over gamma bands and take freq bin with largest variation            
+                sig = np.concatenate([a[:, i_ch] for m in src_arrs.values() for a in m])
+                assert ~ any(np.isnan(sig)), f'NaNs in sig: {sum(np.isnan(sig))}'
+                for f_1 in np.arange(f_range[0],
+                                    f_range[1] - (GAMMA_WIDTH - 1),
+                                    GAMMA_WIDTH / 2):
+                    f_2 = f_1 + GAMMA_WIDTH
+                    env = get_envelop(sig, fs=2048,
+                                                bandpass_freqs=[f_1, f_2])
+                    var_f = variation(env)
+                    if var_f > src_max_gamma_var:
+                        src_max_gamma_var = var_f
+                        indiv_gamma_range = [f_1, f_2]
+                        # add highest gamma to env array (possibly overwritten by next higher gamma)
+                        env_arr[src][-1, :] = env  # last row for general gamma
+
+            elif 'gamma' not in band:
+                # for other bands take env over full freq range
+                sig = np.concatenate([a[:, i_ch] for m in src_arrs.values() for a in m])
+                assert ~ any(np.isnan(sig)), f'NaNs in sig: {sum(np.isnan(sig))}'
+                env = get_envelop(sig, fs=2048, bandpass_freqs=f_range)
+                try:
+                    env_arr[src][i_ch, :] = env
+                except ValueError:
+                    if abs(len(sig) - len(env)) < 5:
+                        env_arr[src] = env_arr[src][:, :len(env)]
+                    env_arr[src][i_ch, :] = env
+        
+        # after adding all freq-band envelops, add 'meta' info (order: CDRS, timestamps, tasks, mov-coding)
+        meta_arr = np.concatenate([a[:, -4:] for m in src_arrs.values() for a in m]).T
+        try:
+            env_arr[src] = np.concatenate([env_arr[src], meta_arr], axis=0)
+        except ValueError:
+            env_arr[src] = np.concatenate(
+                [env_arr[src],
+                 meta_arr[:, :env_arr[src].shape[1]]], axis=0
+            )  # single sample removed in env creation, adjust length
+
+        if LOAD_SAVE:
+            f_name = (f'sub{sub}_{src}_movEnvArray_gamma'
+                      f'{int(indiv_gamma_range[0])}{int(indiv_gamma_range[1])}.npy')
+            np.save(join(data_path, 'movement_feature_arrays', f_name),
+                    env_arr[src], allow_pickle=True)
+            print(f'...saved {f_name} (arr shape: {env_arr[src].shape})')
+
+
+    return env_arr
+
+
+if __name__ == '__main__':
+    """
+    Run (WIN): cd REPO/code: python -m  lfpecog_predict.prepare_predict_arrays
+    """
+
+    print(f'extract movement selected envelop arrays')
+
+    FT_VERSION='v6'
+    SETTINGS = load_ft_ext_cfg(FT_VERSION=FT_VERSION)
+
+    SUBS = get_avail_ssd_subs(DATA_VERSION=SETTINGS["DATA_VERSION"],
+                              FT_VERSION=FT_VERSION)
+    
+    for sub in SUBS:
+        print(f'\nextract envelop-arrays for sub-{sub}')
+        # get move-selected env arrays
+        _ = get_move_selected_env_arrays(
+            sub=sub, LOAD_SAVE=True
+        )
