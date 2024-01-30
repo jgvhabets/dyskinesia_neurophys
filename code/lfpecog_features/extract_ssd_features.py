@@ -41,11 +41,14 @@ from lfpecog_predict.prepare_predict_arrays import (
 
 def get_moveSpec_predArrays(
     MOV_SEL: str, FEAT_WIN_sec: int = 5,
+    POWER_METHOD: str = 'ENV',
     FT_VERSION: str = 'v6', DATA_VERSION: str = 'v4.0',
     LOAD_SOURCES=['STN', 'ECOG', 'CONN'],
     INCL_ECOG: bool = False,
 ):
     """
+    bottom of script: function to run
+
     Arguments:
         - MOV_SEL: define movement dependency to extract
     """
@@ -54,6 +57,7 @@ def get_moveSpec_predArrays(
         X_arr, y_arr, sub_arr, feat_names
     ) = saveLoad_mov_spec_predArrays(
         SAVELOAD='LOAD', MOV_SEL=MOV_SEL,
+        power_method=POWER_METHOD,
         FEAT_WIN_sec=FEAT_WIN_sec,
         LOAD_SOURCES=LOAD_SOURCES,
     )
@@ -63,24 +67,30 @@ def get_moveSpec_predArrays(
         print(f'CREATING {MOV_SEL} PRED ARRAYS ({FEAT_WIN_sec} sec)')
 
         # get move-selected env arrays
-        DATA = {}
+        DATA, fband_ranges = {}, {}
         SUBS = get_avail_ssd_subs(DATA_VERSION=DATA_VERSION,
                                   FT_VERSION=FT_VERSION,)
-
+        # get envelops per subject and per band, incl corresponding freq-bands
         for sub in SUBS:
-            DATA[sub] = get_move_selected_env_arrays(
+            (
+                DATA[sub], fband_ranges[sub]
+            ) = get_move_selected_env_arrays(
                 sub=sub, LOAD_SAVE=True
             )
+
         # create group arrays
         (
             X_arr, y_arr, sub_arr, feat_names
         ) = create_pred_arrays_from_movSpec_envs(
-            env_dict=DATA, incl_ECOG=INCL_ECOG,
-            MOV_SEL=MOV_SEL, FEAT_WIN_sec=FEAT_WIN_sec,
+            env_dict=DATA, f_bands=fband_ranges,
+            POWER_METHOD=POWER_METHOD,
+            incl_ECOG=INCL_ECOG, MOV_SEL=MOV_SEL,
+            FEAT_WIN_sec=FEAT_WIN_sec,
         )
         # save afterwards
         saveLoad_mov_spec_predArrays(
             X_arr=X_arr, y_arr=y_arr,
+            power_method=POWER_METHOD,
             sub_arr=sub_arr, feat_names=feat_names,
             SAVELOAD='SAVE', MOV_SEL=MOV_SEL,
             FEAT_WIN_sec=FEAT_WIN_sec,
@@ -92,8 +102,21 @@ def get_moveSpec_predArrays(
     return X_arr, y_arr, sub_arr, feat_names
 
 
+def correct_LoHiBeta_dictKeys(orig_dict):
+    """
+    replaces keys lo_beta and hi_beta with lowbeta and highbeta
+    """
+    corr_dict = {k.replace('lo_beta', 'lowbeta'): v
+                    for k, v in orig_dict.items()}
+    corr_dict = {k.replace('hi_beta', 'highbeta'): v
+                    for k, v in corr_dict.items()}
+    
+    return corr_dict
+
+
 def create_pred_arrays_from_movSpec_envs(
-    env_dict: dict, MOV_SEL: str,
+    env_dict: dict, f_bands: dict, MOV_SEL: str,
+    POWER_METHOD: str = 'ENV',
     incl_ECOG: bool = False,
     FEAT_WIN_sec: float = 1.0,
     sfreq: int = 2048,
@@ -115,46 +138,49 @@ def create_pred_arrays_from_movSpec_envs(
         - y_arr: contains CDRS scores (default bilat incl axial)
         - sub_arr: contains 
     """
+    # check correct movement selection input
     allowed_moves = ['DEPEND', 'INDEP', 'all']
     assert MOV_SEL in allowed_moves, (f'MOV_SEL {MOV_SEL} not in'
                                       f'{allowed_moves}')
-    
-
-    
+    # set window length in samples, used later
     win_samples = int(sfreq * FEAT_WIN_sec)
-
+    # set coherence inclusion to false if no ecog is included
     if ~ incl_ECOG: INCL_COH_STNECOG = False
 
-    bands = ['theta', 'alpha', 'lowbeta', 'highbeta', 'gamma']
-    ft_names = {'STN': [], 'ECOG': [], 'CONN': []}
+    # extract and correct freq band names
+    f_band_names = list(f_bands[list(f_bands.keys())[0]].values())[0]
+    f_band_names = correct_LoHiBeta_dictKeys(f_band_names)
 
+    # create feature names per source
+    ft_names = {'STN': []}
+    if incl_ECOG: ft_names['ECOG'] = []
+    if INCL_COH_STNECOG: ft_names['CONN']: []
     if INCL_POWER:
-        ft_names['STN'].extend([f'STN_power_{b}' for b in bands])
-        if incl_ECOG: ft_names['ECOG'].extend([f'ECOG_{b}_power' for b in bands])
+        ft_names['STN'].extend([f'STN_power_{b}' for b in f_band_names])
+        if incl_ECOG: ft_names['ECOG'].extend([f'ECOG_{b}_power' for b in f_band_names])
 
     if INCL_SPECVAR:
-        ft_names['STN'].extend([f'STN_var_{b}' for b in bands])
-        if incl_ECOG: ft_names['ECOG'].extend([f'ECOG_{b}_var' for b in bands])
+        ft_names['STN'].extend([f'STN_var_{b}' for b in f_band_names])
+        if incl_ECOG: ft_names['ECOG'].extend([f'ECOG_{b}_var' for b in f_band_names])
         
     if INCL_COH_biSTN:
-        ft_names['CONN'].extend([f'biSTN_coh_{b}' for b in bands])
+        ft_names['CONN'].extend([f'biSTN_coh_{b}' for b in f_band_names])
 
     if INCL_COH_STNECOG:
-        ft_names['CONN'].extend([f'STNECOG_coh_{b}' for b in bands])
+        ft_names['CONN'].extend([f'STNECOG_coh_{b}' for b in f_band_names])
     
-    feat_funcs = {
-        'power': calc_power,
-        'var': calc_var
-    }
-
+    # define feature functions to use
+    feat_funcs = {'power': calc_power,
+                  'var': calc_var}
+    # lists to store outputs
     temp_feat_lists = {'STN': [], 'ECOG': [], 'CONN': []}
     temp_cdrs_lists = {'STN': [], 'ECOG': [], 'CONN': []}
     temp_sub_lists = {'STN': [], 'ECOG': [], 'CONN': []}
 
+    # execute functions, per subject, per source
     for sub in env_dict:
-        print(f'\n- start sub-{sub} move-specific ssd-feature extraction')
-
         for src in env_dict[sub].keys():
+            print(f'\n- start sub-{sub}, {src.upper()} move-specific ssd-feature extraction')
             # check for ecog incl and extract SRC for later feat naming
             if 'ecog' in src and not incl_ECOG: continue
             if 'ecog' in src: SRC = 'ECOG'
@@ -169,7 +195,7 @@ def create_pred_arrays_from_movSpec_envs(
             if MOV_SEL == 'INDEP': mov_sel = move == 0
             if MOV_SEL == 'DEPEND': mov_sel = move == 1
             if MOV_SEL == 'all': mov_sel = np.ones_like(move).astype(bool)
-            sig_arr = env_dict[sub][src][:len(bands), mov_sel]
+            sig_arr = env_dict[sub][src][:len(f_bands[sub][src]), mov_sel]  # select ephys bands
             cdrs = cdrs[mov_sel]
 
             # categorize CDRS
@@ -195,11 +221,17 @@ def create_pred_arrays_from_movSpec_envs(
                     temp_win_fts = []
                     # loop over src-features (always cmatching order)
                     for ft in ft_names[SRC]:
+                        f_bands[sub][src] = correct_LoHiBeta_dictKeys(f_bands[sub][src])
+                        if 'lo_beta' in ft: ft = ft.replace('lo_beta', 'lowbeta')
+                        if 'hi_beta' in ft: ft = ft.replace('hi_beta', 'highbeta')
                         band = ft.split('_')[-1]
-                        i_band = np.where([b == band for b in bands])[0][0]
+                        i_band = np.where([b == band for b in f_bands[sub][src]])[0][0]
                         ft_type = ft.split('_')[1]
                         ft_func = feat_funcs[ft_type]
-                        temp_win_fts.append(ft_func(win_sig[i_band]))
+                        ft_value = ft_func(win_sig[i_band], sfreq=sfreq,
+                                           band=list(f_bands[sub][src].values())[i_band],
+                                           power_method=POWER_METHOD,)
+                        temp_win_fts.append(ft_value)
                     # ADDING FEATURES, SCORES, SUB-IDS
                     temp_feat_lists[SRC].append(temp_win_fts)
                     temp_cdrs_lists[SRC].append(CAT)
@@ -211,33 +243,79 @@ def create_pred_arrays_from_movSpec_envs(
         for k in d.keys():
             d[k] = np.array(d[k])
     
+    # take average of gammas for broad gamma
+    for src, ft in product(ft_names.keys(), ['pow', 'var']):
+        print(f'...at START feat names {src}-{ft}: {ft_names[src]}')
+        # select broad gamma features, per source
+        g_sel = np.array([ft in n and any([f'gamma{i}' in n for i in [1,2,3]])
+                 for n in ft_names[src]])
+        print(f'g_sel has sum {sum(g_sel)}')
+        if sum(g_sel) == 0:
+            print(f'### NO GAMMA123 features available in {src}-{ft}, SKIP')
+            continue
+        g_mean = np.mean(temp_feat_lists[src][:, g_sel], axis=1)
+        first_idx = np.where(g_sel)[0][0]
+        print(f'first idx found: {first_idx}')
+        g_sel[first_idx] = False  # g_sel now boolean to remove redundant gamma-columns
+        print(f'g_sel should have MINUS 1 sum {sum(g_sel)}')
+        # replace with average values, delete redundant broad gamma feats and cols
+        temp_feat_lists[src][:, first_idx] = g_mean
+        temp_feat_lists[src] = np.delete(temp_feat_lists[src], g_sel, axis=1)
+        ft_names[src][first_idx] = ft_names[src][first_idx].replace('gamma1', 'gammaBroad')
+        ft_names[src] = list(compress(ft_names[src], ~np.array(g_sel)))
+        print(f'feat names at END {src}-{ft}: {ft_names[src]}')
+
+    
     return temp_feat_lists, temp_cdrs_lists, temp_sub_lists, ft_names
 
 
-def calc_power(sig_win):
+def calc_power(sig_win, sfreq, power_method='WELCH',
+               band=None,):
+    allowed_methods = ['ENV', 'WELCH']
+    assert power_method in allowed_methods, f'wrong method {power_method}'
     
-    pow = np.nanmean(sig_win)
+    if power_method == 'ENV':
+        pow = np.nanmean(sig_win)
+
+    elif power_method == 'WELCH':
+        f, psd = welch(sig_win, fs=sfreq, nperseg=sfreq,)
+        # TODO: get raw data for welch
+        f_sel = np.logical_and(f >= band[0], f <= band[1])
+        pow = np.mean(psd[f_sel])
 
     return pow
 
-def calc_var(sig_win):
+def calc_var(sig_win, sfreq, band=None,
+             power_method=None,):
+    """
+    calculates mean coefficient of variation
+    per second
+    """
 
-    var = variation(sig_win)
+    var_list = []
+    
+    for i in np.arange(0, len(sig_win), sfreq)[:-1]:
+        var_list.append(variation(sig_win[i:i + sfreq]))
+    # add remaining samples
+    var_list.append(variation(sig_win[i + sfreq:]))
+
+    var = np.mean(var_list)
 
     return var
 
 
 def saveLoad_mov_spec_predArrays(
     MOV_SEL, FEAT_WIN_sec,
+    power_method: str = 'ENV',
     X_arr=None, y_arr=None, sub_arr=None,
     feat_names=None, SAVELOAD: str = 'SAVE',
     LOAD_SOURCES=['STN', 'ECOG', 'CONN'],
 ):
-    ft_path = join(
-        get_project_path('results'),
-        'features', 'SSD_feats_broad_v6',
-        'v4.0', 'movement_specific'
-    )
+    ft_path = join(get_project_path('results'),
+                   'features', 'SSD_feats_broad_v6', 'v4.0',)
+    folder = 'movement_specific'
+    if power_method in ['WELCH', 'ENV']: folder += f'_{power_method}'
+    ft_path = join(ft_path, folder)
 
     if SAVELOAD == 'SAVE':
     
@@ -246,22 +324,26 @@ def saveLoad_mov_spec_predArrays(
             name_base = (f'predArr_{src}_mov{MOV_SEL}_'
                         f'{FEAT_WIN_sec}sWindows_')
             
-            # save X_arr
-            np.save(join(ft_path, name_base + 'X.npy'),
-                    X_arr[src], allow_pickle=True)
-            # save y_arr
-            np.save(join(ft_path, name_base + 'y.npy'),
-                    y_arr[src], allow_pickle=True)
-            # save sub_arr
-            np.save(join(ft_path, name_base + 'subs.npy'),
-                    sub_arr[src], allow_pickle=True)
-            # save feat_names
-            with open(
-                join(ft_path, name_base + 'ftnames.json'),
-                'w'
-            ) as f:
-                json.dump(feat_names[src], f)
-        
+            try:
+                # save X_arr
+                np.save(join(ft_path, name_base + 'X.npy'),
+                        X_arr[src], allow_pickle=True)
+                # save y_arr
+                np.save(join(ft_path, name_base + 'y.npy'),
+                        y_arr[src], allow_pickle=True)
+                # save sub_arr
+                np.save(join(ft_path, name_base + 'subs.npy'),
+                        sub_arr[src], allow_pickle=True)
+                # save feat_names
+                with open(
+                    join(ft_path, name_base + 'ftnames.json'),
+                    'w'
+                ) as f:
+                    json.dump(feat_names[src], f)
+            except:
+                print(f'\n### WARNING: {name_base} could not be saved,'
+                      f' feat_names available: {feat_names.keys()}')
+
         return print('SAVED ALL ARRAYS and JSONs')
 
 
@@ -782,3 +864,14 @@ def get_clean2d(data3d, times=None):
     return data2d
 
 
+
+
+
+if __name__ == '__main__':
+    # CREATE FEATURE FILES
+    for MOV_SEL in ['INDEP', 'DEPEND']:
+        # loading/ creating/ saving in ssdFeats script
+        _, _, _, _ = get_moveSpec_predArrays(
+            MOV_SEL=MOV_SEL, LOAD_SOURCES=['STN',],
+            POWER_METHOD='ENV',
+        )

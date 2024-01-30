@@ -185,10 +185,8 @@ def merge_group_arrays(X_total, y_total_binary,
     # X_all contains n-windows, n-features
     # y_all contains y-values (n-windows)
     # sub_ids contains subject-codes corresponding to windows (n-windows)
-    print(X_all.shape, y_all_binary.shape, y_all_scale.shape,
-        sub_ids.shape, ft_times_all.shape)
     print(f'out of n={len(y_all_binary)} samples, n={sum(y_all_binary > 0)} are Dyskinesia'
-        f' ({round(sum(y_all_binary > 0) / len(y_all_binary) * 100, 1)} %)')
+          f' ({round(sum(y_all_binary > 0) / len(y_all_binary) * 100, 1)} %)')
     
     return X_all, y_all_binary, y_all_scale, sub_ids, ft_times_all
 
@@ -257,7 +255,10 @@ def get_movement_selected_arrays(
 
 def get_move_selected_env_arrays(
     sub, LOAD_SAVE: bool = True,
-    FT_VERSION = 'v6', GAMMA_WIDTH = 4,
+    FT_VERSION: str = 'v6', GAMMA_WIDTH: int = 5,
+    INCL_GAMMA_PEAK: bool = True,
+    INCL_GAMMA_BROAD: bool = True,
+    sfreq: int = 2048,
 ):
     """
     Takes the lists with arrays selected on
@@ -277,6 +278,7 @@ def get_move_selected_env_arrays(
         - env_arr (dict): dict containing per ephys-source
             one array with rows: freq-bands, CDRS, timestamps,
             tasks, mov-coding; eavh row n-samples (ALL)
+        - env_ranges: dict with freq-band names and freq-ranges
     """
     env_arr = {}  # dict to fill and return
 
@@ -293,18 +295,30 @@ def get_move_selected_env_arrays(
                      f'_{win_overlap}overlap', data_v,)
     files = listdir(join(data_path, 'movement_feature_arrays'))
 
-    # check subject files
+    # get (new) bands names
+    bands = SETTINGS['SPECTRAL_BANDS'].copy()
+    bands = {'theta' if k == 'delta' else k: v for k, v in bands.items()}
+    if INCL_GAMMA_BROAD: env_ranges = {k: v for k, v in bands.items()}
+    else: env_ranges = {k: v for k, v in bands.items()[:-3]}
+    if INCL_GAMMA_PEAK: env_ranges['gammaPeak'] = 0  # default to guarantee correct empty array build
+
+    # check subject files, LOAD IF AVAILABLE
     if sum([sub in f for f in files]) >= 2 and LOAD_SAVE:
+        fbands_out = {}
         # load present data
         for f in [f for f in files if sub in f ]:
+            # get data array and define source
             src = f"{f.split('_')[1]}_{f.split('_')[2]}"
-            env_arr[src] = np.load(
-                join(data_path, 'movement_feature_arrays',f),
-                allow_pickle=True
-            )
+            env_arr[src] = np.load(join(data_path, 'movement_feature_arrays',f),
+                                   allow_pickle=True)
+            # define source freq ranges
+            fbands_out[src] = {k: v for k, v in env_ranges.items()}  # take copy of env_ranges as start
+            g_range = f.split('gamma')[1][:4]
+            g_range = [int(g_range[:2]), int(g_range[2:])]
             print(f'- LOADED {src}: {f}')
-        
-        return env_arr
+            if INCL_GAMMA_PEAK: fbands_out[src]['gammaPeak'] = g_range  # add gamma peak per source
+
+        return env_arr, fbands_out
  
     # only load piclke with all selections if not loaded
     ext_subclass_path = join(
@@ -319,26 +333,21 @@ def get_move_selected_env_arrays(
     # get subject arrays
     sub_arrs = get_movement_selected_arrays(sub_class=sub_class)
     
-    # get (new) bands names
-    bands = sub_class.SETTINGS['SPECTRAL_BANDS'].copy()
-    bands = {'theta' if k == 'delta' else k: v for k, v in bands.items()}
-    # take band freq names and reduce to one gamma
-    env_bands = list(bands.keys()).copy()[:-3]
-    env_bands.append('gamma')
-
     # calculate full env arrays per source
     for src in sub_class.ephys_sources:
         f_sel = [sub_class.sub in f and src in f for f in files]  # creates bool
         if sum(f_sel) == 1 and LOAD_SAVE:
+
             src_file = np.array(files)[f_sel]
             env_arr[src] = np.load(join(data_path, src_file), allow_pickle=True)
             print(f'- LOADED: {src_file}')
             continue
+        
         # if not existing or LOAD_SAVE is false
         print(f'- START {src.upper()} (sub-{sub_class.sub})')
         src_arrs = sub_arrs[src]  # take dict with MOV DEP/INDEP arrays per source
         n_all_samples = sum([a.shape[0] for m in src_arrs.values() for a in m])  # sum all arrays up
-        env_arr[src] = np.zeros((len(env_bands), n_all_samples))  # new arr to fill with band-envelops
+        env_arr[src] = np.zeros((len(env_ranges), n_all_samples))  # new arr to fill with band-envelops
 
         src_max_gamma_var = 0  # set at source-beginning for gamma peak finding
 
@@ -350,24 +359,33 @@ def get_move_selected_env_arrays(
                 # loop over gamma bands and take freq bin with largest variation            
                 sig = np.concatenate([a[:, i_ch] for m in src_arrs.values() for a in m])
                 assert ~ any(np.isnan(sig)), f'NaNs in sig: {sum(np.isnan(sig))}'
-                for f_1 in np.arange(f_range[0],
-                                    f_range[1] - (GAMMA_WIDTH - 1),
-                                    GAMMA_WIDTH / 2):
-                    f_2 = f_1 + GAMMA_WIDTH
-                    env = get_envelop(sig, fs=2048,
-                                                bandpass_freqs=[f_1, f_2])
-                    var_f = variation(env)
-                    if var_f > src_max_gamma_var:
-                        src_max_gamma_var = var_f
-                        indiv_gamma_range = [f_1, f_2]
-                        # add highest gamma to env array (possibly overwritten by next higher gamma)
-                        env_arr[src][-1, :] = env  # last row for general gamma
+
+                if INCL_GAMMA_PEAK:
+                    for f_1 in np.arange(f_range[0],
+                                        f_range[1] - (GAMMA_WIDTH - 1),
+                                        GAMMA_WIDTH / 2):
+                        f_2 = f_1 + GAMMA_WIDTH
+                        env = get_envelop(sig, fs=sfreq,
+                                                    bandpass_freqs=[f_1, f_2])
+                        var_f = variation(env)
+                        if var_f > src_max_gamma_var:
+                            src_max_gamma_var = var_f
+                            indiv_gamma_range = [f_1, f_2]
+                            # add highest gamma to env array (possibly overwritten by next higher gamma)
+                            env_arr[src][-1, :] = env  # last row for indiv peak gamma
+                
+                if INCL_GAMMA_BROAD:
+                    env = get_envelop(sig, fs=sfreq,
+                                      bandpass_freqs=[f_1, f_2])
+                    env_arr[src][i_ch, :] = env
 
             elif 'gamma' not in band:
                 # for other bands take env over full freq range
                 sig = np.concatenate([a[:, i_ch] for m in src_arrs.values() for a in m])
                 assert ~ any(np.isnan(sig)), f'NaNs in sig: {sum(np.isnan(sig))}'
+                
                 env = get_envelop(sig, fs=2048, bandpass_freqs=f_range)
+                
                 try:
                     env_arr[src][i_ch, :] = env
                 except ValueError:
@@ -391,9 +409,11 @@ def get_move_selected_env_arrays(
             np.save(join(data_path, 'movement_feature_arrays', f_name),
                     env_arr[src], allow_pickle=True)
             print(f'...saved {f_name} (arr shape: {env_arr[src].shape})')
+    
+    if INCL_GAMMA_PEAK: env_ranges['gammaPeak'] = indiv_gamma_range
 
 
-    return env_arr
+    return env_arr, env_ranges
 
 
 if __name__ == '__main__':
@@ -412,6 +432,6 @@ if __name__ == '__main__':
     for sub in SUBS:
         print(f'\nextract envelop-arrays for sub-{sub}')
         # get move-selected env arrays
-        _ = get_move_selected_env_arrays(
+        _, _ = get_move_selected_env_arrays(
             sub=sub, LOAD_SAVE=True
         )

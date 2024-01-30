@@ -26,12 +26,17 @@ def calc_lmem_freqCoeffs(temp_values,
                          VALUES_GIVEN_GROUPED=False,
                          GROUP_LABELS=None,
                          STATS_PER_LID_CAT: bool = False,
+                         LID_REST_BASELINE: bool = False,
                          STATS_VERSION='',
                          verbose: bool = False,):
     """
     temp_values:
     temp_ids: array corresponding to values
     temp_freqs: array corr to values
+
+    LID_REST_BASELINE: alternative baselining for TAP
+        and INVOLUNT in which baseline is the LID-category
+        without movement (in rest)
 
     Returns:
         - dynamic output_list: list depending
@@ -67,12 +72,20 @@ def calc_lmem_freqCoeffs(temp_values,
 
     # objects to store data in
     if not STATS_PER_LID_CAT:
+        
         coeffs_freqs, sign_freqs, grads = [], [], []
+    
     elif STATS_PER_LID_CAT:
+        
         if np.nanmax(GROUP_LABELS) <= 3:
             CAT_CODING = {1: 'mild', 2: 'moderate', 3: 'severe'}
+        
         elif np.nanmax(GROUP_LABELS) == 4:
             CAT_CODING = {1: 'no', 2: 'mild', 3: 'moderate', 4: 'severe'}
+        
+        elif np.nanmax(GROUP_LABELS) > 4 and LID_REST_BASELINE:
+            CAT_CODING = {0: 'no', 1: 'mild', 2: 'moderate', 3: 'severe'}  # LIDREST baseline is coded +10
+        
         coeffs_freqs = {c: [] for c in CAT_CODING.values()}
         sign_freqs = {c: [] for c in CAT_CODING.values()}
     
@@ -88,7 +101,8 @@ def calc_lmem_freqCoeffs(temp_values,
             print(f'...skip {f} Hz (already done before)')
             continue
         
-        assert sum(stat_labels == 0) > 0, f'NO BASELINE found in LMM calc ({f} Hz)'
+        if not LID_REST_BASELINE:
+            assert sum(stat_labels == 0) > 0, f'NO BASELINE found in LMM calc ({f} Hz)'
 
         ### calculate each category separately
         res_freqs.append(f)
@@ -96,34 +110,65 @@ def calc_lmem_freqCoeffs(temp_values,
             # loop over LID-categories, always same baseline (coded as 0)
             for CAT in CAT_CODING:  # corr to mild-moderate-severe (0: NO-LID is skipped)
                 if verbose: print(f'...start STAT calc for LID CAT: {CAT}, {CAT_CODING[CAT]} ({f} Hz)')
-                cat_sel = np.logical_or(stat_labels == 0,
-                                        stat_labels == CAT)
-                cat_values = stat_values[cat_sel, i_f]
+                
+                if not LID_REST_BASELINE:
+                    cat_sel = np.logical_or(stat_labels == 0,
+                                            stat_labels == CAT)
+                    cat_labels = stat_labels[cat_sel]
+                    cat_values = stat_values[cat_sel, i_f]
+                    cat_ids = stat_ids[cat_sel]
+                
+                # overwrite in alternative case of LID-rest category baselines
+                elif LID_REST_BASELINE:
+                    cat_sel = np.logical_or(stat_labels == (CAT + 10),  # baseline coded +10
+                                            stat_labels == CAT)
+                    temp_labels = stat_labels[cat_sel]
+                    # set labels always baseline: 0 and CAT: 1
+                    cat_labels = np.zeros_like(temp_labels)
+                    cat_labels[temp_labels == CAT] = 1
+                    cat_values = stat_values[cat_sel, i_f]
+                    cat_ids = stat_ids[cat_sel]
+                    assert sum(cat_labels == 0) > 0, f'NO (alt, LID-categ) BASELINE found in LMM calc ({f} Hz)'
+                    if sum(cat_labels == 1) == 0:
+                        print(f'NO VALUES in LMM (LID cat: {CAT}, {f} Hz), DELETED CAT STORING LIST')
+                        if CAT_CODING[CAT] in coeffs_freqs.keys():
+                            del coeffs_freqs[CAT_CODING[CAT]]
+                            del sign_freqs[CAT_CODING[CAT]]
+                        continue
+
                 # take mean of both freqs (except for last)
                 if STATS_VERSION == '2Hz' and i_f + 1 != stat_values.shape[1]:
                     cat_values = np.mean([cat_values, stat_values[cat_sel, i_f + 1]], axis=0)
                     res_freqs.append(temp_freqs[i_f + 1])
-                cat_labels = stat_labels[cat_sel]
-                cat_ids = stat_ids[cat_sel]
+                
                 # calculate difference versus 0
-                result_list = run_mixEff_wGroups(
-                    dep_var=cat_values,
-                    indep_var=cat_labels,
-                    groups=cat_ids,
-                    TO_ZSCORE=False,
-                    RETURN_GRADIENT=RETURN_GRAD,
-                    RETURN_CI=RETURN_CI
-                )
+                try:
+                    result_list = run_mixEff_wGroups(
+                        dep_var=cat_values,
+                        indep_var=cat_labels,
+                        groups=cat_ids,
+                        TO_ZSCORE=False,
+                        RETURN_GRADIENT=RETURN_GRAD,
+                        RETURN_CI=RETURN_CI
+                    )
+                except:
+                    print(cat_values.shape)
+                    print(cat_labels.shape)
+                    print(cat_ids.shape)
+                    print(sum(cat_sel), len(cat_sel))
+                    raise ValueError
                 # in case of unsuccessful calc 
                 if isinstance(result_list, bool):
                     if result_list == False:
-                        print(f'\n#### no conversion for {f}\n')
+                        print(f'\n#### no conversion for {f} (LID cat: {CAT})\n')
+                        print(f'sum {sum(cat_sel), {len(cat_sel)}}')
+                        print(f'cat values: {cat_values.shape}')
                         fig, ax = plt.subplots(1,1, figsize=(4, 4))
-                        ax.scatter([0] * sum(stat_labels == 0),
-                                stat_values[stat_labels == 0, i_f],)
-                        ax.scatter([1] * sum(stat_labels == 1),
-                                stat_values[stat_labels == 1, i_f],)
-                        ax.set_title(f'{f} Hz')
+                        ax.scatter([0] * sum(cat_labels == 0),
+                                cat_values[cat_labels == 0],)
+                        ax.scatter([1] * sum(cat_labels == 1),
+                                cat_values[cat_labels == 1],)
+                        ax.set_title(f'{f} Hz, LID category: {CAT}')
                         plt.show()
                         break
                         coeffs_freqs.append(0)

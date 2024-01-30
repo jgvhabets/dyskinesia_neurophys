@@ -69,6 +69,10 @@ def get_REST_stat_grouped_data(
     elif STAT_SPLIT == 'move_baseline':
         group_states = {0: ['nolidbelow30', 'nolidover30'],}
     
+    elif STAT_SPLIT == 'move_baseline_lidRest':
+        group_states = {10: ['nolidbelow30', 'nolidover30'],
+                        11: ['mildlid'], 12: ['moderatelid'], 13: ['severelid']}
+    
     # dictionaries to store grouped results
     group_subs = {i: [] for i in group_states.keys()}
     group_psds = {i: [] for i in group_states.keys()}
@@ -134,6 +138,7 @@ def get_MOVE_stat_grouped_data(
     STAT_SPLIT: str = 'linear',
     SRC: str = 'lfp',
     PSD_1s_windows: bool = False,
+    ALPHA: float = .05,
 ):
     """
     creates two dicts with stat-data-arrays,
@@ -163,12 +168,11 @@ def get_MOVE_stat_grouped_data(
     print(f'...prep MOVEMENT spec psds for {MOVE_COND}')
     (psd_arrs,
      psd_freqs,
-     psd_subs) = prep_MOVEMENT_spec_psds(
-        PLOT_MOVE=MOVE_COND,
-        PSD_DICT=PSD_DICT,
-        BASELINE=BL_class,
-        RETURN_IDS=True,
-        MERGED_STNS=MERGE_STN)
+     psd_subs) = prep_MOVEMENT_spec_psds(PLOT_MOVE=MOVE_COND,
+                                         PSD_DICT=PSD_DICT,
+                                         BASELINE=BL_class,
+                                         RETURN_IDS=True,
+                                         MERGED_STNS=MERGE_STN)
     src_psd = psd_arrs[SRC]  # contains INVOLUNT/TAP_CONTRA/IPSI/BILAT
     src_subs = psd_subs[SRC]
 
@@ -240,13 +244,15 @@ def get_stats_REST_psds(
     MERGE_STNs: bool = False,
     STATS_VERSION: str = '',
     STAT_PER_LID_CAT: bool = False,
+    ALPHA: float = .05,
 ):
     CLASSES_LOADED = False  # bool to only load classes once during creation
     
     stat_dir = get_stat_folder(STAT_LID_COMPARE=STAT_LID_COMPARE,
                                STAT_PER_LID_CAT=STAT_PER_LID_CAT,
                                STAT_DATA_EXT_PATH=STAT_DATA_EXT_PATH,
-                               STATS_VERSION=STATS_VERSION,)
+                               STATS_VERSION=STATS_VERSION,
+                               ALPHA=ALPHA,)
 
     # define LID split for analysis
     if STAT_PER_LID_CAT:
@@ -304,6 +310,7 @@ def get_stats_REST_psds(
                 GROUP_LABELS=stat_labels,
                 STATS_PER_LID_CAT=STAT_PER_LID_CAT,
                 STATS_VERSION=STATS_VERSION,
+                ALPHA=ALPHA,
             )
             if not STAT_PER_LID_CAT:
                 sign_bools.append(sign_freqs)
@@ -360,7 +367,8 @@ def get_stats_REST_psds(
 def get_stat_folder(STAT_LID_COMPARE: str,
                     STAT_PER_LID_CAT: bool = False,
                     STAT_DATA_EXT_PATH: bool = True,
-                    STATS_VERSION: str = '',):
+                    STATS_VERSION: str = '',
+                    ALPHA: float = 0.05,):
     
     if STAT_DATA_EXT_PATH:
         stat_dir = ('D://Research/CHARITE/projects/'
@@ -373,12 +381,17 @@ def get_stat_folder(STAT_LID_COMPARE: str,
     assert STAT_LID_COMPARE in ['binary', 'linear', 'categs'], (
         f'STAT_LID_COMPARE ({STAT_LID_COMPARE}) should be linear / binary / categs'
     )
+    # add categ to folder name
     if STAT_PER_LID_CAT:
         stat_dir += f'_lidCategs'
     else:      
         stat_dir += f'_lid{STAT_LID_COMPARE.capitalize()}'  # add Linear or Binary
-
+    
+    # add 2 Hz bin to folder name
     if len (STATS_VERSION) > 1: stat_dir += f'_{STATS_VERSION}'
+
+    # add different ALPHA to folder name
+    if ALPHA != 0.05: stat_dir += f'_{ALPHA}'
 
     return stat_dir
 
@@ -390,8 +403,10 @@ def get_stats_MOVE_psds(
     STATS_VERSION: str = '',
     STAT_PER_LID_CAT: bool = False,
     REST_BASELINE: bool = True,
+    ALT_BASELINE: bool = False,
     SKIP_MOVES: list = [],
     MERGE_DYSK_SIDES: bool = False,
+    ALPHA: float = .05,
 ):
     """
     Get statistical difference between movement
@@ -413,11 +428,13 @@ def get_stats_MOVE_psds(
     CLASSES_LOADED = False  # bool to only load classes once during creation
 
     if STAT_PER_LID_CAT: STAT_LID_COMPARE = 'categs'  # default with one category vs baseline
+    if ALT_BASELINE: REST_BASELINE = False
 
     stat_dir = get_stat_folder(STAT_LID_COMPARE=STAT_LID_COMPARE,
                                STAT_PER_LID_CAT=STAT_PER_LID_CAT,
                                STAT_DATA_EXT_PATH=STAT_DATA_EXT_PATH,
-                               STATS_VERSION=STATS_VERSION,)
+                               STATS_VERSION=STATS_VERSION,
+                               ALPHA=ALPHA,)
 
     
     for MOV in ['TAP', 'INVOLUNT', 'FREEMOVE', 'FREENOMOVE']:
@@ -441,6 +458,7 @@ def get_stats_MOVE_psds(
             if MOV == 'TAP' and SIDE == 'BILAT': continue
             print(f'({MOV}) START-{i_src}: {SRC} x {SIDE}')
             df_name = f'PsdStateStats_1secWins_{MOV}_{SRC}_{SIDE}.csv'
+            if ALT_BASELINE: df_name = 'alt_' + df_name
             stat_path = os.path.join(stat_dir, df_name)
 
             if os.path.exists(stat_path):
@@ -509,7 +527,26 @@ def get_stats_MOVE_psds(
                 stat_values = np.concatenate([stat_values, bl_values])
                 stat_labels = np.concatenate([stat_labels, bl_labels])
                 stat_ids = np.concatenate([stat_ids, bl_ids])
-                
+
+            # change baseline to analyze movement effect within LID categories 
+            elif ALT_BASELINE:
+                print('...define new LID focussed movement baseline')
+                if MOV in ['TAP', 'INVOLUNT']:
+                    # returns rest-LID values, labeled 10,11,12,13
+                    (
+                        bl_values, bl_labels, bl_ids, value_freqs
+                    ) = get_REST_stat_grouped_data(
+                        STAT_SPLIT='move_baseline_lidRest',
+                        SRC=SRC,
+                        PSD_DICT=PSDs, BL_class=BLs,
+                        PSD_1s_windows=True,
+                        MERGE_STNs=True,  # merge STNs to get src lfp
+                    )
+                # add baseline values to stat values
+                stat_values = np.concatenate([stat_values, bl_values])
+                stat_labels = np.concatenate([stat_labels, bl_labels])
+                stat_ids = np.concatenate([stat_ids, bl_ids])
+
             # get STATS (coeffs, sign-bools) based on grouped data
             # internal dealing with LID categories if necessary
             (
@@ -522,6 +559,8 @@ def get_stats_MOVE_psds(
                 GROUP_LABELS=stat_labels,
                 STATS_PER_LID_CAT=STAT_PER_LID_CAT,
                 STATS_VERSION=STATS_VERSION,
+                ALPHA=ALPHA,
+                LID_REST_BASELINE=ALT_BASELINE,
             )
             
             # CALC and SAVE STATS in dataframes separate per MOV / SRC / SIDE

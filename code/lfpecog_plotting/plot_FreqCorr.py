@@ -113,6 +113,7 @@ def plot_ftCorr_heatMap(R_grid, p_grid, fig_name,
     none_map = ListedColormap(['none'])
 
     fig, ax = plt.subplots(1, 1, figsize=(20, 12), )
+    
     # full colored for sign Rs
     vmin, vmax = -.4, .4
     sig_map = ax.pcolormesh(sig_R_grid, vmin=vmin, vmax=vmax,

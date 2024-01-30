@@ -29,6 +29,8 @@ def prep_and_plot_moveSpecPsd(
     SHOW_PLOT: bool = True,
     INCL_STATS: bool = False,
     STAT_PER_LID_CAT: bool = True,
+    ALPHA: float = 0.05,
+    ALT_MOVELID_BASELINE: bool = False,
     STATS_VERSION: str = '',
     STAT_LID_COMPARE: str = 'binary',
     MERGE_REST_STNS: bool = False,
@@ -79,6 +81,8 @@ def prep_and_plot_moveSpecPsd(
         SHOW_PLOT=SHOW_PLOT,
         INCL_STATS=INCL_STATS,
         STAT_PER_LID_CAT=STAT_PER_LID_CAT,
+        ALT_MOVELID_BASELINE=ALT_MOVELID_BASELINE,
+        ALPHA=ALPHA,
         STATS_VERSION=STATS_VERSION,
         STAT_LID_COMPARE=STAT_LID_COMPARE,
         MERGED_STNS=MERGE_STN,
@@ -92,6 +96,8 @@ def plot_moveLidSpec_PSDs(
     SHOW_PLOT: bool = True,
     INCL_STATS: bool = False,
     STAT_PER_LID_CAT: bool = True,
+    ALT_MOVELID_BASELINE: bool = False,
+    ALPHA: float = 0.05,
     STATS_VERSION: str = '',
     STAT_LID_COMPARE: str = 'binary',
     STAT_DATA_EXT_PATH: bool = True,
@@ -126,7 +132,8 @@ def plot_moveLidSpec_PSDs(
     stat_dir = get_stat_folder(STAT_LID_COMPARE=STAT_LID_COMPARE,
                                 STAT_PER_LID_CAT=STAT_PER_LID_CAT,
                                 STAT_DATA_EXT_PATH=STAT_DATA_EXT_PATH,
-                                STATS_VERSION=STATS_VERSION,)
+                                STATS_VERSION=STATS_VERSION,
+                                ALPHA=ALPHA,)
     
     # LFP-row0, ECoG-row1; IPSI/CONTRA/BOTH in columns
     AX_WIDTH, AX_HEIGHT = 8, 6
@@ -177,6 +184,9 @@ def plot_moveLidSpec_PSDs(
                     else:
                         dfname = f'PsdStateStats_1secWins_{PLOT_MOVE_TYPE}_{src}_{mov}.csv'
                 
+                # in case of alternative df naming for move with LID categories
+                if ALT_MOVELID_BASELINE: dfname = 'alt_' + dfname
+
                 stat_df = os.path.join(stat_dir, dfname)
                 if os.path.exists(stat_df):
                     print(f'...stats df loading: {stat_df}')
@@ -241,7 +251,8 @@ def plot_moveLidSpec_PSDs(
                 if STAT_PER_LID_CAT:
                     axes = plot_stats_categs(
                         stat_df, axes, PLOT_MOVE_TYPE,
-                        axrow, axcol
+                        axrow, axcol,
+                        ALT_MOVLID_BL=ALT_MOVELID_BASELINE,
                     )
                     
 
@@ -689,7 +700,8 @@ def plot_summary_stats(stat_df, axes, PLOT_MOVE_TYPE,
 
 
 def plot_stats_categs(stat_df, axes, PLOT_MOVE_TYPE,
-                      axrow, axcol, lw=8,):
+                      axrow, axcol, lw=8,
+                      ALT_MOVLID_BL: bool = False,):
     sign_bools = {}
 
     if PLOT_MOVE_TYPE == 'REST':
@@ -706,6 +718,9 @@ def plot_stats_categs(stat_df, axes, PLOT_MOVE_TYPE,
             groups_lid = ['nolid'] + groups_lid
 
     for i_cat, cat in enumerate(groups_lid):  # loop over CATEGs to show
+        if ALT_MOVLID_BL and cat == 'nolid':
+            print(f'dont show significance (ALT LID-cat BASELINING) for cat {cat}')
+            continue
         # signs for full and only compared to <30
         if PLOT_MOVE_TYPE == 'REST':
             sign_bools['full'] = stat_df[f'sig_no-LID vs {cat}']
