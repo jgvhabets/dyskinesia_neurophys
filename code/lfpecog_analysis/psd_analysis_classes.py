@@ -40,8 +40,6 @@ def get_allSpecStates_Psds(
         - BLs: baseline class
     """
 
-    
-
     sources = ['lfp_left', 'lfp_right', 'ecog']
     lid_states = ['no', 'mild', 'moderate', 'severe']
 

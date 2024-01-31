@@ -531,17 +531,18 @@ def get_stats_MOVE_psds(
             # change baseline to analyze movement effect within LID categories 
             elif ALT_BASELINE:
                 print('...define new LID focussed movement baseline')
-                if MOV in ['TAP', 'INVOLUNT']:
-                    # returns rest-LID values, labeled 10,11,12,13
-                    (
-                        bl_values, bl_labels, bl_ids, value_freqs
-                    ) = get_REST_stat_grouped_data(
-                        STAT_SPLIT='move_baseline_lidRest',
-                        SRC=SRC,
-                        PSD_DICT=PSDs, BL_class=BLs,
-                        PSD_1s_windows=True,
-                        MERGE_STNs=True,  # merge STNs to get src lfp
-                    )
+                # if MOV in ['TAP', 'INVOLUNT',]:
+                # returns BL values from rest-nomove per LID category,
+                # labeled: no lid: 10, mild: 11, mod: 12, severe: 13
+                (
+                    bl_values, bl_labels, bl_ids, value_freqs
+                ) = get_REST_stat_grouped_data(
+                    STAT_SPLIT='move_baseline_lidRest',
+                    SRC=SRC,
+                    PSD_DICT=PSDs, BL_class=BLs,
+                    PSD_1s_windows=True,
+                    MERGE_STNs=True,  # merge STNs to get src lfp
+                )
                 # add baseline values to stat values
                 stat_values = np.concatenate([stat_values, bl_values])
                 stat_labels = np.concatenate([stat_labels, bl_labels])

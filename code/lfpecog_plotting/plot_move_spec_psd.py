@@ -51,6 +51,7 @@ def prep_and_plot_moveSpecPsd(
             PLOT_CONDITION = ['FREENOMOVE', 'FREEMOVE']
         elif PLOT_CONDITION == 'INVOLUNT':
             MERGE_STN = MERGED_DYSK  # new plotting dysk_move
+   
     # execute prep function
     if isinstance(PLOT_CONDITION, str):
         psd_arrs, psd_freqs, psd_subs = prep_func(
