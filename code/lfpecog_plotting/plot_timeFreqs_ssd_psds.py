@@ -35,6 +35,7 @@ def plot_indiv_ssd_timefreq_allSources(
     SHOW_PLOT = False,
     CDRS_RATER='Jeroen',
     FORCE_PSD_CREATION=False,
+    FOR_FIG=False,
 ):
     # adjust
     fig_name = f'{fig_name_base}_sub{sub}'
@@ -65,6 +66,16 @@ def plot_indiv_ssd_timefreq_allSources(
                             )
     tf_col=1
 
+    if FOR_FIG:
+        alltimes = [PSD_ssd_dict[s]['times'] for s in sources]
+        uniq_bool = np.in1d(alltimes[0], alltimes[1])
+        uniq_times = np.array(alltimes[0])[uniq_bool]
+        uniq_bool = np.in1d(uniq_times, alltimes[2])
+        uniq_times = uniq_times[uniq_bool]
+    else:
+        uniq_times = False
+
+
     for i_s, source in enumerate(sources):
 
         if ZSCORE: vmin, vmax, cmap = -4, 4, 'bwr'  #'afmhot'  'hot'  'bwr'
@@ -72,9 +83,9 @@ def plot_indiv_ssd_timefreq_allSources(
 
         # get COMBINED SSDd SPECTRAL timeseries
         psd_source_dict = PSD_ssd_dict[source]
-        tf_values = psd_source_dict['values']
-        tf_times = psd_source_dict['times']
-        tf_freqs = psd_source_dict['freqs']
+        tf_values = psd_source_dict['values'].copy()
+        tf_times = psd_source_dict['times'].copy()
+        tf_freqs = psd_source_dict['freqs'].copy()
         if isinstance(tf_times, list): tf_times = np.array(tf_times)
         if isinstance(tf_values, list): tf_values = np.array(tf_values)
         if isinstance(tf_freqs, list): tf_freqs = np.array(tf_freqs)
@@ -106,26 +117,27 @@ def plot_indiv_ssd_timefreq_allSources(
 
         # get nearest CDRS values for ephys-timings
         cdrs_values = {}
-        for bodyside in ['bilat', 'left', 'right']:
-            try:
-                _, cdrs_values[bodyside] = ftProc.find_select_nearest_CDRS_for_ephys(
-                    sub=sub,
-                    ft_times=tf_times / 60,
-                    side=bodyside,
-                    cdrs_rater=CDRS_RATER,
-                )
+        for bodyside in ['full',]: #['bilat', 'left', 'right']:
+            # try:
+            print(f'load {bodyside} cdrs for {sub}, {source}')
+            cdrs_values[bodyside] = ftProc.find_select_nearest_CDRS_for_ephys(
+                sub=sub,
+                ft_times=tf_times / 60,
+                side=bodyside,
+                cdrs_rater=CDRS_RATER,
+                INCL_CORE_CDRS=True,
+            )
 
-                # convert CDRS labels into categories
-                if CAT_CDRS:
-                    cdrs_values[bodyside] = ftProc.categorical_CDRS(
-                        y_full_scale=cdrs_values[bodyside],
-                        time_minutes=tf_times / 60,
-                        preLID_minutes=0,
-                        preLID_separate=False,
-                        convert_inBetween_zeros='mild',
-                    )
-            except ValueError:
-                print(f'Error during importing CDRS scores sub {sub}')
+            # convert CDRS labels into categories
+            if CAT_CDRS:
+                cdrs_values[bodyside] = ftProc.categorical_CDRS(
+                    y_full_scale=cdrs_values[bodyside],
+                    time_minutes=tf_times / 60,
+                    preLID_separate=False,
+                    convert_inBetween_zeros=False,
+                )
+            # except ValueError:
+            #     print(f'Error during importing CDRS scores sub {sub}')
         
         # PLOT TIMEFREQ AND DYSKIENSIA SCORES
         (axes[2 + (i_s*4), tf_col],
@@ -133,10 +145,12 @@ def plot_indiv_ssd_timefreq_allSources(
          im_cbar, legend_hands_labels) = plot_splitted_timefreq_ax(
             ax_down=axes[2 + (i_s*4), tf_col], ax_up=axes[0 + (i_s*4), tf_col],
             tf_values=tf_values,
-            tf_times=tf_times,
+            tf_times=tf_times.copy(),
             tf_freqs=tf_freqs,
             cmap=cmap, vmin=vmin, vmax=vmax,
             cdrs_values=cdrs_values,
+            FOR_FIG=FOR_FIG,
+            uniq_times=uniq_times,
         )
         
         # PLOT Y LABEL FOR 2nd Y AXIS DYSKINESIA
@@ -201,10 +215,19 @@ def plot_indiv_ssd_timefreq_allSources(
     # Plot xlabel at bottom
     axes[-1, tf_col].set_xlabel('Time (minutes after L-Dopa intake)',
                         size=fsize+4, weight='bold',)
-    xticks = np.linspace(round(tf_times[0] / 60, -1), round(tf_times[-1] / 60, -1), 5)
-    if 0 not in xticks: xticks = sorted(np.append(xticks, 0))
-    axes[-1, tf_col].set_xticks(np.array(xticks) * 60, size=fsize,)
-    axes[-1, tf_col].set_xticklabels(np.around(xticks), size=fsize)
+    
+    if not FOR_FIG:
+        xticks = np.linspace(round(tf_times[0] / 60, -1), round(tf_times[-1] / 60, -1), 5)
+        if 0 not in xticks: xticks = sorted(np.append(xticks, 0))
+        axes[-1, tf_col].set_xticks(np.array(xticks) * 60, size=fsize,)
+        axes[-1, tf_col].set_xticklabels(np.around(xticks), size=fsize)
+
+    elif FOR_FIG:
+        xticks=[0, 10, 20, 30, 40, 60]
+        xtick_idx = [np.argmin(abs(tf_times - (t * 60))) for t in xticks]
+        axes[-1, tf_col].set_xticks(xtick_idx, size=fsize,)
+        axes[-1, tf_col].set_xticklabels(xticks, size=fsize)
+
 
     hands, labels = remove_duplicate_legend(legend_hands_labels)
     axbox = axes[0, tf_col].get_position()
@@ -223,8 +246,15 @@ def plot_indiv_ssd_timefreq_allSources(
                         f'data_{DATA_VERSION}_ft_{FT_VERSION}',
                         'ssd_timeFreqs')
         if not exists(path): makedirs(path)
-        plt.savefig(join(path, fig_name),
+        if FOR_FIG:
+            fig_name += '.pdf'
+            plt.savefig(join(path, fig_name), facecolor='w',)
+            
+        else:
+            plt.savefig(join(path, fig_name),
                     facecolor='w', dpi=300,)
+        
+
         print(f'sub-{sub}, figure saved: {fig_name}')
 
     if SHOW_PLOT:
@@ -240,6 +270,7 @@ def plot_splitted_timefreq_ax(
     cmap, vmin, vmax, win_spacing=1, fsize=16,
     f_lims={'down': (4, 35), 'up': (60, 90)},
     cdrs_values=False, SKIP_BILAT_CDRS=True,
+    FOR_FIG: bool = False, uniq_times=False,
 ):
     """
         - win_spacing: in seconds
@@ -247,21 +278,37 @@ def plot_splitted_timefreq_ax(
     # prepare timefreq array data for colormesh
     C = tf_values.copy()
 
-    tdiffs_idx = [(t, i) for i, t in enumerate(np.diff(tf_times)) if t>win_spacing]
+    if FOR_FIG:
+        t_sel = np.in1d(tf_times, uniq_times)
+        C = C[:, t_sel]
+        tf_times = tf_times[t_sel]
+        cdrs_values['full'] = cdrs_values['full'][t_sel]
 
-    for t, i in tdiffs_idx[::-1]:  # in reverse order to not change the relevant indices on the go
-        pad = np.array([[np.nan] * C.shape[0]] * int((t - win_spacing) / win_spacing))
-        C = np.insert(C, obj=i, values=pad, axis=1)
-        # add nans as well to cdrs-array
-        if isinstance(cdrs_values, np.ndarray):
-            cdrs_values = np.insert(cdrs_values, obj=i, values=pad[:, 0], )
-        elif isinstance(cdrs_values, dict):
-            for side in cdrs_values.keys():
-                cdrs_values[side] = np.insert(cdrs_values[side], obj=i, values=pad[:, 0], )
+
+    # to fix correct timescale (x-axis), add nan-data blocks
+    if not FOR_FIG:
+        tdiffs_idx = [(t, i) for i, t in enumerate(np.diff(tf_times)) if t>win_spacing]
+
+        for t, i in tdiffs_idx[::-1]:  # in reverse order to not change the relevant indices on the go
+            pad = np.array([[np.nan] * C.shape[0]] * int((t - win_spacing) / win_spacing))
+            C = np.insert(C, obj=i, values=pad, axis=1)
+            # add nans as well to cdrs-array
+            if isinstance(cdrs_values, np.ndarray):
+                cdrs_values = np.insert(cdrs_values, obj=i, values=pad[:, 0], )
+            elif isinstance(cdrs_values, dict):
+                for side in cdrs_values.keys():
+                    cdrs_values[side] = np.insert(cdrs_values[side], obj=i, values=pad[:, 0], )
         
-    # create x and y
-    x = np.arange(tf_times[0], tf_times[-1] + win_spacing, win_spacing)
-    y = tf_freqs
+        # create x and y
+        x = np.arange(tf_times[0], tf_times[-1] + win_spacing, win_spacing)
+        y = tf_freqs
+    
+    elif FOR_FIG:
+        # create x and y
+        x = np.arange(len(tf_times))
+        y = tf_freqs
+        
+
     # blank non-SSD freqs
     f_sel = np.logical_and(y > 35, y < 60)
     C[f_sel] = np.nan
