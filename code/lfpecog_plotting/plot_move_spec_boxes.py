@@ -2,13 +2,14 @@
 Plots Boxplots of Spectral Changes selected
 on millisecond precise movement selection
 """
-
+import importlib
 import os
 import matplotlib.pyplot as plt
 import numpy as np
 from itertools import product, compress
 import seaborn as sns
 from pandas import DataFrame
+from scipy.stats import mannwhitneyu
 
 from utils.utils_fileManagement import (
     get_project_path, load_ft_ext_cfg
@@ -31,6 +32,7 @@ from lfpecog_analysis.psd_lid_stats import run_mixEff_wGroups
 #     'alllid': 'blue', 'mildlid': 'orange',
 #     'moderatelid': 'red', 'severelid': 'purple',
 # }
+
 
 lid_labels = ["None\n<30'", "None\n>30'", 'None',
                 'Mild', 'Moderate', 'Severe']
@@ -202,18 +204,19 @@ def plot_moveSpec_boxplots(
     fsize = 14,
     FIG_SAVE: bool = False,
     fig_name_start: str = '',
+    SQUEEZE_FIG: bool = False,
 ):
     ALPHA = .01
     # PLOT BOXPLOTS PER FREQ BAND; FOR SELECTED CONDITIONS(S)
     print(f'included conditions: {STATE_SEL}')
     print(f'selected data-source: {SOURCE_SEL}')
 
+    if SQUEEZE_FIG:
+        plt_kws = {'figsize': (5, 7), 'sharex': 'col'}
+    else:
+        plt_kws = {'figsize': (6, 9)}
 
-    fig, axes = plt.subplots(len(psd_box), 1,
-                            # figsize=(6, 9),
-                            figsize=(5, 7),
-                             sharex='col',
-                            )
+    fig, axes = plt.subplots(len(psd_box), 1, **plt_kws)
 
     for i_ax, bw in enumerate(psd_box.keys()):
 
@@ -315,21 +318,16 @@ def plot_moveSpec_boxplots(
             else:
                 leg_loc = {'loc': 'lower right',
                             'bbox_to_anchor': ((.95, .02))}
-            axes[i_ax].scatter(
-                [], [], lw=.1, c='w',
-                label=f'Coef.: {round(coef, 3)} (p={round(pval, 3)})'
-            )
+            stat_lab = f'Coef.: {round(coef, 3)} (p={round(pval, 3)})'
+            if pval < 1e-4: stat_lab = stat_lab.replace('=', '<')
+            axes[i_ax].scatter([], [], lw=.1, c='w', label=stat_lab)
             axes[i_ax].legend(frameon=False, fontsize=fsize - 2,
                               prop=leg_props, **leg_loc)
                             #   loc='lower right', bbox_to_anchor=(.99, .01),
 
-        # if bw in ind_peak_bands: title = f'{bw} (indiv peak)'
-        # else: title = f'{bw} (broad mean)'
-        # axes[i_ax].set_title(title, weight='bold', size=fsize,)
-
         axes[i_ax].set_xticks(boxxticks)
         axes[i_ax].set_xticklabels(list(compress(lid_labels, box_sel)),
-                                size=fsize-2,)
+                                    size=fsize-2,)
         axes[i_ax].set_xlim(-BOX_WIDTH, boxxticks[-1] + BOX_WIDTH)
         axes[i_ax].set_yticks(np.arange(-2, 2.1, .5))
         axes[i_ax].set_yticklabels(np.arange(-2, 2.1, .5), size=fsize,)
@@ -337,25 +335,29 @@ def plot_moveSpec_boxplots(
         if not PLOT_SUB_MEANS: axes[i_ax].set_ylim(-2, 2)
         elif PLOT_SUB_MEANS: axes[i_ax].set_ylim(-.75, .75)
 
-
-        axes[i_ax].set_ylabel(
-            # rf"$\bf{band_labels[i_ax]}$" + "\n(z-scores)",  # two separate string parts to save \n function
-            band_labels[i_ax].replace(' ', '\n'),  # two separate string parts to save \n function
-            size=fsize, weight='bold',
-        )
+        # if SQUEEZE_FIG:
+        axes[i_ax].set_ylabel(band_labels[i_ax].replace(' ', '\n'),
+                                weight='bold', size=fsize,)
+        # else:
+        #     axes[i_ax].set_ylabel(
+        #         rf"$\bf{band_labels[i_ax]}$" + "\n(z-scores)",  # two separate string parts to save \n function
+        #         size=fsize,
+        #     )
+        
     # pretty axes
     for ax in axes:
         ax.tick_params(size=fsize, axis='both',)
         ax.spines[['right', 'top']].set_visible(False)
 
+    axes[-1].set_xlabel('Dyskinesia severity', size=fsize, weight='bold',)
+
     # overall title
-    # T = f'{SOURCE_SEL.upper()}: Spectral changes during {STATE_SEL.upper()}'
     T = (rf"$\bf{SOURCE_SEL.upper()}$" + " " +
-         rf"$\bf changes $" + " " rf"$\bf during $" + " " +
-         rf"$\bf{STATE_SEL.upper()}$"
-         "\n(indiv. z-scored powers)")
+        rf"$\bf changes $" + " " rf"$\bf during $" + " " +
+        rf"$\bf{STATE_SEL.upper()}$"
+        "\n(indiv. z-scored powers)")
     T = T.replace('LFP', 'STN')
-    plt.suptitle(T, x=.55, y=.98, ha='center', size=fsize)  # weight='bold', 
+    plt.suptitle(T, x=.5, y=.98, ha='center', size=fsize,)
 
     plt.tight_layout(h_pad=.001)
 
@@ -365,9 +367,9 @@ def plot_moveSpec_boxplots(
             figname += '_submeans'
             if ADD_SUB_DOTS:
                 figname += 'dots'
-        if ADD_LMM_COEF: figname += '_lmmCf'
+        if ADD_LMM_COEF: figname += '_lmm'
         plt.savefig(os.path.join(get_project_path('figures'),
-                                 'final_Q1_2024', figname),
+                                 'final_Q1_2024', 'specBandBoxes', figname),
                     dpi=150, facecolor='w',)
         plt.close()
 
@@ -382,7 +384,7 @@ def plot_moveSplit_violins(
     PLOT_SUB_MEANS: bool = True,
     ADD_SUB_DOTS: bool = False,
     SOURCE_SEL = 'lfp',
-    ADD_LMM_COEF: bool = False,
+    ADD_STAT: bool = False,
     fsize = 14,
     FIG_SAVE: bool = False,
     fig_name_start: str = '',
@@ -400,7 +402,7 @@ def plot_moveSplit_violins(
                             figsize=(6, 9),
                             sharex='col',
                             )
-    sns.set_theme(style="whitegrid")
+    # sns.set_theme(style="whitegrid")
 
     for i_ax, bw in enumerate(psd_box.keys()):
 
@@ -408,8 +410,14 @@ def plot_moveSplit_violins(
         # list of bool-arrays for movetype (per lid category)
         if PLOT_SUB_MEANS:
             assert len(values) == len(ids_box), 'IDs dont match values lists'
+             # mean ids is stored to connect subject dots
+            mean_values, dot_ids, dot_mtypes, dot_cats = [], [], [], [] 
 
-            mean_values, dot_ids, dot_mtypes, dot_cats = [], [], [], []  # mean ids is stored to connect subject dots
+            # store single values for stats
+            (
+                stat_values, stat_ids, stat_moves, stat_lids
+            ) = [], [], [], []
+
             for lid_key in ids_box.keys():
                 # store mean values per lid
                 (
@@ -425,11 +433,18 @@ def plot_moveSplit_violins(
                     # select on individual AND movetype
                     subMove_sel = np.logical_and(lid_subs == sub,
                                                  lid_moves == mtype)
-                    sub_mean = np.mean(lid_values[subMove_sel])
+                    if sum(subMove_sel) == 0: continue  # skip empty combis
+                    # store for subject mean plotting
+                    sub_mean = np.nanmean(lid_values[subMove_sel])
                     lid_pow_temp.append(sub_mean)
                     lid_sub_temp.append(sub)
                     lid_move_temp.append(mtype)
                     lid_cat_temp.append(lid_key)
+                    # plot for sample-wise stats
+                    stat_values.extend(lid_values[subMove_sel])
+                    stat_ids.extend([sub] * sum(subMove_sel))
+                    stat_moves.extend([mtype] * sum(subMove_sel))
+                    stat_lids.extend([lid_key] * sum(subMove_sel))
 
                 mean_values.append(lid_pow_temp)
                 dot_ids.append(lid_sub_temp)
@@ -456,7 +471,7 @@ def plot_moveSplit_violins(
         # boxvalues = list(compress(value_lists, box_sel))  # lists with present boxes
         
         boxxticks = np.arange(0, len(value_lists),)
-        violin = sns.violinplot(
+        ax_violin = sns.violinplot(
             data=violin_df,
             x="lid", y="power",
             hue="movetype",
@@ -469,6 +484,7 @@ def plot_moveSplit_violins(
             legend=False,
             log_scale=10
         )
+
         axes[i_ax].set(xlabel=None,)
         if i_ax == 0:
             axes[i_ax].legend(frameon=False, fontsize=fsize,
@@ -519,43 +535,41 @@ def plot_moveSplit_violins(
             #     axes[i_ax].plot(sub_x, sub_y, c='gray', lw=.5,
             #                     alpha=.3,)
 
-        if ADD_LMM_COEF:
+        if ADD_STAT:
             # prepare equal lists with all stat info
-            all_powers = list(compress(list(psd_box[bw].values()), box_sel))
-            stat_powers = [v for l in all_powers for v in l]
-            all_subids = list(compress(list(ids_box.values()), box_sel))
-            stat_subids = [s for l in all_subids for s in l]
-            stat_scores = [[i] * len(l) for i, l in enumerate(all_subids)]
-            stat_scores = [s for l in stat_scores for s in l]
+            move_diffs = [True,]  # for first No-LID group without comparison
+            for lidcat in lid_states[1:]:
+                temp_sel = np.array(stat_lids) == lidcat
+                m1 = list(compress(
+                    stat_values,
+                    np.logical_and(temp_sel, np.array(stat_moves) == 'voluntary')
+                ))
+                m2 = list(compress(
+                    stat_values,
+                    np.logical_and(temp_sel, np.array(stat_moves) == 'involuntary')
+                ))
+                Stat, p_mwu = mannwhitneyu(m1, m2)
+                print(f'\n...MWU: {bw}, {lidcat}: {Stat}, p:{p_mwu} ({len(m1), len(m2)})')
+                # run linear mixed effect model
+                coded_mtypes = [0 if m == 'voluntary' else 1
+                                for m in list(compress(stat_moves, temp_sel))]
+                coef, p_lmm = run_mixEff_wGroups(
+                    dep_var=np.array(list(compress(stat_values, temp_sel))),
+                    indep_var=np.array(coded_mtypes),
+                    groups=np.array(list(compress(stat_ids, temp_sel))), TO_ZSCORE=False,
+                )
+                print(f'...LMM: {bw}, {lidcat}: {coef}, p:{p_lmm}')
+                # add double for both violin parts
+                if ADD_STAT == 'LMM':
+                    move_diffs.extend([p_lmm < (ALPHA / 3)] * 2)  # correct for comparing 3 groups
+                elif ADD_STAT == 'MWU':
+                    move_diffs.extend([p_mwu < (ALPHA / 3)] * 2)  # correct for comparing 3 groups
+            # set violin transparency based on sign difference between moves                
+            for i_v, (body, p) in enumerate(zip(ax_violin.collections, move_diffs)):
+                if i_v == 0: body.set_alpha(.5)
+                elif p: body.set_alpha(1)
+                else: body.set_alpha(.3)
             
-            assert len(stat_powers) == len(stat_scores) == len(stat_subids), (
-                '(BOX, LMM) given powers, scores and sub-ids differ in length'    
-            )
-            
-            # run linear mixed effect model
-            coef, pval = run_mixEff_wGroups(
-                dep_var=np.array(stat_powers),
-                indep_var=np.array(stat_scores),
-                groups=np.array(stat_subids), TO_ZSCORE=False,
-            )
-            SIGN = pval < (ALPHA / len(band_labels))
-
-            # plot only for legend
-            if SIGN: leg_props = {'weight':'bold'}
-            else:  leg_props = {}
-            if 'beta' in bw:
-                leg_loc = {'loc': 'upper right',
-                            'bbox_to_anchor': ((.95, .98))}
-            else:
-                leg_loc = {'loc': 'lower right',
-                            'bbox_to_anchor': ((.95, .02))}
-            axes[i_ax].scatter(
-                [], [], lw=.1, c='w',
-                label=f'Coef.: {round(coef, 3)} (p={round(pval, 3)})'
-            )
-            # axes[i_ax].legend(frameon=False, fontsize=fsize - 2,
-            #                   prop=leg_props, **leg_loc)
-                            #   loc='lower right', bbox_to_anchor=(.99, .01),
 
         axes[i_ax].set_xticks(boxxticks)
         axes[i_ax].set_xticklabels(lid_labels, size=fsize-2,)
@@ -592,9 +606,9 @@ def plot_moveSplit_violins(
             figname += '_submeans'
             if ADD_SUB_DOTS:
                 figname += 'dots'
-        if ADD_LMM_COEF: figname += '_lmmCf'
+        if ADD_STAT: figname += f'_{ADD_STAT}'
         plt.savefig(os.path.join(get_project_path('figures'),
-                                 'final_Q1_2024', figname),
+                                 'final_Q1_2024', 'splitMoveViolins', figname),
                     dpi=150, facecolor='w',)
         plt.close()
 
