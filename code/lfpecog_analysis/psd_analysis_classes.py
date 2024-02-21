@@ -26,6 +26,31 @@ from lfpecog_preproc.preproc_import_scores_annotations import (
     get_ecog_side
 )
 
+
+def get_baseline_arr_dict(BLs_1s):
+    """
+    based on baseline class generated below, creates workable
+    array with baseline values for z-scoring
+    """
+    SUBS = get_avail_ssd_subs('v4.0', 'v6',)
+    BL_arrs = {}
+
+    for sub, src in product(SUBS, ['lfp_left', 'lfp_right', 'ecog']):
+
+        if sub.startswith('1') and src == 'ecog': continue
+
+        try:
+            bl_m = np.nanmean(getattr(BLs_1s, f'{src}_{sub}_baseline'), axis=0,)
+            bl_sd = np.nanstd(getattr(BLs_1s, f'{src}_{sub}_baseline'), axis=0,)
+        except AttributeError:
+            print('baseline data missing for:', sub, src)
+            continue
+            
+        BL_arrs[f'{sub}_{src}'] = [bl_m, bl_sd]
+    
+    return BL_arrs
+
+
 def get_allSpecStates_Psds(
     RETURN_PSD_1sec = True,
     incl_rest: bool = True,

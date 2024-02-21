@@ -30,6 +30,8 @@ def calc_lmem_freqCoeffs(temp_values,
                          STATS_VERSION='',
                          verbose: bool = False,):
     """
+    Calculate LMM coefficients per frequency bin within PSD
+
     temp_values:
     temp_ids: array corresponding to values
     temp_freqs: array corr to values
@@ -258,10 +260,11 @@ def calc_lmem_freqCoeffs(temp_values,
 
 
 def run_mixEff_wGroups(dep_var, indep_var,
-                       groups, TO_ZSCORE=True,
+                       groups, TO_ZSCORE=False,
                        ALPHA=.01,
                        RETURN_CI=False,
-                       RETURN_GRADIENT=False,):
+                       RETURN_GRADIENT=False,
+                       allow_lm_error: bool = True,):
     """
     # tests sign effect of LID on ephys
     # Model: https://www.statsmodels.org/stable/generated/statsmodels.regression.mixed_linear_model.MixedLM.html
@@ -275,6 +278,7 @@ def run_mixEff_wGroups(dep_var, indep_var,
     # z-score ephys values on group level for scaling
     if TO_ZSCORE:
         dep_var = (dep_var - np.std(dep_var)) / np.mean(dep_var)
+
     # define model
     lm_model = MixedLM(
         endog=dep_var,  # dependent variable (ephys score)
@@ -286,7 +290,12 @@ def run_mixEff_wGroups(dep_var, indep_var,
     try:
         lm_results = lm_model.fit()
     except:
-        return False
+        if allow_lm_error:
+            return False
+        else:
+            print(dep_var.shape, indep_var.shape, groups.shape)
+            lm_results = lm_model.fit()
+
     # extract results
     fixeff_cf = lm_results._results.fe_params[0]
     pval = lm_results._results.pvalues[0]

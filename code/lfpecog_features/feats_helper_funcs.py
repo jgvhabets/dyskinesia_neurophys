@@ -5,7 +5,96 @@ Feature Extraction
 
 # Import public packages and functions
 import numpy as np
+from scipy.stats import variation
 # from scipy.ndimage import uniform_filter1d
+
+from utils.utils_fileManagement import get_avail_ssd_subs
+
+def get_indiv_peak_freqs(
+    psd_dict,
+    STATE: str = 'all',
+    BANDS: dict = {'narrow_gamma': [62, 89],
+                   'lo_beta': [13, 20],
+                   'hi_beta': [21, 24]},
+    SOURCE_SEL: str = 'lfp',
+    verbose: bool = False,
+    DATA_VERSION='v4.0',
+    FT_VERSION='v6',
+):
+    
+    assert STATE in ['rest', 'dyskmove', 'tap', 'all'], (
+        f'incorrect STATE ({STATE})'
+    )
+    if STATE == 'all': sel_states = ['rest', 'dyskmove', 'tap']
+    else: sel_states = [STATE,]
+
+    lid_states = ['nolidbelow30', 'nolidover30', 'nolid',
+                  'mildlid', 'moderatelid', 'severelid']
+
+    SUBS = get_avail_ssd_subs(DATA_VERSION=DATA_VERSION,
+                              FT_VERSION=FT_VERSION,)
+    sub_psds = {s: [] for s in SUBS}
+
+    # COLLECT ALL PSD 1-sec ROWS
+    for state in psd_dict.keys():
+        # only continue with selected condition data
+        if not any([s in state.lower() for s in sel_states]):
+            if verbose: print(f'...SKIP state (SEL): {state}')
+            continue
+
+        if not any([l in state for l in lid_states]):
+            if verbose: print(f'...SKIP state (lid state): {state}')        
+            continue
+        
+        if verbose: print(f'continue with {state}')
+        freqs = psd_dict[state].freqs
+
+        # only continue with subject data
+        for k in vars(psd_dict[state]).keys():
+
+            s = k.split(state)[0]
+            if not s.endswith('_'): continue
+            src = s[:-5]
+            sub = s[-4:-1]
+
+            if not SOURCE_SEL in src: continue
+            
+            # print(f'sub-{sub}, data from {src}   ({k})')
+            
+            # get psd array (samples, freqs)
+            psx = getattr(psd_dict[state], k)
+            
+
+            # add sub-id code for every added sample
+            for l in psx: sub_psds[sub].append(l)
+
+    # CALCULATE INDIV VARIANCES for freq bands
+    ind_peaks = {s: {} for s in SUBS}
+
+    for sub in SUBS:
+        sub_psx = np.array(sub_psds[sub])
+        if verbose: print(f'\n...SUB-{sub} (n = {len(sub_psx)} 1-sec-samples)')
+
+        for bw, f_range in BANDS.items():
+            # select relevant freq range from psd
+            f_sel = np.logical_and(freqs >= f_range[0],
+                                   freqs < f_range[1])
+            # get power mean over freq-range, per 1-sec epoch
+            try:
+                powers = sub_psx[:, f_sel]
+            except IndexError:
+                if len(sub_psx) == 0: continue  # skips empty psx
+                else: powers = sub_psx[:, f_sel]  # raises IndexError in case of different cause
+            
+            pow_fs = freqs[f_sel]
+            variations = variation(powers, axis=0)
+            i_max_var = np.argmax(variations)
+            f_max_var = pow_fs[i_max_var]
+            if verbose: print(f'\tmax {bw} variation in {f_max_var}')
+            ind_peaks[sub][bw] = f_max_var
+
+    return ind_peaks
+
 
 
 def baseline_zscore(
