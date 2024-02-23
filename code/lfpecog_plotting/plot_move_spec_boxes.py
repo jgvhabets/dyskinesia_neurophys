@@ -14,6 +14,9 @@ from scipy.stats import mannwhitneyu
 from utils.utils_fileManagement import (
     get_project_path, load_ft_ext_cfg
 )
+from lfpecog_preproc.preproc_import_scores_annotations import(
+    get_ecog_side
+)
 from lfpecog_features.feats_helper_funcs import (
     get_indiv_peak_freqs,
 )
@@ -46,7 +49,7 @@ lid_states = ['nolidbelow30', 'nolidover30', 'nolid',
 ind_peak_bands = ['lo_beta', 'hi_beta', 'narrow_gamma']
 
 band_labels = ['Theta', 'Alpha', 'low Beta',
-            'high Beta', 'Gamma', 'peak Gamma']
+            'high Beta', 'broad Gamma', 'peak Gamma']
 
 
 
@@ -72,7 +75,9 @@ def calc_fband_boxlists(
     SRC_SEL: str = 'lfp',  
     STATE_SEL: str = 'rest',
     SPLIT_MOVEMENT: bool = False,
+    SPLIT_CONTRAIPSI: bool = False,
     MEAN_EPOCH = 1,  # n 1-sec windows to average per value
+    LOG: bool = False,
     verbose: bool = False,
 ):
     """
@@ -80,17 +85,31 @@ def calc_fband_boxlists(
     Arguments:
         - SPLIT_MOVEMENT: returns data to split voluntary
             and involuntary movement
+        - SPLIT_CONTRAIPSI: includes ONLY IPSILATERAL movements
+            (voluntary and invol.) and show the contra- and
+            ipsilateral hemispheres
     """
     # check and process defined
     allowed_state_sels = [['rest', 'dyskmove'],
                           ['tap', 'dyskmove'],
                           'rest', 'tap', 'dyskmove', 'movement', ]
     assert STATE_SEL in allowed_state_sels, 'incorrect STATE_SEL'
-    if STATE_SEL == 'movement': STATE_SEL = ['tap', 'dyskmove']
-    else: SPLIT_MOVEMENT = False  # default false if not movement
+    assert not (STATE_SEL == 'rest' and (
+        SPLIT_CONTRAIPSI or SPLIT_MOVEMENT
+    )), 'SPLIT movetypes and rest not compatible'
+
+    assert not (SPLIT_CONTRAIPSI and SPLIT_MOVEMENT), (
+        'choose EITHER movement OR contraipsi to split'
+    )
+
+    if STATE_SEL == 'movement':
+        STATE_SEL = ['tap', 'dyskmove']
+    # else:
+    #     SPLIT_MOVEMENT = False  # default false if not movement
+    #     SPLIT_CONTRAIPSI = False  # default false if not movement
 
     # get baseline arrays
-    BL_arrs = get_baseline_arr_dict(BLs_1s=baselines)
+    BL_arrs = get_baseline_arr_dict(BLs_1s=baselines, LOG=LOG,)
 
     # get freq bands and indiv peaks
     f_bands = get_canonical_bands(list(psd_dict.values())[0].SETTINGS)
@@ -100,7 +119,8 @@ def calc_fband_boxlists(
     psd_lists = {b: {l: [] for l in lid_states}
                 for b in f_bands.keys()}
     subid_lists = {l: [] for l in lid_states}
-    if SPLIT_MOVEMENT: movetype_lists = {l: [] for l in lid_states}
+    if SPLIT_MOVEMENT or SPLIT_CONTRAIPSI:
+        movetype_lists = {l: [] for l in lid_states}
 
     # loop over all states
     for state in psd_dict.keys():
@@ -116,26 +136,44 @@ def calc_fband_boxlists(
         if not any([l in state for l in lid_states]):
             if verbose: print(f'...SKIP state (lid state): {state}')        
             continue
+    
+        if SPLIT_CONTRAIPSI and 'moveboth' in state:
+            if verbose: print(f'...SKIP state (ONLY UNILAT dysk): {state}')
+            continue    
         
         if verbose: print(f'...include state: {state}')
         
         LID_CODE = np.where([l in state for l in lid_states])[0][0]
         LID_CODE = lid_states[LID_CODE]
         if verbose: print(f'\ncontinue with {state}  (LID code: {LID_CODE})')
+
+        if SPLIT_CONTRAIPSI:
+            if 'left' in state: MOVE_SIDE = 'left'
+            elif 'right' in state: MOVE_SIDE = 'right'
+
         freqs = psd_dict[state].freqs
 
         # only continue with subject data
         for k in vars(psd_dict[state]).keys():
-
+            # get subject and data characteristics
             s = k.split(state)[0]
             if not s.endswith('_'): continue
             src = s[:-5]
             sub = s[-4:-1]
 
+            if SPLIT_CONTRAIPSI:
+                if 'lfp_left' in k: EPHYS_SIDE = 'left'
+                elif 'lfp_right' in k: EPHYS_SIDE = 'right'
+                else: EPHYS_SIDE = get_ecog_side(sub)
+                if EPHYS_SIDE == MOVE_SIDE: EPHYS_SIDE = 'ipsi'
+                else: EPHYS_SIDE = 'contra'
+                
+
             if not SRC_SEL in src: continue
                     
             # get psd array (samples, freqs)
             psx = getattr(psd_dict[state], k)
+            if LOG: psx = np.log(psx)
 
             # Z-SCORE against baseline (mean and stddev)
             try:
@@ -167,7 +205,7 @@ def calc_fband_boxlists(
                 
                 psd_lists[bw][LID_CODE].extend(powers)
 
-            # add sub-id code ONLX ONCE for every added sample (outside bw loop)
+            # add sub-id code ONLY ONCE for every added sample (outside bw loop)
             subid_lists[LID_CODE].extend([sub] * len(powers))
 
             if SPLIT_MOVEMENT:
@@ -176,12 +214,16 @@ def calc_fband_boxlists(
                 else: raise ValueError('no movetype found')
                 if verbose: print(f'...added "{movetype}", n={len(powers)} ({k})')
                 movetype_lists[LID_CODE].extend([movetype] * len(powers))
+            
+            elif SPLIT_CONTRAIPSI:
+                if verbose: print(f'...added "{EPHYS_SIDE}", n={len(powers)} ({k})')
+                movetype_lists[LID_CODE].extend([EPHYS_SIDE] * len(powers))
 
 
-    if not SPLIT_MOVEMENT:
+    if not (SPLIT_MOVEMENT or SPLIT_CONTRAIPSI):
         return psd_lists, subid_lists
     
-    elif SPLIT_MOVEMENT:
+    elif SPLIT_MOVEMENT or SPLIT_CONTRAIPSI:
         # remove below and over 30 lists
         clean_lists = {}
         for bw in psd_lists:
@@ -204,6 +246,7 @@ def plot_moveSpec_boxplots(
     fsize = 14,
     FIG_SAVE: bool = False,
     fig_name_start: str = '',
+    fig_add_end: str = '',
     SQUEEZE_FIG: bool = False,
 ):
     ALPHA = .01
@@ -247,15 +290,20 @@ def plot_moveSpec_boxplots(
         else:
             value_lists = psd_box[bw].values
 
+        
         # BOX PLOT values per LID category (plot only present categories)
         BOX_SPACING, BOX_WIDTH = .25, .15
         box_sel = [len(l) > 0 for l in value_lists]
         boxxticks = np.arange(0, BOX_SPACING*sum(box_sel), BOX_SPACING)
         boxvalues = list(compress(value_lists, box_sel))  # lists with present boxes
+        # plot zero line forst for background
+        axes[i_ax].axhline(0, xmin=-BOX_WIDTH, xmax=boxxticks[-1] + 1,
+                           color='k', lw=.5, alpha=.5, zorder=1,)
+        # PLOT BOXES
         boxplot = axes[i_ax].boxplot(
             boxvalues,
             positions=boxxticks, widths=BOX_WIDTH,
-            patch_artist=True, showfliers=False,
+            patch_artist=True, showfliers=False, zorder=2,
         )
         # make boxplots pretty
         box_clrs = list(compress(lid_clrs, box_sel))
@@ -314,40 +362,33 @@ def plot_moveSpec_boxplots(
             else:  leg_props = {}
             if 'beta' in bw:
                 leg_loc = {'loc': 'upper right',
-                            'bbox_to_anchor': ((.95, .98))}
+                            'bbox_to_anchor': ((.99, .99))}
             else:
-                leg_loc = {'loc': 'lower right',
-                            'bbox_to_anchor': ((.95, .02))}
+                leg_loc = {'loc': 'lower left',
+                            'bbox_to_anchor': ((-.1, -.1))}
             stat_lab = f'Coef.: {round(coef, 3)} (p={round(pval, 3)})'
             if pval < 1e-4: stat_lab = stat_lab.replace('=', '<')
-            axes[i_ax].scatter([], [], lw=.1, c='w', label=stat_lab)
+            axes[i_ax].scatter([], [], lw=.1, c='w', label=stat_lab, zorder=3,)
             axes[i_ax].legend(frameon=False, fontsize=fsize - 2,
                               prop=leg_props, **leg_loc)
                             #   loc='lower right', bbox_to_anchor=(.99, .01),
 
+        # pretty axes and ticks
         axes[i_ax].set_xticks(boxxticks)
         axes[i_ax].set_xticklabels(list(compress(lid_labels, box_sel)),
                                     size=fsize-2,)
         axes[i_ax].set_xlim(-BOX_WIDTH, boxxticks[-1] + BOX_WIDTH)
-        axes[i_ax].set_yticks(np.arange(-2, 2.1, .5))
-        axes[i_ax].set_yticklabels(np.arange(-2, 2.1, .5), size=fsize,)
+        # axes[i_ax].set_yticks(np.arange(-2, 2.1, .5))
+        # axes[i_ax].set_yticklabels(np.arange(-2, 2.1, .5), size=fsize,)
         
         if not PLOT_SUB_MEANS: axes[i_ax].set_ylim(-2, 2)
-        elif PLOT_SUB_MEANS: axes[i_ax].set_ylim(-.75, .75)
+        elif PLOT_SUB_MEANS: axes[i_ax].set_ylim(-.38, .38)
 
-        # if SQUEEZE_FIG:
         axes[i_ax].set_ylabel(band_labels[i_ax].replace(' ', '\n'),
                                 weight='bold', size=fsize,)
-        # else:
-        #     axes[i_ax].set_ylabel(
-        #         rf"$\bf{band_labels[i_ax]}$" + "\n(z-scores)",  # two separate string parts to save \n function
-        #         size=fsize,
-        #     )
         
-    # pretty axes
-    for ax in axes:
-        ax.tick_params(size=fsize, axis='both',)
-        ax.spines[['right', 'top']].set_visible(False)
+        axes[i_ax].tick_params(size=fsize, axis='both',)
+        axes[i_ax].spines[['right', 'top']].set_visible(False)
 
     axes[-1].set_xlabel('Dyskinesia severity', size=fsize, weight='bold',)
 
@@ -363,6 +404,7 @@ def plot_moveSpec_boxplots(
 
     if FIG_SAVE:
         figname = f'{fig_name_start}SpecBandBoxes_{SOURCE_SEL}_{STATE_SEL}'
+        if len(fig_add_end) > 0: figname += fig_add_end
         if PLOT_SUB_MEANS:
             figname += '_submeans'
             if ADD_SUB_DOTS:
@@ -396,13 +438,27 @@ def plot_moveSplit_violins(
     # PLOT BOXPLOTS PER FREQ BAND; FOR SELECTED CONDITIONS(S)
     print(f'selected data-source: {SOURCE_SEL}')
 
-    clrs = list(get_colors().values())
+
+    
 
     fig, axes = plt.subplots(len(psd_box), 1,
                             figsize=(6, 9),
                             sharex='col',
                             )
-    # sns.set_theme(style="whitegrid")
+    # define color schemes
+    if 'ipsi' in list(np.unique([v for l in movetypes.values() for v in l])):
+        move_codes = ['ipsi', 'contra']
+        clrs = [list(get_colors().values())[-2],
+                list(get_colors().values())[2]]
+        figname = f'{fig_name_start}SpecBand_IpsiContraMoveViolins_{SOURCE_SEL}'
+
+    elif 'voluntary' in list(movetypes.values())[0]:
+        move_codes = ['voluntary', 'involuntary']
+        clrs = [list(get_colors().values())[4],
+                list(get_colors().values())[1]]
+        figname = f'{fig_name_start}SpecBand_VoluntMoveViolins_{SOURCE_SEL}'
+
+    
 
     for i_ax, bw in enumerate(psd_box.keys()):
 
@@ -428,8 +484,9 @@ def plot_moveSplit_violins(
                 lid_subs = np.array(ids_box[lid_key])
                 lid_moves = np.array(movetypes[lid_key])
 
+                # loop over subject and volunt/invol or contra/ipsi
                 for sub, mtype in product(np.unique(lid_subs),
-                                          ['voluntary', 'involuntary']):
+                                          move_codes):
                     # select on individual AND movetype
                     subMove_sel = np.logical_and(lid_subs == sub,
                                                  lid_moves == mtype)
@@ -479,10 +536,10 @@ def plot_moveSplit_violins(
             inner="stick",
             linewidth=1,
             ax=axes[i_ax],
-            palette={'voluntary': clrs[4],
-                     'involuntary': clrs[1]},
+            palette={move_codes[0]: clrs[0], move_codes[1]: clrs[1]},
             legend=False,
-            log_scale=10
+            log_scale=10,
+            alpha=.7,
         )
 
         axes[i_ax].set(xlabel=None,)
@@ -504,24 +561,24 @@ def plot_moveSplit_violins(
         # for median in boxplot['medians']:
         #     median.set_color('black')
 
-        # SCATTER PLOT sub means and connect individual dots
-        if ADD_SUB_DOTS and PLOT_SUB_MEANS:
-            np.random.seed(42)
-            for i_box, (xtick, y_dots, move_dots) in enumerate(zip(
-                boxxticks, mean_values, dot_mtypes
-            )):
-                # scatter voluntary
-                volun_dots = list(compress(y_dots, np.array(move_dots) == 'voluntary'))
-                xjitter = np.random.uniform(low=xtick-.08, high=xtick+.08,
-                                            size=len(volun_dots))
-                axes[i_ax].scatter(xjitter, volun_dots,
-                                   color=clrs[4], alpha=.5, s=25,)
-                # scatter involuntary
-                invol_dots = list(compress(y_dots, np.array(move_dots) == 'involuntary'))
-                xjitter = np.random.uniform(low=xtick-.08, high=xtick+.08,
-                                            size=len(invol_dots))
-                axes[i_ax].scatter(xjitter, invol_dots,
-                                   color=clrs[1], alpha=.5, s=25,)
+        # # SCATTER PLOT sub means and connect individual dots
+        # if ADD_SUB_DOTS and PLOT_SUB_MEANS:
+        #     np.random.seed(42)
+        #     for i_box, (xtick, y_dots, move_dots) in enumerate(zip(
+        #         boxxticks, mean_values, dot_mtypes
+        #     )):
+        #         # scatter voluntary
+        #         volun_dots = list(compress(y_dots, np.array(move_dots) == move_codes[0]))
+        #         xjitter = np.random.uniform(low=xtick-.08, high=xtick+.08,
+        #                                     size=len(volun_dots))
+        #         axes[i_ax].scatter(xjitter, volun_dots,
+        #                            color=clrs[0], alpha=.5, s=25,)
+        #         # scatter involuntary
+        #         invol_dots = list(compress(y_dots, np.array(move_dots) == move_codes[1]))
+        #         xjitter = np.random.uniform(low=xtick-.08, high=xtick+.08,
+        #                                     size=len(invol_dots))
+        #         axes[i_ax].scatter(xjitter, invol_dots,
+        #                            color=clrs[1], alpha=.5, s=25,)
                 
             # # connect sub-dots
             # box_ids = list(compress(dot_ids, box_sel))
@@ -537,21 +594,28 @@ def plot_moveSplit_violins(
 
         if ADD_STAT:
             # prepare equal lists with all stat info
-            move_diffs = [True,]  # for first No-LID group without comparison
-            for lidcat in lid_states[1:]:
+            # move_diffs = [True,]  # for first No-LID group without comparison
+            move_diffs = []  # sotre sign differences
+            for lidcat in lid_states:
                 temp_sel = np.array(stat_lids) == lidcat
                 m1 = list(compress(
                     stat_values,
-                    np.logical_and(temp_sel, np.array(stat_moves) == 'voluntary')
+                    np.logical_and(temp_sel, np.array(stat_moves) == move_codes[0])
                 ))
                 m2 = list(compress(
                     stat_values,
-                    np.logical_and(temp_sel, np.array(stat_moves) == 'involuntary')
+                    np.logical_and(temp_sel, np.array(stat_moves) == move_codes[1])
                 ))
-                Stat, p_mwu = mannwhitneyu(m1, m2)
-                print(f'\n...MWU: {bw}, {lidcat}: {Stat}, p:{p_mwu} ({len(m1), len(m2)})')
+                try:
+                    Stat, p_mwu = mannwhitneyu(m1, m2)
+                except:
+                    print(len(m1), len(m2))
+                    if len(m1) == 0 or len(m2) == 2:
+                        move_diffs.extend(['nan', 'nan'])
+                        continue
+                print(f'\n...MWU: {bw}: {lidcat}, {lidcat}: {Stat}, p:{p_mwu} ({len(m1), len(m2)})')
                 # run linear mixed effect model
-                coded_mtypes = [0 if m == 'voluntary' else 1
+                coded_mtypes = [0 if m == move_codes[0] else 1
                                 for m in list(compress(stat_moves, temp_sel))]
                 coef, p_lmm = run_mixEff_wGroups(
                     dep_var=np.array(list(compress(stat_values, temp_sel))),
@@ -566,7 +630,7 @@ def plot_moveSplit_violins(
                     move_diffs.extend([p_mwu < (ALPHA / 3)] * 2)  # correct for comparing 3 groups
             # set violin transparency based on sign difference between moves                
             for i_v, (body, p) in enumerate(zip(ax_violin.collections, move_diffs)):
-                if i_v == 0: body.set_alpha(.5)
+                if p == 'nan': body.set_alpha(.5)
                 elif p: body.set_alpha(1)
                 else: body.set_alpha(.3)
             
@@ -592,8 +656,8 @@ def plot_moveSplit_violins(
 
     # overall title
     T = (rf"$\bf{SOURCE_SEL.upper()}$" + " " +
-         rf"$\bf changes: $" + " " rf"$\bf Voluntary $" + " " +
-         rf"$\bf vs $" + " " + rf"$\bf Involuntary $" + " " + rf"$\bf Movement $"
+         rf"$\bf changes: $" + " " rf"$\bf {move_codes[0].capitalize()} $" + " " +
+         rf"$\bf vs $" + " " + rf"$\bf {move_codes[1].capitalize()} $" + " " + rf"$\bf Movement $"
          "\n(indiv. z-scored powers)")
     T = T.replace('LFP', 'STN')
     plt.suptitle(T, x=.5, y=.98, ha='center', size=fsize)  # weight='bold', 
@@ -601,7 +665,6 @@ def plot_moveSplit_violins(
     plt.tight_layout(h_pad=.01)
 
     if FIG_SAVE:
-        figname = f'{fig_name_start}SpecBand_MoveViolins_{SOURCE_SEL}'
         if PLOT_SUB_MEANS:
             figname += '_submeans'
             if ADD_SUB_DOTS:

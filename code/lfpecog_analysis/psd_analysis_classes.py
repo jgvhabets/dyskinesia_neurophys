@@ -27,7 +27,7 @@ from lfpecog_preproc.preproc_import_scores_annotations import (
 )
 
 
-def get_baseline_arr_dict(BLs_1s):
+def get_baseline_arr_dict(BLs_1s, LOG: bool = False,):
     """
     based on baseline class generated below, creates workable
     array with baseline values for z-scoring
@@ -40,8 +40,10 @@ def get_baseline_arr_dict(BLs_1s):
         if sub.startswith('1') and src == 'ecog': continue
 
         try:
-            bl_m = np.nanmean(getattr(BLs_1s, f'{src}_{sub}_baseline'), axis=0,)
-            bl_sd = np.nanstd(getattr(BLs_1s, f'{src}_{sub}_baseline'), axis=0,)
+            values = getattr(BLs_1s, f'{src}_{sub}_baseline')
+            if LOG: values = np.log(values)
+            bl_m = np.nanmean(values, axis=0,)
+            bl_sd = np.nanstd(values, axis=0,)
         except AttributeError:
             print('baseline data missing for:', sub, src)
             continue
