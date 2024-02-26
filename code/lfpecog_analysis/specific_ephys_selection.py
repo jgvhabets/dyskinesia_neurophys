@@ -1,6 +1,7 @@
 """
 Selected specific data based on TASK,
 MOVEMENT PRESENCE, and DYSKINESIA SEVERITY
+
 """
 # import functions and packages
 import os
@@ -425,7 +426,10 @@ def get_ssd_coh_from_array(
                     sig = sig.reshape((n_wins, sfreq))
                 new_sqcoh = new_sqcoh[:n_wins, :]
                 new_icoh = new_icoh[:n_wins, :]
-            
+
+            if sig1.shape[0] == 0 or sig2.shape[0] == 0:
+                return [], [], []
+
             icoh_list, coh_list = [], []
 
             # calculate Coherences per epoch
@@ -526,3 +530,4 @@ def get_hemisphere_movement_location(
     #         f'{move_side} lead to {MOVETYPE} {IP_CON}')
     
     return IP_CON, MOVETYPE
+

@@ -144,9 +144,18 @@ def calc_coherence(
     if nperseg == None: nperseg = fs // 2
 
     # check if signals are in np.float64 dtype, if not psd output raises errors 
-    if np.logical_or(
-        type(sig1[0]) != np.float64, type(sig2[0]) != np.float64 
-    ):
+    try:
+        if np.logical_or(
+            type(sig1[0]) != np.float64, type(sig2[0]) != np.float64 
+        ):
+            sig1 = sig1.astype(np.float64)
+            sig2 = sig2.astype(np.float64)
+
+    except IndexError:
+        print(type(sig1), sig1)
+        print(type(sig2), sig2)
+    
+    except:
         raise ValueError(
             'Not both signals contain np.float64:'
             f'sig1 is {type(sig1[0])}, sig2 is {type(sig2[0])}'
