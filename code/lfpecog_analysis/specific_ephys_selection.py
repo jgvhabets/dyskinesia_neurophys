@@ -21,6 +21,9 @@ from lfpecog_analysis.ft_processing_helpers import (
     find_select_nearest_CDRS_for_ephys,
     categorical_CDRS
 )
+from lfpecog_features.feats_spectral_features import (
+    calc_coherence
+)
 # from lfpecog_analysis.psd_analysis_classes import PSD_vs_Move_sub
 
 
@@ -366,6 +369,118 @@ def get_ssd_psd_from_array(
         )
     return new_f, new_psd
 
+
+def get_ssd_coh_from_array(
+    ephys_arr1, ephys_arr2, sfreq, SETTINGS, band_names,
+    PSD_WIN_sec: int = 1, RETURN_PSD_1sec: bool = False,
+):
+    """
+    extracts Coherences based on specific SSDd
+    frquency bands. input is selected ephys
+    based on meta-data.
+
+    Arguments:
+
+    Returns:
+        - new_f: array with PSD-freqs (4-35, 60-90)
+        - new_psd: array containing PSDs corr to new_f
+    """
+    # skip too short samples
+    if ephys_arr1.shape[0] < sfreq: return [], [], []
+
+    # create new freq array to return
+    new_f = np.concatenate([np.arange(4, 35),
+                            np.arange(60, 90)])
+    
+    # create NaN-array (1d for means, 2d for 1sec windows)
+    if not RETURN_PSD_1sec:
+        new_sqcoh = np.array([np.nan] * len(new_f))
+        new_icoh = np.array([np.nan] * len(new_f))
+    elif RETURN_PSD_1sec:
+        n_wins = ephys_arr1.shape[0] // sfreq  # number of a sec windows fitting in data
+        new_sqcoh = np.array([[np.nan] * len(new_f)] * n_wins)
+        new_icoh = np.array([[np.nan] * len(new_f)] * n_wins)
+
+    # calculate per freq-band
+    for i, band in enumerate(band_names):
+        f_range = list(SETTINGS['SPECTRAL_BANDS'].values())[i]
+        sig1 = ephys_arr1[:, i]  # select band signal (SSD)
+        sig2 = ephys_arr2[:, i]  # select band signal (SSD)
+        nan_sel = np.logical_or(np.isnan(sig1), np.isnan(sig2))
+        sig1 = sig1[~nan_sel]  # delete NaNs
+        sig2 = sig2[~nan_sel]  # delete NaNs
+
+        if RETURN_PSD_1sec:
+            # reshape in 2d array with 1 sec windows
+            sig1 = sig1[:sfreq * n_wins]
+            sig2 = sig2[:sfreq * n_wins]
+            try:
+                sig1 = sig1.reshape((n_wins, sfreq))
+                sig2 = sig2.reshape((n_wins, sfreq))
+            except ValueError:
+                # if one sample short this can happen (trxy with one window less)
+                n_wins -= 1
+                for sig in [sig1, sig2]:
+                    sig = sig[:sfreq * n_wins]
+                    sig = sig.reshape((n_wins, sfreq))
+                new_sqcoh = new_sqcoh[:n_wins, :]
+                new_icoh = new_icoh[:n_wins, :]
+            
+            icoh_list, coh_list = [], []
+
+            # calculate Coherences per epoch
+            for s1, s2 in zip(sig1, sig2):
+                freqs, _, icoh, _, sqcoh = calc_coherence(
+                    sig1=s1, sig2=s2, fs=sfreq,
+                    nperseg=sfreq * PSD_WIN_sec,
+                )
+                icoh_list.append(icoh)
+                coh_list.append(sqcoh)
+            icoh = np.array(icoh_list)
+            sqcoh = np.array(coh_list)
+
+        else:        
+            # calculate Coherences
+            freqs, _, icoh, _, sqcoh = calc_coherence(
+                sig1=sig1, sig2=sig2, fs=sfreq,
+                nperseg=sfreq * PSD_WIN_sec,
+            )
+
+        # select out relevant freqs related to ssd bands
+        band_sel = [f >= f_range[0] and f < f_range[1]
+                    for f in freqs]
+        new_band_sel = [f >= f_range[0] and f < f_range[1]
+                        for f in new_f]
+        
+        if not RETURN_PSD_1sec:
+            new_sqcoh[new_band_sel] = sqcoh[band_sel]
+            new_icoh[new_band_sel] = icoh[band_sel]
+        elif RETURN_PSD_1sec:
+            new_sqcoh[:, new_band_sel] = sqcoh[:, band_sel]
+            new_icoh[:, new_band_sel] = icoh[:, band_sel]
+
+    # check shape PSDs and freqs, check NaNs
+    if not RETURN_PSD_1sec:
+        assert len(new_sqcoh) == len(new_f), (
+            f'f {new_f.shape} and psd {new_sqcoh.shape} not match'
+        )
+        assert ~np.any(np.isnan(new_sqcoh), axis=0), (
+            f'NaNs in new_psd ({sum(np.isnan(new_sqcoh))})'
+        )
+
+    elif RETURN_PSD_1sec:
+        assert new_sqcoh.shape == (n_wins, len(new_f)), (
+            f'f: {new_f.shape}, wins: {n_wins}, and COH: '
+            f'{new_sqcoh.shape} do not match'
+        )
+        assert ~np.any(np.isnan(new_sqcoh), axis=0).any(), (
+            'NaNs in new_psd (in # freqs columns: '
+            f'{sum(np.any(np.isnan(new_sqcoh), axis=0))})'
+        )
+
+    print(f'...COH: return shapes {len(new_f)}, {new_icoh.shape}, {new_sqcoh.shape}')
+
+    return new_f, new_sqcoh, new_icoh
 
 
 def get_hemisphere_movement_location(

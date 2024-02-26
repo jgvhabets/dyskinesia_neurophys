@@ -20,6 +20,7 @@ from lfpecog_analysis.prep_movement_psd_analysis import (
 from lfpecog_analysis.specific_ephys_selection import (
     select_3d_ephys_moveTaskLid,
     get_ssd_psd_from_array,
+    get_ssd_coh_from_array,
     plot_check_ephys_selection
 )
 from lfpecog_preproc.preproc_import_scores_annotations import (
@@ -54,6 +55,7 @@ def get_baseline_arr_dict(BLs_1s, LOG: bool = False,):
 
 
 def get_allSpecStates_Psds(
+    FEATURE: str = 'POWER',
     RETURN_PSD_1sec = True,
     incl_rest: bool = True,
     incl_tap: bool = True,
@@ -66,6 +68,9 @@ def get_allSpecStates_Psds(
         - PSDs: dict with all conditions
         - BLs: baseline class
     """
+    assert FEATURE in ['POWER', 'COH_STNs', 'COH_STNECOG'], (
+        'incorrect FEATURE given'
+    )
 
     sources = ['lfp_left', 'lfp_right', 'ecog']
     lid_states = ['no', 'mild', 'moderate', 'severe']
@@ -95,6 +100,7 @@ def get_allSpecStates_Psds(
 
     # get baselines
     BLs = get_selectedEphys(
+        FEATURE=FEATURE,
         STATE_SEL='baseline',
         LOAD_PICKLE=True,
         USE_EXT_HD=True,
@@ -104,6 +110,7 @@ def get_allSpecStates_Psds(
 
     PSDs = {
         cond: get_selectedEphys(
+            FEATURE=FEATURE,
             STATE_SEL=cond,
             LOAD_PICKLE=True,
             USE_EXT_HD=True,
@@ -119,6 +126,7 @@ def get_allSpecStates_Psds(
 @dataclass(init=True,)
 class get_selectedEphys:
     STATE_SEL: str
+    FEATURE: str = 'POWER'
     FT_VERSION: int = 'v6'
     MIN_SEL_LENGTH: int = 5
     RETURN_PSD_1sec: bool = False
@@ -161,6 +169,11 @@ class get_selectedEphys:
         assert self.STATE_SEL in self.available_states, (
             f'STATE_SEL "{self.STATE_SEL}" should be in {self.available_states}'
         )
+
+        assert self.FEATURE in ['POWER', 'COH_STNs', 'COH_STNECOG'], (
+            f'FEATURE "{self.FEATURE}" incorrect'
+        )
+
         self.SETTINGS = load_ft_ext_cfg(FT_VERSION=self.FT_VERSION)
         data_path = get_project_path('data')
         if self.USE_EXT_HD:
@@ -170,12 +183,20 @@ class get_selectedEphys:
             'windowed_data_classes_10s_0.5overlap',
             'selected_ephys_classes_all'
         )
-        states_picklepath = os.path.join(
-            data_path,
-            'windowed_data_classes_10s_0.5overlap',
-            'selected_psd_states'
-        )
-        
+        if self.FEATURE == 'POWER':
+            states_picklepath = os.path.join(
+                data_path,
+                'windowed_data_classes_10s_0.5overlap',
+                'selected_psd_states'
+            )
+        else:
+            states_picklepath = os.path.join(
+                data_path,
+                'windowed_data_classes_10s_0.5overlap',
+                'selected_COH_states'
+            )
+
+
         ### INCLUDE FREE
         if self.EXTRACT_FREE:
             if self.verbose: print(f'\n#### ADDED _FREE to FOLDERNAMES')
@@ -184,6 +205,7 @@ class get_selectedEphys:
         # print(f'\n#### (no FREE folder) TODO: calculate selectedPsdState (MEANS) incl FREE')
         
         if self.RETURN_PSD_1sec: states_picklepath += '_1secArrays'
+        if not os.path.exists(picklepath): os.makedirs(picklepath)
         
         self.loaded_subs = []
 
@@ -212,8 +234,15 @@ class get_selectedEphys:
 
                     self.freqs = np.concatenate([np.arange(4, 35), np.arange(60, 90)])
                     continue
+            
+            if self.FEATURE == 'COH_STNs':
+                SRC1, SRC2 = ['lfp_left', 'lfp_right']
+            elif self.FEATURE == 'COH_STNECOG':
+                SRC1 = f'lfp_{get_ecog_side(sub)}'
+                SRC2 = f'ecog_{get_ecog_side(sub)}'
 
-            # CALCULATE PSD PER CONDITION
+
+            # CALCULATE SPECTRAL VALUES (PSD/COH) PER CONDITION
 
             # get (load or create) large data-pickle for current subject
             picklename = f'ephys_selections_{sub}.P'
@@ -254,28 +283,84 @@ class get_selectedEphys:
             ### calculate condition-PSDs with loaded SUB_CLASS
             src_INVOL_TODO = {s: True for s in sub_class.ephys_sources}  # bool to calc DYSK MOVE once per source     
             
+            # booleans to magane coherence prep
+            if 'COH' in self.FEATURE:
+                coh_codes = ['bl', 'below30', 'over30',
+                             'rest_mild', 'rest_moderate', 'rest_severe']
+                for m in ['Both', 'LeftOnly', 'RightOnly']:
+                    for l in ['mild', 'moderate', 'severe']: coh_codes.append(f'dysk_{m}_{l}' )
+                for t in ['left', 'right']:
+                    for l in ['nolid', 'mild', 'moderate', 'severe']: 
+                        coh_codes.append(f'tap{t}_{l}')
+                SIG1 = {c: False for c in coh_codes}
+                SIG2 = {c: False for c in coh_codes}
+                T1, T2 = {}, {}  # store timings
+                
+
             # select relevant data (PSDs) for subject
             for src, sel in product(sub_class.ephys_sources,
                                     sub_class.incl_selections):
                 # add baseline per source
                 # TODO PM ADD sub-012 baseline
+                
+                print(f'\n- #### {sel}, {src} ({sub})')
+
                 if src in sel and 'baseline' in sel.lower():
+                    print(f'... start BASELINE: {sel}')
                     if 'BASELINE' in self.SKIP_NEW_CREATION: continue
-                    # load 2d arr: n-samples, n-bands (only samples for selection)
-                    bl_sig = getattr(sub_class, sel).ephys_2d_arr
-                    ftemp, psdtemp = get_ssd_psd_from_array(
-                        ephys_arr=bl_sig,
-                        sfreq=sub_class.fs,
-                        SETTINGS=self.SETTINGS,
-                        band_names=sub_class.band_names,
-                        RETURN_PSD_1sec=self.RETURN_PSD_1sec,
-                    )
-                    if len(psdtemp) == 0: continue  # array shorter than 1 second
-                    np.save(os.path.join(states_picklepath,
-                                         f'{sub}_{src}_baseline_'
-                                         f'{bl_sig.shape[0]}samples.npy'),
-                            psdtemp, allow_pickle=True)
-                    setattr(self, f'{src}_{sub}_baseline', psdtemp)
+                    if self.FEATURE == 'POWER':
+                        # load 2d arr: n-samples, n-bands (only samples for selection)
+                        bl_sig = getattr(sub_class, sel).ephys_2d_arr
+                        ftemp, psdtemp = get_ssd_psd_from_array(
+                            ephys_arr=bl_sig,
+                            sfreq=sub_class.fs,
+                            SETTINGS=self.SETTINGS,
+                            band_names=sub_class.band_names,
+                            RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                        )
+                        if len(psdtemp) == 0: continue  # array shorter than 1 second
+                        np.save(os.path.join(states_picklepath,
+                                            f'{sub}_{src}_baseline_'
+                                            f'{bl_sig.shape[0]}samples.npy'),
+                                psdtemp, allow_pickle=True)
+                        setattr(self, f'{src}_{sub}_baseline', psdtemp)
+                    
+                    else:
+                        print(f'... COH BASELINE, feats: {SRC1, SRC2} {sel}')
+
+                        # STORE SAMPLES and TIMES for COH selection and calculation
+                        if SRC1 in sel.lower():
+                            SIG1['bl'] = getattr(sub_class, sel).ephys_2d_arr
+                            T1['bl'] = getattr(sub_class, sel).time_arr
+                            print(f'added SIG1 PREP')
+                        elif SRC2 in sel.lower():
+                            SIG2['bl'] = getattr(sub_class, sel).ephys_2d_arr
+                            T2['bl'] = getattr(sub_class, sel).time_arr
+                            print(f'added SIG2 PREP')
+                        if isinstance(SIG1['bl'], np.ndarray) and isinstance(SIG2['bl'], np.ndarray):
+                            tempsig1, tempsig2 = select_coh_values(
+                                SIG1['bl'], SIG2['bl'], T1['bl'], T2['bl'],
+                            )
+                            ftemp, sqcoh_temp, icoh_temp = get_ssd_coh_from_array(
+                                ephys_arr1=tempsig1,
+                                ephys_arr2=tempsig2,
+                                sfreq=sub_class.fs,
+                                SETTINGS=self.SETTINGS,
+                                band_names=sub_class.band_names,
+                                RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                            )
+                            if len(sqcoh_temp) == 0: continue  # array shorter than 1 second
+                            np.save(os.path.join(states_picklepath,
+                                                f'{sub}_{src}_baseline_'
+                                                f'{tempsig1.shape[0]}samples_sqCOH.npy'),
+                                    sqcoh_temp, allow_pickle=True)
+                            # setattr(self, f'{src}_{sub}_baseline_sqcoh', sqcoh_temp)
+                            np.save(os.path.join(states_picklepath,
+                                                f'{sub}_{src}_baseline_'
+                                                f'{tempsig1.shape[0]}samples_iCOH.npy'),
+                                    icoh_temp, allow_pickle=True)
+                            # setattr(self, f'{src}_{sub}_baseline_icoh', icoh_temp)
+                            SIG1['bl'], SIG2['bl'] = False, False
 
                 # all REST WITHOUT DYSKINESIA
                 if src in sel and 'REST' in sel and 'lidno' in sel:
@@ -286,20 +371,56 @@ class get_selectedEphys:
                          getattr(sub_class, sel).time_arr > (30 * 60)],
                         ['below30', 'over30']
                     ):
-                        # load 2d arr: n-samples, n-bands (only samples for selection)
-                        sel_sig = getattr(sub_class, sel).ephys_2d_arr[time_SEL.astype(bool), :]
-                        ftemp, psdtemp = get_ssd_psd_from_array(
-                            ephys_arr=sel_sig,
-                            sfreq=sub_class.fs,
-                            SETTINGS=self.SETTINGS,
-                            band_names=sub_class.band_names,
-                            RETURN_PSD_1sec=self.RETURN_PSD_1sec,
-                        )
-                        if len(psdtemp) == 0: continue  # array shorter than 1 second
-                        np.save(os.path.join(states_picklepath,
-                                            f'{sub}_{src}_rest_nolid{time_code}'
-                                            f'_{sum(time_SEL)}samples.npy'),
-                                psdtemp, allow_pickle=True)
+                        # extract Powers or Coherences
+                        if self.FEATURE == 'POWER':
+                            # load 2d arr: n-samples, n-bands (only samples for selection)
+                            sel_sig = getattr(sub_class, sel).ephys_2d_arr[time_SEL.astype(bool), :]
+                            ftemp, psdtemp = get_ssd_psd_from_array(
+                                ephys_arr=sel_sig,
+                                sfreq=sub_class.fs,
+                                SETTINGS=self.SETTINGS,
+                                band_names=sub_class.band_names,
+                                RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                            )
+                            if len(psdtemp) == 0: continue  # array shorter than 1 second
+                            np.save(os.path.join(states_picklepath,
+                                                f'{sub}_{src}_rest_nolid{time_code}'
+                                                f'_{sum(time_SEL)}samples.npy'),
+                                    psdtemp, allow_pickle=True)
+                            setattr(self, f'{src}_{sub}_rest_nolid{time_code}', psdtemp)
+        
+                        else:
+                            # STORE SAMPLES and TIMES for COH selection and calculation
+                            if SRC1 in sel.lower():
+                                SIG1[time_code] = getattr(sub_class, sel).ephys_2d_arr
+                                T1[time_code] = getattr(sub_class, sel).time_arr
+                            elif SRC2 in sel.lower():
+                                SIG2[time_code] = getattr(sub_class, sel).ephys_2d_arr
+                                T2[time_code] = getattr(sub_class, sel).time_arr
+                            if isinstance(SIG1[time_code], np.ndarray) and isinstance(SIG2[time_code], np.ndarray):
+                                tempsig1, tempsig2 = select_coh_values(
+                                    SIG1[time_code], SIG2[time_code], T1[time_code], T2[time_code]
+                                )
+                                ftemp, sqcoh_temp, icoh_temp = get_ssd_coh_from_array(
+                                    ephys_arr1=tempsig1,
+                                    ephys_arr2=tempsig2,
+                                    sfreq=sub_class.fs,
+                                    SETTINGS=self.SETTINGS,
+                                    band_names=sub_class.band_names,
+                                    RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                )
+                                if len(sqcoh_temp) == 0: continue  # array shorter than 1 second
+                                np.save(os.path.join(states_picklepath,
+                                                    f'{sub}_{src}_rest_nolid{time_code}'
+                                                    f'{tempsig1.shape[0]}samples_sqCOH.npy'),
+                                        sqcoh_temp, allow_pickle=True)
+                                # setattr(self, f'{src}_{sub}_rest_nolid{time_code}_sqcoh', sqcoh_temp)
+                                np.save(os.path.join(states_picklepath,
+                                                    f'{sub}_{src}_rest_nolid{time_code}'
+                                                    f'{tempsig1.shape[0]}samples_iCOH.npy'),
+                                        icoh_temp, allow_pickle=True)
+                                # setattr(self, f'{src}_{sub}_rest_nolid{time_code}_icoh', icoh_temp)
+                                SIG1[time_code], SIG2[time_code] = False, False
 
                 
                 # get rest with ALL LID
@@ -314,21 +435,59 @@ class get_selectedEphys:
                                 getattr(sub_class, sel).cdrs_arr >= self.DYSK_CUTOFFS[lid_code][0],
                                 getattr(sub_class, sel).cdrs_arr <= self.DYSK_CUTOFFS[lid_code][1]
                             )
-                        lid_sel = getattr(sub_class, sel).ephys_2d_arr[lid_sel.astype(bool), :]
-                        ftemp, psdtemp = get_ssd_psd_from_array(
-                            ephys_arr=lid_sel,
-                            sfreq=sub_class.fs,
-                            SETTINGS=self.SETTINGS,
-                            band_names=sub_class.band_names,
-                            RETURN_PSD_1sec=self.RETURN_PSD_1sec,
-                        )
-                        if len(psdtemp) == 0: continue  # array shorter than 1 second
-                        if lid_code == 'lid': lid_code = 'all'
-                        np.save(os.path.join(states_picklepath,
-                                            f'{sub}_{src}_dyskRest_{lid_code}lid'
-                                            f'_{lid_sel.shape[0]}samples.npy'),
-                                psdtemp, allow_pickle=True)
-                    
+                        
+                        if self.FEATURE == 'POWER':
+                            lid_sel = getattr(sub_class, sel).ephys_2d_arr[lid_sel.astype(bool), :]
+                            ftemp, psdtemp = get_ssd_psd_from_array(
+                                ephys_arr=lid_sel,
+                                sfreq=sub_class.fs,
+                                SETTINGS=self.SETTINGS,
+                                band_names=sub_class.band_names,
+                                RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                            )
+                            if len(psdtemp) == 0: continue  # array shorter than 1 second
+                            if lid_code == 'lid': lid_code = 'all'
+                            np.save(os.path.join(states_picklepath,
+                                                f'{sub}_{src}_dyskRest_{lid_code}lid'
+                                                f'_{lid_sel.shape[0]}samples.npy'),
+                                    psdtemp, allow_pickle=True)
+
+                        else:  # calc COHERNCES
+                            if lid_code == 'lid': continue  # no all category for coherences
+                            # STORE SAMPLES and TIMES for COH selection and calculation
+                            if SRC1 in sel.lower():
+                                SIG1[f'rest_{lid_code}'] = getattr(sub_class, sel).ephys_2d_arr[lid_sel.astype(bool), :]
+                                T1[f'rest_{lid_code}'] = getattr(sub_class, sel).time_arr[lid_sel.astype(bool)]
+                            elif SRC2 in sel.lower():
+                                SIG2[f'rest_{lid_code}'] = getattr(sub_class, sel).ephys_2d_arr[lid_sel.astype(bool), :]
+                                T2[f'rest_{lid_code}'] = getattr(sub_class, sel).time_arr[lid_sel.astype(bool)]
+                            if (isinstance(SIG1[f'rest_{lid_code}'], np.ndarray) and
+                                isinstance(SIG2[f'rest_{lid_code}'], np.ndarray)):
+                                tempsig1, tempsig2 = select_coh_values(
+                                    SIG1[f'rest_{lid_code}'], SIG2[f'rest_{lid_code}'],
+                                    T1[f'rest_{lid_code}'], T2[f'rest_{lid_code}']
+                                )
+                                ftemp, sqcoh_temp, icoh_temp = get_ssd_coh_from_array(
+                                    ephys_arr1=tempsig1,
+                                    ephys_arr2=tempsig2,
+                                    sfreq=sub_class.fs,
+                                    SETTINGS=self.SETTINGS,
+                                    band_names=sub_class.band_names,
+                                    RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                )
+                                if len(sqcoh_temp) == 0: continue  # array shorter than 1 second
+                                np.save(os.path.join(states_picklepath,
+                                                    f'{sub}_{src}_dyskRest_{lid_code}lid'
+                                                    f'{tempsig1.shape[0]}samples_sqCOH.npy'),
+                                        sqcoh_temp, allow_pickle=True)
+                                # setattr(self, f'{src}_{sub}_dyskRest_{lid_code}lid_sqcoh', sqcoh_temp)
+                                np.save(os.path.join(states_picklepath,
+                                                    f'{sub}_{src}_dyskRest_{lid_code}lid'
+                                                    f'{tempsig1.shape[0]}samples_iCOH.npy'),
+                                        icoh_temp, allow_pickle=True)
+                                # setattr(self, f'{src}_{sub}_dyskRest_{lid_code}lid_icoh', icoh_temp)
+                                SIG1[f'rest_{lid_code}'], SIG2[f'rest_{lid_code}'] = False, False     
+                
                 ## ADD DYSKINETIC MOVEMENTS (only during REST-tasks)
                 if src in sel and 'INVOL' in sel and src_INVOL_TODO[src]:
                     if 'INVOLUNTARY' in self.SKIP_NEW_CREATION: continue
@@ -368,20 +527,61 @@ class get_selectedEphys:
                                     temp_cdrs >= self.DYSK_CUTOFFS[lid_code][0],
                                     temp_cdrs <= self.DYSK_CUTOFFS[lid_code][1]
                                 )
-                            lid_sel = temp_ephys[lid_sel.astype(bool), :]
-                            ftemp, psdtemp = get_ssd_psd_from_array(
-                                ephys_arr=lid_sel,
-                                sfreq=sub_class.fs,
-                                SETTINGS=self.SETTINGS,
-                                band_names=sub_class.band_names,
-                                RETURN_PSD_1sec=self.RETURN_PSD_1sec,
-                            )
-                            if len(psdtemp) == 0: continue  # array shorter than 1 second
-                            if lid_code == 'lid': lid_code = 'all'
-                            np.save(os.path.join(states_picklepath,
-                                                f'{sub}_{src}_dyskmove{move_code}_'
-                                                f'{lid_code}lid_{lid_sel.shape[0]}samples.npy'),
-                                    psdtemp, allow_pickle=True)
+
+                            if self.FEATURE == 'POWER':
+                                lid_sel = temp_ephys[lid_sel.astype(bool), :]
+                                ftemp, psdtemp = get_ssd_psd_from_array(
+                                    ephys_arr=lid_sel,
+                                    sfreq=sub_class.fs,
+                                    SETTINGS=self.SETTINGS,
+                                    band_names=sub_class.band_names,
+                                    RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                )
+                                if len(psdtemp) == 0: continue  # array shorter than 1 second
+                                if lid_code == 'lid': lid_code = 'all'
+                                np.save(os.path.join(states_picklepath,
+                                                    f'{sub}_{src}_dyskmove{move_code}_'
+                                                    f'{lid_code}lid_{lid_sel.shape[0]}samples.npy'),
+                                        psdtemp, allow_pickle=True)
+                            
+                            else:  # calc COHERNCES
+                                if lid_code == 'lid': continue  # no all category for coherences
+                                # STORE SAMPLES and TIMES for COH selection and calculation
+                                if SRC1 in sel.lower():
+                                    SIG1[f'dysk_{move_code}_{lid_code}'] = getattr(sub_class, sel).ephys_2d_arr[lid_sel.astype(bool), :]
+                                    T1[f'dysk_{move_code}_{lid_code}'] = getattr(sub_class, sel).time_arr[lid_sel.astype(bool)]
+                                elif SRC2 in sel.lower():
+                                    SIG2[f'dysk_{move_code}_{lid_code}'] = getattr(sub_class, sel).ephys_2d_arr[lid_sel.astype(bool), :]
+                                    T2[f'dysk_{move_code}_{lid_code}'] = getattr(sub_class, sel).time_arr[lid_sel.astype(bool)]
+                                if (isinstance(SIG1[f'dysk_{move_code}_{lid_code}'], np.ndarray) and
+                                    isinstance(SIG2[f'dysk_{move_code}_{lid_code}'], np.ndarray)):
+                                    tempsig1, tempsig2 = select_coh_values(
+                                        SIG1[f'dysk_{move_code}_{lid_code}'],
+                                        SIG2[f'dysk_{move_code}_{lid_code}'],
+                                        T1[f'dysk_{move_code}_{lid_code}'],
+                                        T2[f'dysk_{move_code}_{lid_code}']
+                                    )
+                                    ftemp, sqcoh_temp, icoh_temp = get_ssd_coh_from_array(
+                                        ephys_arr1=tempsig1,
+                                        ephys_arr2=tempsig2,
+                                        sfreq=sub_class.fs,
+                                        SETTINGS=self.SETTINGS,
+                                        band_names=sub_class.band_names,
+                                        RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                    )
+                                    if len(sqcoh_temp) == 0: continue  # array shorter than 1 second
+                                    np.save(os.path.join(states_picklepath,
+                                                        f'{sub}_{src}_dyskmove{move_code}_{lid_code}lid'
+                                                        f'{tempsig1.shape[0]}samples_sqCOH.npy'),
+                                            sqcoh_temp, allow_pickle=True)
+                                    # setattr(self, f'{src}_{sub}_dyskmove{move_code}_{lid_code}lid_sqcoh', psdtemp)
+                                    np.save(os.path.join(states_picklepath,
+                                                        f'{sub}_{src}_dyskmove{move_code}_{lid_code}lid'
+                                                        f'{tempsig1.shape[0]}samples_iCOH.npy'),
+                                            icoh_temp, allow_pickle=True)
+                                    # setattr(self, f'{src}_{sub}_dyskmove_{lid_code}lid_icoh', psdtemp)
+                                    (SIG1[f'dysk_{move_code}_{lid_code}'],
+                                     SIG2[f'dysk_{move_code}_{lid_code}']) = False, False
                             
                 ## add TAPs (voluntary movement)
                 if src in sel and '_VOLUN' in sel:
@@ -392,29 +592,10 @@ class get_selectedEphys:
                     tap_side = sel.split('move')[1].split('_')[0]
                     # once add taps without LID and once taps in LID-categories
                     if 'lidno' in sel.lower():
-                        sig = getattr(sub_class, sel).ephys_2d_arr
-                        ftemp, psdtemp = get_ssd_psd_from_array(
-                            ephys_arr=sig,
-                            sfreq=sub_class.fs,
-                            SETTINGS=self.SETTINGS,
-                            band_names=sub_class.band_names,
-                            RETURN_PSD_1sec=self.RETURN_PSD_1sec,
-                        )
-                        if len(psdtemp) == 0: continue  # array shorter than 1 second
-                        np.save(os.path.join(states_picklepath,
-                                            f'{sub}_{src}_tap{tap_side}_noLid'
-                                            f'_{sig.shape[0]}samples.npy'),
-                                psdtemp, allow_pickle=True)
-                    
-                    else:
-                        for lid_code in ['mild', 'moderate', 'severe']:
-                            lid_sel = np.logical_and(
-                                    getattr(sub_class, sel).cdrs_arr >= self.DYSK_CUTOFFS[lid_code][0],
-                                    getattr(sub_class, sel).cdrs_arr <= self.DYSK_CUTOFFS[lid_code][1]
-                                )
-                            lid_sel = getattr(sub_class, sel).ephys_2d_arr[lid_sel.astype(bool), :]
+                        if self.FEATURE == 'POWER':
+                            sig = getattr(sub_class, sel).ephys_2d_arr
                             ftemp, psdtemp = get_ssd_psd_from_array(
-                                ephys_arr=lid_sel,
+                                ephys_arr=sig,
                                 sfreq=sub_class.fs,
                                 SETTINGS=self.SETTINGS,
                                 band_names=sub_class.band_names,
@@ -422,12 +603,115 @@ class get_selectedEphys:
                             )
                             if len(psdtemp) == 0: continue  # array shorter than 1 second
                             np.save(os.path.join(states_picklepath,
-                                                f'{sub}_{src}_tap{tap_side}_'
-                                                f'{lid_code}lid_{lid_sel.shape[0]}samples.npy'),
+                                                f'{sub}_{src}_tap{tap_side}_noLid'
+                                                f'_{sig.shape[0]}samples.npy'),
                                     psdtemp, allow_pickle=True)
+                        
+                        else:
+                            # STORE SAMPLES and TIMES for COH selection and calculation
+                            if SRC1 in sel.lower():
+                                SIG1[f'tap{tap_side}_nolid'] = getattr(sub_class, sel).ephys_2d_arr
+                                T1[f'tap{tap_side}_nolid'] = getattr(sub_class, sel).time_arr
+                            elif SRC2 in sel.lower():
+                                SIG2[f'tap{tap_side}_nolid'] = getattr(sub_class, sel).ephys_2d_arr
+                                T2[f'tap{tap_side}_nolid'] = getattr(sub_class, sel).time_arr
+                            if (isinstance(SIG1[f'tap{tap_side}_nolid'], np.ndarray) and
+                                isinstance(SIG2[f'tap{tap_side}_nolid'], np.ndarray)):
+                                tempsig1, tempsig2 = select_coh_values(
+                                    SIG1[f'tap{tap_side}_nolid'],
+                                    SIG2[f'tap{tap_side}_nolid'],
+                                    T1[f'tap{tap_side}_nolid'],
+                                    T2[f'tap{tap_side}_nolid']
+                                )
+                                print(f'...coh tap-{tap_side}, NO lid: (n={len(tempsig1)})')
+                                ftemp, sqcoh_temp, icoh_temp = get_ssd_coh_from_array(
+                                    ephys_arr1=tempsig1,
+                                    ephys_arr2=tempsig2,
+                                    sfreq=sub_class.fs,
+                                    SETTINGS=self.SETTINGS,
+                                    band_names=sub_class.band_names,
+                                    RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                )
+                                if len(sqcoh_temp) == 0: continue  # array shorter than 1 second
+                                np.save(os.path.join(states_picklepath,
+                                                    f'{sub}_{src}_tap{tap_side}_noLid'
+                                                    f'{tempsig1.shape[0]}samples_sqCOH.npy'),
+                                        sqcoh_temp, allow_pickle=True)
+                                # setattr(self, f'{src}_{sub}_dyskmove{move_code}_{lid_code}lid_sqcoh', psdtemp)
+                                np.save(os.path.join(states_picklepath,
+                                                    f'{sub}_{src}_tap{tap_side}_noLid'
+                                                    f'{tempsig1.shape[0]}samples_iCOH.npy'),
+                                        icoh_temp, allow_pickle=True)
+                                # setattr(self, f'{src}_{sub}_dyskmove_{lid_code}lid_icoh', psdtemp)
+                                (SIG1[f'tap{tap_side}_nolid'],
+                                 SIG2[f'tap{tap_side}_nolid']) = False, False
+
+                    
+                    else:
+                        for lid_code in ['mild', 'moderate', 'severe']:
+                            lid_sel = np.logical_and(
+                                getattr(sub_class, sel).cdrs_arr >= self.DYSK_CUTOFFS[lid_code][0],
+                                getattr(sub_class, sel).cdrs_arr <= self.DYSK_CUTOFFS[lid_code][1]
+                            )
+                        
+                            if self.FEATURE == 'POWER':
+                                lid_sel = getattr(sub_class, sel).ephys_2d_arr[lid_sel.astype(bool), :]
+                                ftemp, psdtemp = get_ssd_psd_from_array(
+                                    ephys_arr=lid_sel,
+                                    sfreq=sub_class.fs,
+                                    SETTINGS=self.SETTINGS,
+                                    band_names=sub_class.band_names,
+                                    RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                )
+                                if len(psdtemp) == 0: continue  # array shorter than 1 second
+                                np.save(os.path.join(states_picklepath,
+                                                    f'{sub}_{src}_tap{tap_side}_'
+                                                    f'{lid_code}lid_{lid_sel.shape[0]}samples.npy'),
+                                        psdtemp, allow_pickle=True)
+
+                            else:  # calc COHERNCES
+                                # STORE SAMPLES and TIMES for COH selection and calculation
+                                if SRC1 in sel.lower():
+                                    SIG1[f'tap{tap_side}_{lid_code}'] = getattr(sub_class, sel).ephys_2d_arr[lid_sel.astype(bool), :]
+                                    T1[f'tap{tap_side}_{lid_code}'] = getattr(sub_class, sel).time_arr[lid_sel.astype(bool)]
+                                elif SRC2 in sel.lower():
+                                    SIG2[f'tap{tap_side}_{lid_code}'] = getattr(sub_class, sel).ephys_2d_arr[lid_sel.astype(bool), :]
+                                    T2[f'tap{tap_side}_{lid_code}'] = getattr(sub_class, sel).time_arr[lid_sel.astype(bool)]
+                                if (isinstance(SIG1[f'tap{tap_side}_{lid_code}'], np.ndarray) and
+                                    isinstance(SIG2[f'tap{tap_side}_{lid_code}'], np.ndarray)):
+                                    tempsig1, tempsig2 = select_coh_values(
+                                        SIG1[f'tap{tap_side}_{lid_code}'],
+                                        SIG2[f'tap{tap_side}_{lid_code}'],
+                                        T1[f'tap{tap_side}_{lid_code}'],
+                                        T2[f'tap{tap_side}_{lid_code}']
+                                    )
+                                    print(f'...coh tap-{tap_side}, lid: {lid_code} (n={len(tempsig1)})')
+                                    ftemp, sqcoh_temp, icoh_temp = get_ssd_coh_from_array(
+                                        ephys_arr1=tempsig1,
+                                        ephys_arr2=tempsig2,
+                                        sfreq=sub_class.fs,
+                                        SETTINGS=self.SETTINGS,
+                                        band_names=sub_class.band_names,
+                                        RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                    )
+                                    if len(sqcoh_temp) == 0: continue  # array shorter than 1 second
+                                    np.save(os.path.join(states_picklepath,
+                                                        f'{sub}_{src}_tap{tap_side}_{lid_code}lid'
+                                                        f'{tempsig1.shape[0]}samples_sqCOH.npy'),
+                                            sqcoh_temp, allow_pickle=True)
+                                    # setattr(self, f'{src}_{sub}_dyskmove{move_code}_{lid_code}lid_sqcoh', psdtemp)
+                                    np.save(os.path.join(states_picklepath,
+                                                        f'{sub}_{src}_tap{tap_side}_{lid_code}lid'
+                                                        f'{tempsig1.shape[0]}samples_iCOH.npy'),
+                                            icoh_temp, allow_pickle=True)
+                                    # setattr(self, f'{src}_{sub}_dyskmove_{lid_code}lid_icoh', psdtemp)
+                                    (SIG1[f'tap{tap_side}_{lid_code}'],
+                                     SIG2[f'tap{tap_side}_{lid_code}']) = False, False
+
 
                 ## extract FREE moments
                 if src in sel and 'FREE' in sel:
+                    if self.FEATURE != 'POWER': continue  # no free coherences so far 
                     if 'FREE' in self.SKIP_NEW_CREATION: continue
                     if 'lidall' in sel or 'lidlid' in sel: continue  # skip summary groups
                     print(f'\n...new FREE process: {sel}')
@@ -495,6 +779,20 @@ class get_selectedEphys:
             self.loaded_subs.append(sub)
             if self.verbose: print(f'CREATED AND ADDED states of sub-{sub} to main get class')
 
+
+def select_coh_values(SIG1, SIG2, times1, times2):
+    """
+    select only mutual timepoints for coherences calculation
+    """
+    sel1 = np.isin(times1, times2)
+    sel2 = np.isin(times2, times1)
+
+    SIG1 = SIG1[sel1]
+    SIG2 = SIG2[sel2]
+
+    assert len(SIG1) == len(SIG2), 'coherence arrays must have same length'
+
+    return SIG1, SIG2
 
 
 

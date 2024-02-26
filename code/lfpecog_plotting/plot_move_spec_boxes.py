@@ -83,17 +83,23 @@ def calc_fband_boxlists(
     """
     
     Arguments:
+        - psd_dict: result of psdClass.get_allSpecStates_Psds()
+        - baselines: result of psdClass.get_allSpecStates_Psds()
+        - SRC_SEL: lfp or ecog
+        - STATE_SEL: rest movement or see allowed states
         - SPLIT_MOVEMENT: returns data to split voluntary
             and involuntary movement
         - SPLIT_CONTRAIPSI: includes ONLY IPSILATERAL movements
             (voluntary and invol.) and show the contra- and
             ipsilateral hemispheres
     """
-    # check and process defined
+    # check and process defined keywords
+    assert SRC_SEL in ['lfp', 'ecog'], f'SRC_SEL "{SRC_SEL}" should be lfp/ecog'
     allowed_state_sels = [['rest', 'dyskmove'],
                           ['tap', 'dyskmove'],
                           'rest', 'tap', 'dyskmove', 'movement', ]
     assert STATE_SEL in allowed_state_sels, 'incorrect STATE_SEL'
+    
     assert not (STATE_SEL == 'rest' and (
         SPLIT_CONTRAIPSI or SPLIT_MOVEMENT
     )), 'SPLIT movetypes and rest not compatible'
@@ -141,15 +147,16 @@ def calc_fband_boxlists(
             if verbose: print(f'...SKIP state (ONLY UNILAT dysk): {state}')
             continue    
         
-        if verbose: print(f'...include state: {state}')
+        if verbose: print(f'\n-> include state: {state}')
         
         LID_CODE = np.where([l in state for l in lid_states])[0][0]
         LID_CODE = lid_states[LID_CODE]
-        if verbose: print(f'\ncontinue with {state}  (LID code: {LID_CODE})')
+        if verbose: print(f'...continue with {state}  (LID code: {LID_CODE})')
 
         if SPLIT_CONTRAIPSI:
             if 'left' in state: MOVE_SIDE = 'left'
             elif 'right' in state: MOVE_SIDE = 'right'
+            if verbose: print(f'...continue with {state}  (MOVE_SIDE: {MOVE_SIDE})')
 
         freqs = psd_dict[state].freqs
 
@@ -167,6 +174,7 @@ def calc_fband_boxlists(
                 else: EPHYS_SIDE = get_ecog_side(sub)
                 if EPHYS_SIDE == MOVE_SIDE: EPHYS_SIDE = 'ipsi'
                 else: EPHYS_SIDE = 'contra'
+                if verbose: print(f'...ipsi/contra EPHYS_SIDE: {EPHYS_SIDE} ({state}))')
                 
 
             if not SRC_SEL in src: continue
@@ -438,27 +446,33 @@ def plot_moveSplit_violins(
     # PLOT BOXPLOTS PER FREQ BAND; FOR SELECTED CONDITIONS(S)
     print(f'selected data-source: {SOURCE_SEL}')
 
-
-    
-
-    fig, axes = plt.subplots(len(psd_box), 1,
-                            figsize=(6, 9),
-                            sharex='col',
-                            )
-    # define color schemes
-    if 'ipsi' in list(np.unique([v for l in movetypes.values() for v in l])):
+    # define movement split type and settings
+    if np.logical_or(
+        'ipsi' in list(np.unique([v for l in movetypes.values() for v in l])),
+        'contra' in list(np.unique([v for l in movetypes.values() for v in l]))
+    ):
         move_codes = ['ipsi', 'contra']
         clrs = [list(get_colors().values())[-2],
                 list(get_colors().values())[2]]
         figname = f'{fig_name_start}SpecBand_IpsiContraMoveViolins_{SOURCE_SEL}'
+        # remove no lid objects for ipsi contra violins
+        for d in [ids_box, movetypes]: del(d['nolid'])
+        for bw in psd_box: del(psd_box[bw]['nolid'])
+        for l in [lid_labels, lid_clrs, lid_states]: del(l[0])
 
-    elif 'voluntary' in list(movetypes.values())[0]:
+
+    elif np.logical_or('voluntary' in list(movetypes.values())[0],
+                       'involuntary' in list(movetypes.values())[0]):
         move_codes = ['voluntary', 'involuntary']
         clrs = [list(get_colors().values())[4],
                 list(get_colors().values())[1]]
         figname = f'{fig_name_start}SpecBand_VoluntMoveViolins_{SOURCE_SEL}'
 
-    
+    # set figure
+    fig, axes = plt.subplots(len(psd_box), 1,
+                        figsize=(6, 9),
+                        sharex='col',
+                        )
 
     for i_ax, bw in enumerate(psd_box.keys()):
 
@@ -609,11 +623,11 @@ def plot_moveSplit_violins(
                 try:
                     Stat, p_mwu = mannwhitneyu(m1, m2)
                 except:
-                    print(len(m1), len(m2))
+                    print(f'lid: {lidcat}, m1: {len(m1)}, m2: {len(m2)}, sel: {sum(temp_sel)}')
                     if len(m1) == 0 or len(m2) == 2:
                         move_diffs.extend(['nan', 'nan'])
                         continue
-                print(f'\n...MWU: {bw}: {lidcat}, {lidcat}: {Stat}, p:{p_mwu} ({len(m1), len(m2)})')
+                print(f'\n...MWU: {bw}: {lidcat}, {lidcat}: {Stat}, p:{p_mwu} (m1: {len(m1)}, m2: {len(m2)})')
                 # run linear mixed effect model
                 coded_mtypes = [0 if m == move_codes[0] else 1
                                 for m in list(compress(stat_moves, temp_sel))]
