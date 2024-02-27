@@ -31,6 +31,7 @@ def prep_and_plot_moveSpecPsd(
     STAT_PER_LID_CAT: bool = True,
     ALPHA: float = 0.05,
     ALT_MOVELID_BASELINE: bool = False,
+    REST_u30_BASELINE: bool = False,
     STATS_VERSION: str = '',
     STAT_LID_COMPARE: str = 'binary',
     MERGE_REST_STNS: bool = False,
@@ -83,6 +84,7 @@ def prep_and_plot_moveSpecPsd(
         INCL_STATS=INCL_STATS,
         STAT_PER_LID_CAT=STAT_PER_LID_CAT,
         ALT_MOVELID_BASELINE=ALT_MOVELID_BASELINE,
+        REST_u30_BASELINE=REST_u30_BASELINE,
         ALPHA=ALPHA,
         STATS_VERSION=STATS_VERSION,
         STAT_LID_COMPARE=STAT_LID_COMPARE,
@@ -98,6 +100,7 @@ def plot_moveLidSpec_PSDs(
     INCL_STATS: bool = False,
     STAT_PER_LID_CAT: bool = True,
     ALT_MOVELID_BASELINE: bool = False,
+    REST_u30_BASELINE: bool = False,
     ALPHA: float = 0.05,
     STATS_VERSION: str = '',
     STAT_LID_COMPARE: str = 'binary',
@@ -187,6 +190,7 @@ def plot_moveLidSpec_PSDs(
                 
                 # in case of alternative df naming for move with LID categories
                 if ALT_MOVELID_BASELINE: dfname = 'alt_' + dfname
+                elif REST_u30_BASELINE: dfname = 'u30_' + dfname
 
                 stat_df = os.path.join(stat_dir, dfname)
                 if os.path.exists(stat_df):

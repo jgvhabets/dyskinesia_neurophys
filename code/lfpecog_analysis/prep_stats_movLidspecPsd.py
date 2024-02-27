@@ -161,6 +161,10 @@ def get_MOVE_stat_grouped_data(
         group_states = {0: ['nolid'],
                         1: ['mildlid'], 2: ['moderatelid'], 3: ['severelid']}
     
+    elif STAT_SPLIT == 'categs_u30':
+        group_states = {0: ['nolid'],
+                        1: ['mildlid'], 2: ['moderatelid'], 3: ['severelid']}
+    
     # GET PSD ARRAYS (move states are dependent on move_cond)
     if 'FREE' in MOVE_COND: MERGE_STN = True
     else: MERGE_STN = False
@@ -403,6 +407,7 @@ def get_stats_MOVE_psds(
     STATS_VERSION: str = '',
     STAT_PER_LID_CAT: bool = False,
     REST_BASELINE: bool = True,
+    REST_u30_BASE: bool = False,
     ALT_BASELINE: bool = False,
     SKIP_MOVES: list = [],
     MERGE_DYSK_SIDES: bool = False,
@@ -459,6 +464,7 @@ def get_stats_MOVE_psds(
             print(f'({MOV}) START-{i_src}: {SRC} x {SIDE}')
             df_name = f'PsdStateStats_1secWins_{MOV}_{SRC}_{SIDE}.csv'
             if ALT_BASELINE: df_name = 'alt_' + df_name
+            elif REST_u30_BASE: df_name = 'u30_' + df_name
             stat_path = os.path.join(stat_dir, df_name)
 
             if os.path.exists(stat_path):
@@ -511,11 +517,13 @@ def get_stats_MOVE_psds(
             
             # COMPARE WITH all REST WITHOUT MOVEMENT (labels all 0)
             if REST_BASELINE:
+                stat_split = 'move_baseline'
+                if REST_u30_BASE: stat_split = 'no-LID (<30) vs LID-categs'
                 print('...load rest psds as baseline for movement')
                 (
                     bl_values, bl_labels, bl_ids, value_freqs
                 ) = get_REST_stat_grouped_data(
-                    STAT_SPLIT='move_baseline',
+                    STAT_SPLIT=stat_split,  # 27.02 was move_baseline
                     SRC=SRC,
                     PSD_DICT=PSDs, BL_class=BLs,
                     PSD_1s_windows=True,
