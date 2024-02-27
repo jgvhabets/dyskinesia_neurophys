@@ -56,11 +56,13 @@ def get_baseline_arr_dict(BLs_1s, LOG: bool = False,):
 
 def get_allSpecStates_Psds(
     FEATURE: str = 'POWER',
+    COH_TYPE: str = 'None',
     RETURN_PSD_1sec = True,
     incl_rest: bool = True,
     incl_tap: bool = True,
     incl_lidmove: bool = True,
     incl_free: bool = True,
+    verbose: bool = False,
 ):
     """
     
@@ -101,22 +103,26 @@ def get_allSpecStates_Psds(
     # get baselines
     BLs = get_selectedEphys(
         FEATURE=FEATURE,
+        COH_TYPE=COH_TYPE,
         STATE_SEL='baseline',
         LOAD_PICKLE=True,
         USE_EXT_HD=True,
         PREVENT_NEW_CREATION=False,
         RETURN_PSD_1sec=RETURN_PSD_1sec,
+        verbose=verbose,
     )
 
     PSDs = {
         cond: get_selectedEphys(
             FEATURE=FEATURE,
+            COH_TYPE=COH_TYPE,
             STATE_SEL=cond,
             LOAD_PICKLE=True,
             USE_EXT_HD=True,
             PREVENT_NEW_CREATION=False,
             RETURN_PSD_1sec=RETURN_PSD_1sec,
             # EXTRACT_FREE=EXTRACT_FREE,
+            verbose=verbose,
         ) for cond in conditions
     }
 
@@ -127,6 +133,7 @@ def get_allSpecStates_Psds(
 class get_selectedEphys:
     STATE_SEL: str
     FEATURE: str = 'POWER'
+    COH_TYPE: str = 'None'
     FT_VERSION: int = 'v6'
     MIN_SEL_LENGTH: int = 5
     RETURN_PSD_1sec: bool = False
@@ -210,13 +217,18 @@ class get_selectedEphys:
         self.loaded_subs = []
 
         # GET RELEVANT STATE PSDs per Subject and Source
+        
         for sub in self.SETTINGS['TOTAL_SUBS']:
+            if sub.startswith('1') and self.FEATURE == 'COH_STNECOG':
+                print(f'\n### No ECoG DATA, SKIP sub-{sub} {self.FEATURE}-calculation')
+                continue
+        
             # try to load existing states instead of creating/loading full large array files
             if not self.FORCE_CALC_PSDs:
                 if self.verbose: print(f'...trying to load {self.STATE_SEL, sub} from {states_picklepath}')
                 LOADED_BOOL, sub_state_tups = load_sub_states(
                     self.STATE_SEL, sub, states_picklepath,
-                    FEATURE=self.FEATURE,
+                    FEATURE=self.FEATURE, COH_TYPE=self.COH_TYPE,
                     verbose=self.verbose
                 )
                 if LOADED_BOOL:
@@ -517,7 +529,7 @@ class get_selectedEphys:
                             sel = f'{src}_INVOLUNTARY_moveleft_lidlid'  # both is also based on left
                         temp_ephys = getattr(sub_class, sel).ephys_2d_arr[move_bool, :]
                         temp_cdrs = getattr(sub_class, sel).cdrs_arr[move_bool]
-                        temp_time_arr = getattr(sub_class, sel).time_arr[move_bool]
+                        temp_times = getattr(sub_class, sel).time_arr[move_bool]
                             
                         # select LID categories based on lidlid (contains all)
                         for lid_code in ['lid', 'mild', 'moderate', 'severe']:
@@ -550,10 +562,10 @@ class get_selectedEphys:
                                 # STORE SAMPLES and TIMES for COH selection and calculation
                                 if SRC1 in sel.lower():
                                     SIG1[f'dysk_{move_code}_{lid_code}'] = temp_ephys[lid_sel.astype(bool), :]
-                                    T1[f'dysk_{move_code}_{lid_code}'] = getattr(sub_class, sel).time_arr[lid_sel.astype(bool)]
+                                    T1[f'dysk_{move_code}_{lid_code}'] = temp_times[lid_sel.astype(bool)]
                                 elif SRC2 in sel.lower():
-                                    SIG2[f'dysk_{move_code}_{lid_code}'] = getattr(sub_class, sel).ephys_2d_arr[lid_sel.astype(bool), :]
-                                    T2[f'dysk_{move_code}_{lid_code}'] = getattr(sub_class, sel).time_arr[lid_sel.astype(bool)]
+                                    SIG2[f'dysk_{move_code}_{lid_code}'] = temp_ephys[lid_sel.astype(bool), :]
+                                    T2[f'dysk_{move_code}_{lid_code}'] = temp_times[lid_sel.astype(bool)]
                                 if (isinstance(SIG1[f'dysk_{move_code}_{lid_code}'], np.ndarray) and
                                     isinstance(SIG2[f'dysk_{move_code}_{lid_code}'], np.ndarray)):
                                     tempsig1, tempsig2 = select_coh_values(
@@ -789,9 +801,9 @@ def select_coh_values(SIG1, SIG2, times1, times2):
     sel1 = np.isin(times1, times2)
     sel2 = np.isin(times2, times1)
 
-    SIG1 = SIG1[sel1]
-    SIG2 = SIG2[sel2]
-
+    SIG1 = SIG1[sel1, :]
+    SIG2 = SIG2[sel2, :]
+    
     assert len(SIG1) == len(SIG2), 'coherence arrays must have same length'
 
     return SIG1, SIG2
@@ -942,17 +954,25 @@ class metaSelected_ephysData:
 
 
 def load_sub_states(state, sub, pickled_state_path,
-                    FEATURE: str = 'POWER',
+                    FEATURE: str = 'POWER', COH_TYPE: str = 'None',
                     verbose: bool = False,):
     """
     
     Arguments:
         - FEATURE: defines type of results searched for
     """
+    if verbose: print(f'\n##### START LOADING FT: {FEATURE}, sub-{sub} ({state})')
 
     sub_files = [f for f in os.listdir(pickled_state_path)
                  if f.endswith('.npy') and f.startswith(sub)]
+    # for PSDs, only one feature present in folder
     sub_state_files = [f for f in sub_files if state in f.lower()]
+    # for coherences, select out only the feature specific files
+    if 'COH' in FEATURE:
+        sub_state_files = [f for f in sub_state_files
+                           if FEATURE.lower() in f.lower()]
+        assert COH_TYPE.lower() in ['icoh', 'sqcoh'], 'incorrect COH_TYPE'
+
     if verbose: print(f'for ({sub}, {state}) selected: {sub_state_files}')
     
     # load existing data
@@ -966,19 +986,53 @@ def load_sub_states(state, sub, pickled_state_path,
                 for s in ['lfp_right', 'lfp_left', 'ecog']:
                     if s in f: src = s
             else:
+                if COH_TYPE.lower() not in f.lower(): continue
                 src = f.split('_')[2]  # takes STNECOG or STNs for COH
 
             list_tuples.append((src, arr))
+            if verbose: print(f'...loaded {src}, {sub} {f} ({arr.shape})')
     
         return True, list_tuples
 
     elif len(sub_files) > 0:
-        print(f'\n### NO STATE-specific array available '
-              f'for {state} in sub-{sub}, other states ALREADY CREATED ###\n')
-        return True, []
-    
+
+        if FEATURE == 'POWER':
+            print(f'\n### NO STATE-specific array available '
+                f'for {state} in sub-{sub}, other states ALREADY CREATED ###\n')
+            return True, []
+
+        else:
+            coh_files = [f for f in sub_files
+                         if FEATURE.lower() in f.lower()]
+            
+            if len(coh_files) == 0:
+                print(f'\n...no available {FEATURE}-arrays found, try new CREATION '
+                      f'for {state} in sub-{sub}\n')
+                return False, None
+            
+            else:
+                if verbose: 
+                    print(f'skip new creation, files existing, INCOMPLETE????'
+                          f'or just not existing ({sub, state, FEATURE})')
+                return True, []
+
     else:
         print('\n...no available state-sub-arrays found, try new CREATION '
               f'for {state} in sub-{sub}\n')
         return False, None
     
+
+
+if __name__ == '__main__':
+    
+    COH_FT = 'COH_STNs'  # 'COH_STNECOG',
+    for COH_TYPE in ['sqcoh', 'icoh']: 
+        (
+            PSDs_1s, BLs_1s
+        ) = get_allSpecStates_Psds(
+            FEATURE=COH_FT,
+            COH_TYPE=COH_TYPE,
+            RETURN_PSD_1sec=True,
+            incl_free=False,
+            verbose=False,
+        )

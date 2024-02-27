@@ -427,21 +427,33 @@ def get_ssd_coh_from_array(
                 new_sqcoh = new_sqcoh[:n_wins, :]
                 new_icoh = new_icoh[:n_wins, :]
 
+            # if no data left
             if sig1.shape[0] == 0 or sig2.shape[0] == 0:
                 return [], [], []
 
-            icoh_list, coh_list = [], []
-
-            # calculate Coherences per epoch
-            for s1, s2 in zip(sig1, sig2):
+            elif len(sig1.shape) == 1 or len(sig2.shape) == 1:
                 freqs, _, icoh, _, sqcoh = calc_coherence(
-                    sig1=s1, sig2=s2, fs=sfreq,
+                    sig1=sig1, sig2=sig2, fs=sfreq,
                     nperseg=sfreq * PSD_WIN_sec,
                 )
-                icoh_list.append(icoh)
-                coh_list.append(sqcoh)
-            icoh = np.array(icoh_list)
-            sqcoh = np.array(coh_list)
+                icoh = np.atleast_2d(icoh)
+                sqcoh = np.atleast_2d(sqcoh)
+                if icoh.shape[0] > icoh.shape[1]: icoh = icoh.T
+                if sqcoh.shape[0] > sqcoh.shape[1]: sqcoh = sqcoh.T
+            
+            else:
+                icoh_list, coh_list = [], []
+
+                # calculate Coherences per epoch
+                for s1, s2 in zip(sig1, sig2):
+                    freqs, _, icoh, _, sqcoh = calc_coherence(
+                        sig1=s1, sig2=s2, fs=sfreq,
+                        nperseg=sfreq * PSD_WIN_sec,
+                    )
+                    icoh_list.append(icoh)
+                    coh_list.append(sqcoh)
+                icoh = np.array(icoh_list)
+                sqcoh = np.array(coh_list)
 
         else:        
             # calculate Coherences
