@@ -41,8 +41,6 @@ def prep_and_plot_restvsmove(
     REST_u30_BASELINE: bool = True,
     STATS_VERSION: str = '2Hz',
     STAT_LID_COMPARE: str = 'categs',
-    MERGE_REST_STNS: bool = True,
-    MERGED_DYSK: bool = False,
     ADD_TO_FIG_NAME = False,
 ):
     #
@@ -92,6 +90,8 @@ def prep_and_plot_restvsmove(
                 STAT_LID_COMPARE=STAT_LID_COMPARE,
                 ALPHA=ALPHA,
             )
+        else:
+            stat_df = False
 
         # plot AX
         print(f'\n....PLOT {PLOT_MOVE}')
@@ -110,6 +110,7 @@ def prep_and_plot_restvsmove(
 
     if SAVE_PLOT:
         FIG_NAME = f'PSDs_{SOURCE}_restVsMove'
+        if MOVESIDES_SPLITTED: FIG_NAME += 'Split'
 
         if INCL_STATS:
             FIG_NAME += f'_stats{STAT_LID_COMPARE}'
@@ -210,11 +211,14 @@ def plot_moveLidSpec_PSDs(
 
     # add title (once per AX)
     src_title = SOURCE.replace('lfp', 'stn')
-    if PLOT_MOVE_TYPE == 'ALLMOVE':
-        ax_title = (f'{src_title.upper()} changes during Movement')
+    if PLOT_MOVE_TYPE == 'REST':
+        ax_title = (f'{src_title.upper()} changes: Rest')
+    else:
+        ax_title = (f'{src_title.upper()} changes: Movement')
+    if PLOT_MOVE_TYPE in ['IPSI', 'CONTRA']:
+        ax_title = ax_title.replace('Movement',
+                                    f'{PLOT_MOVE_TYPE.capitalize()}lateral Movement')
     
-    elif PLOT_MOVE_TYPE == 'REST':
-        ax_title = (f'{src_title.upper()} changes during Rest')
     
     AX.set_title(ax_title, weight='bold', size=FS,)
 
@@ -262,14 +266,20 @@ def prep_RestVsMove_psds(SRC, PLOT_MOVE, PSD_DICT, BASELINE,
             CONTRA/IPSI-lateral movements (axcols)
     """
     print(f'start prep MOVEMENT spec psdsPLOTMOVE: {PLOT_MOVE}')
-    assert PLOT_MOVE in ['REST', 'INVOLUNT', 'TAP', 'ALLMOVE']
+    assert PLOT_MOVE in ['REST', 'CONTRA', 'IPSI', 'ALLMOVE']
 
-    if PLOT_MOVE == 'INVOLUNT':
-        ATTR_CODE = ['DYSKMOVE',]  # currently not used for only dysk
-    elif PLOT_MOVE == 'ALLMOVE':
+    if PLOT_MOVE == 'ALLMOVE':
         ATTR_CODE = ['DYSKMOVE', 'TAP']
-    else:
-        ATTR_CODE = [PLOT_MOVE,]
+        MOVE_SPLIT = 'ALL'
+    elif PLOT_MOVE == 'CONTRA':
+        ATTR_CODE = ['DYSKMOVE', 'TAP']
+        MOVE_SPLIT = 'CONTRA'
+    elif PLOT_MOVE == 'IPSI':
+        ATTR_CODE = ['DYSKMOVE', 'TAP']
+        MOVE_SPLIT = 'IPSI'
+    elif PLOT_MOVE == 'REST':
+        ATTR_CODE = ['REST',]
+        MOVE_SPLIT = 'ALL'
 
     sources = ['lfp_left', 'lfp_right', 'ecog']
     lid_states = ['nolidbelow30', 'nolidover30', 'nolid',
@@ -308,10 +318,9 @@ def prep_RestVsMove_psds(SRC, PLOT_MOVE, PSD_DICT, BASELINE,
         if not MOVE.lower() in cond.lower(): continue
         # loop and add subjects
         for attr in vars(PSD_DICT[cond]).keys():
-            # print(f'.......{attr}')
             # skip irelevant attr
             if not MOVE.lower() in attr.lower() or SRC not in attr: continue
-            print(f'...selected attr for {PLOT_MOVE}: {attr}')
+            # print(f'...selected attr for {PLOT_MOVE}: {attr}')
             
             # define SUB
             if 'lfp' in SRC: sub = attr.split('_')[2]  # exclude lfp side
@@ -321,6 +330,22 @@ def prep_RestVsMove_psds(SRC, PLOT_MOVE, PSD_DICT, BASELINE,
             # define EPHYS-side
             if 'lfp' in attr: EPHYS_SIDE = attr.split('_')[1]
             elif 'ecog' in attr: EPHYS_SIDE = PSD_DICT[cond].ecog_sides[sub]
+
+            # for contra/ ipsi, split movements (not for REST and ALLMOVE)
+            if MOVE_SPLIT != 'ALL':
+                if any(['tapleft' in attr, 'leftonly' in attr]):
+                    MOVE_SIDE = 'left'
+                elif any(['tapright' in attr, 'rightonly' in attr]):
+                    MOVE_SIDE = 'right'
+                else:
+                    f'...no UNI side movement, skip {attr} for {PLOT_MOVE}'
+                    continue
+                if MOVE_SIDE == EPHYS_SIDE: MOVE_LAT = 'IPSI'
+                else: MOVE_LAT = 'CONTRA'
+                if MOVE_LAT != MOVE_SPLIT:
+                    # print(f'...skip {attr}, movement is {MOVE_LAT}, instead of {MOVE_SPLIT}')
+                    continue
+                # print(f'...INCLUDE {attr} for {MOVE_SPLIT}')
 
             # get psd arr and correct for baseline
             temp_psd = getattr(PSD_DICT[cond], attr)
