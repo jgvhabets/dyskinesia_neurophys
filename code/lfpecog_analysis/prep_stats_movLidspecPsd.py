@@ -386,7 +386,7 @@ def get_stat_folder(STAT_LID_COMPARE: str,
         f'STAT_LID_COMPARE ({STAT_LID_COMPARE}) should be linear / binary / categs'
     )
     # add categ to folder name
-    if STAT_PER_LID_CAT:
+    if STAT_PER_LID_CAT or STAT_LID_COMPARE == 'categs':
         stat_dir += f'_lidCategs'
     else:      
         stat_dir += f'_lid{STAT_LID_COMPARE.capitalize()}'  # add Linear or Binary

@@ -45,6 +45,7 @@ def prep_and_plot_moveSpecPsd(
         MERGE_STN = MERGE_REST_STNS
     elif PLOT_CONDITION in ['TAP', 'INVOLUNT', 'FREE']:
         prep_func = prep_MOVEMENT_spec_psds
+        prep_func = prep_MOVEMENT_spec_psds
         if PLOT_CONDITION == 'TAP':
             MERGE_STN = False
         elif PLOT_CONDITION == 'FREE':

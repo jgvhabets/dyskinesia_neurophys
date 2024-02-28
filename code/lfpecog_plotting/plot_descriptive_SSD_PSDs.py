@@ -1180,7 +1180,8 @@ def break_x_axis_psds_ticks(tf_freqs, PSD, PSD_sd=False,
 
     Arguments:
         - tf_freqs: frequencies
-        - PSD: psd values, can be dict, arr or list
+        - PSD: psd values, can be dict, arr or list (should contain
+            float and NO INTEGERS to be able to add NaNs)
         - PSD_sd: similar to PSD, then std dev instead of mean i.e.
 
     Returns:
@@ -1189,6 +1190,8 @@ def break_x_axis_psds_ticks(tf_freqs, PSD, PSD_sd=False,
         - xticks: x-array for plotting
         - corr labels for ticks
     """
+    if isinstance(PSD[0], int): PSD = PSD.astype(float)
+    
     del_sel = np.logical_and(tf_freqs > x_break[0],
                              tf_freqs < x_break[1])
 
