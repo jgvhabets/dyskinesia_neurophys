@@ -20,6 +20,7 @@ from lfpecog_analysis.prep_stats_movLidspecPsd import (
 )
 from lfpecog_analysis.psd_lid_stats import calc_lmem_freqCoeffs, run_mixEff_wGroups
 
+
 cond_colors = {
     'nolid': 'green',
     'nolidbelow30': 'limegreen',
@@ -31,22 +32,31 @@ cond_colors = {
 
 def prep_and_plot_restvsmove(
     PSD_DICT, BASELINE, SOURCE,
+    FEATURE: str = 'PSD',
     MOVESIDES_SPLITTED: bool = False,
     SAVE_PLOT: bool = False,
     SHOW_PLOT: bool = True,
     INCL_STATS: bool = True,
     STAT_PER_LID_CAT: bool = True,
     ALPHA: float = 0.01,
-    ALT_MOVELID_BASELINE: bool = False,
     REST_u30_BASELINE: bool = True,
     STATS_VERSION: str = '2Hz',
     STAT_LID_COMPARE: str = 'categs',
     ADD_TO_FIG_NAME = False,
 ):
-    #
+    # check feature and source input
+    if FEATURE.upper() == 'PSD':
+        assert SOURCE in ['lfp', 'ecog'], f'incorrect source ({SOURCE}) for {FEATURE}'
+    elif FEATURE.upper() in ['ICOH', 'SQCOH']:
+        assert SOURCE in ['STNECOG', 'STNs'], f'incorrect source ({SOURCE}) for {FEATURE}'
+    else:
+        raise ValueError('FEATURE should be PSD / ICOH / SQCOH')
+    
+    # prep figure
     n_cols = 2
     if MOVESIDES_SPLITTED: n_cols += 1
-    YLIM = (-75, 225)
+    if FEATURE == 'PSD': YLIM = (-60, 175)
+    else: YLIM = (-50, 100)
 
     fig, axes = plt.subplots(1, n_cols, figsize=(6*n_cols, 4),
                              sharey='row',)
@@ -64,7 +74,7 @@ def prep_and_plot_restvsmove(
         # execute prep function
         print(f'\n\n###### PREP {PLOT_MOVE}, {SOURCE}')
         psd_arrs, psd_freqs, psd_subs = prep_RestVsMove_psds(
-            SRC=SOURCE,
+            SRC=SOURCE, FEATURE=FEATURE,
             PLOT_MOVE=PLOT_MOVE,
             PSD_DICT=PSD_DICT,
             BASELINE=BASELINE,
@@ -78,14 +88,13 @@ def prep_and_plot_restvsmove(
                 STAT_BL_subs = list(psd_subs.values())[0]
 
             stat_df = get_restMove_stats(
-                SOURCE=SOURCE,
+                SOURCE=SOURCE, FEATURE=FEATURE,
                 MOVE_TYPE=PLOT_MOVE,
                 STAT_BL_epochs=STAT_BL_epochs,
                 STAT_BL_subs=STAT_BL_subs,
                 epoch_values=psd_arrs,
                 epoch_ids=psd_subs,
                 epoch_freqs=psd_freqs,
-                REST_u30_BASE=True,
                 STATS_VERSION=STATS_VERSION,
                 STAT_LID_COMPARE=STAT_LID_COMPARE,
                 ALPHA=ALPHA,
@@ -97,19 +106,18 @@ def prep_and_plot_restvsmove(
         print(f'\n....PLOT {PLOT_MOVE}')
         plot_moveLidSpec_PSDs(
             psd_arrs, psd_freqs=psd_freqs, psd_subs=psd_subs,
-            SOURCE=SOURCE, AX=ax,
-            PLOT_MOVE_TYPE=PLOT_MOVE,
+            SOURCE=SOURCE, FEATURE=FEATURE,
+            AX=ax, PLOT_MOVE_TYPE=PLOT_MOVE,
             stat_df=stat_df,
             INCL_STATS=INCL_STATS,
             STAT_PER_LID_CAT=STAT_PER_LID_CAT,
             YLIM=YLIM,
             )
     
-    print(f'\n....SAVE FULL FIG')
     plt.tight_layout()
 
     if SAVE_PLOT:
-        FIG_NAME = f'PSDs_{SOURCE}_restVsMove'
+        FIG_NAME = f'{SOURCE}_{FEATURE}_restVsMove'
         if MOVESIDES_SPLITTED: FIG_NAME += 'Split'
 
         if INCL_STATS:
@@ -132,7 +140,8 @@ def prep_and_plot_restvsmove(
 def plot_moveLidSpec_PSDs(
     psd_arrs, psd_freqs, psd_subs,
     PLOT_MOVE_TYPE, SOURCE, stat_df,
-    AX=None,
+    AX=None, FEATURE: str = 'PSD',
+    STATS_VERSION: str = '4Hz',
     PLOT_ALL_SUBS: bool = False,
     INCL_STATS: bool = False,
     STAT_PER_LID_CAT: bool = True,
@@ -205,9 +214,12 @@ def plot_moveLidSpec_PSDs(
 
     # plot significancies shades (once per AX)
     if INCL_STATS and STAT_PER_LID_CAT:
+        if FEATURE == 'PSD': y_legend_gap = 60
+        else: y_legend_gap = 35
         plot_stats_categs(stat_df=stat_df, ax=AX,
-                               PLOT_MOVE_TYPE=PLOT_MOVE_TYPE,)
-
+                          PLOT_MOVE_TYPE=PLOT_MOVE_TYPE,
+                          Y_BASE=YLIM[1] - y_legend_gap, lw=5,
+                          STATS_VERSION=STATS_VERSION,)
 
     # add title (once per AX)
     src_title = SOURCE.replace('lfp', 'stn')
@@ -215,11 +227,13 @@ def plot_moveLidSpec_PSDs(
         ax_title = (f'{src_title.upper()} changes: Rest')
     else:
         ax_title = (f'{src_title.upper()} changes: Movement')
+    ax_title = ax_title.replace('STNS', 'Inter-Subthalamic')
+    ax_title = ax_title.replace('STNECOG', 'Cortico-Subthalamic')
     if PLOT_MOVE_TYPE in ['IPSI', 'CONTRA']:
-        ax_title = ax_title.replace('Movement',
-                                    f'{PLOT_MOVE_TYPE.capitalize()}lateral Movement')
-    
-    
+        ax_title = ax_title.replace(
+            'Movement',
+            f'{PLOT_MOVE_TYPE.capitalize()}lateral Movement'
+        )
     AX.set_title(ax_title, weight='bold', size=FS,)
 
 
@@ -232,20 +246,29 @@ def plot_moveLidSpec_PSDs(
     AX.set_xticks(xticks)
     AX.set_xticklabels(xlabs, fontsize=FS,)
     AX.set_ylim(YLIM)
-    AX.legend(fontsize=FS - 6, frameon=False, ncol=2,)
+    AX.legend(fontsize=FS - 6, frameon=False, ncol=2,
+              bbox_to_anchor=(.5, .99), loc='upper center')
     AX.tick_params(size=FS, labelsize=FS,)
     for s in ['right', 'top']: AX.spines[s].set_visible(False)
-    AX.text(x=xticks[len(xticks) // 2] + 2, y=-73, s='//', size=16, color='k')
+    # AX.text(x=xticks[len(xticks) // 2] + 2, y=-73, s='//', size=16, color='k')
 
     # set axis labels
+    # rf"$\bf{SOURCE_SEL.upper()}$" + " " +
     AX.set_xlabel('Frequency (Hz)', size=FS, weight='bold',)
-    AX.set_ylabel('Spectral Power\n(%-change vs Med-OFF)',
-                  size=FS, weight='bold',)
+    if FEATURE == 'PSD':
+        ylab = rf"$\bfSpectral$" + " " + rf"$\bfPower$"  # + "\n(% vs Med-OFF)"
+    elif FEATURE == 'ICOH':
+        ylab = rf"$\bfabs.$" + " " + rf"$\bfimag.$" + " " + rf"$\bfCoherence$"
+    elif FEATURE == 'SQCOH':
+        ylab = rf"$\bfsquared$" + " " + rf"$\bfCoherence$"    
+    ylab += "\n(% change vs Med-OFF)"
+    AX.set_ylabel(ylab, size=FS, )
 
 
 
 
 def prep_RestVsMove_psds(SRC, PLOT_MOVE, PSD_DICT, BASELINE,
+                         FEATURE: str = 'PSD',
                          RETURN_IDS: bool = False,
                          RETURN_STATE_ARRAYS: bool = False,
                          SPLIT_CONTRA_IPSI: bool = False,):
@@ -284,34 +307,13 @@ def prep_RestVsMove_psds(SRC, PLOT_MOVE, PSD_DICT, BASELINE,
     sources = ['lfp_left', 'lfp_right', 'ecog']
     lid_states = ['nolidbelow30', 'nolidover30', 'nolid',
                   'mildlid', 'moderatelid', 'severelid']
-    # move_axes = [f'{PLOT_MOVE}_CONTRA', f'{PLOT_MOVE}_IPSI']
     
-    # if PLOT_MOVE == 'INVOLUNT' and not MERGED_STNS:
-    #     move_axes.append('INVOLUNT_BILAT')
-    
-    # if MERGED_STNS: sources = ['lfp', 'ecog']
-
     # create dicts to store psds
-    # psd_arrs = {d: [] for d in move_axes}  # store all psds for move axes
     psd_arrs = {l: [] for l in lid_states}
 
     # store IDs parallel to psds
     if RETURN_IDS: sub_arrs = {l: [] for l in lid_states}
-    # 'lfp': {d: [] for d in move_axes},
-    # 'ecog': {d: [] for d in move_axes}}
-
-    # # replace single large lists for dicts with lid-states
-    # for s, m in product(psd_arrs.keys(), move_axes):
-    #     psd_arrs[s][m] = {f'{l}lid': [] for l in lid_states}
-    #     if RETURN_IDS: sub_arrs[s][m] = {f'{l}lid': [] for l in lid_states}
     
-    # if PLOT_MOVE == 'INVOLUNT' and MERGED_STNS:
-    #     psd_arrs = {'lfp': {f'{l}lid': [] for l in lid_states},
-    #                 'ecog': {f'{l}lid': [] for l in lid_states}}
-    #     if RETURN_IDS:
-    #         sub_arrs['lfp'] = {f'{l}lid': [] for l in lid_states}
-    #         sub_arrs['ecog'] = {f'{l}lid': [] for l in lid_states}
-
     # categorize, average, baseline-corr all conditions
     for MOVE, cond in product(ATTR_CODE, PSD_DICT.keys()):
         print(f'\n\t- {MOVE}, {cond} ({SRC})')
@@ -320,11 +322,12 @@ def prep_RestVsMove_psds(SRC, PLOT_MOVE, PSD_DICT, BASELINE,
         for attr in vars(PSD_DICT[cond]).keys():
             # skip irelevant attr
             if not MOVE.lower() in attr.lower() or SRC not in attr: continue
-            # print(f'...selected attr for {PLOT_MOVE}: {attr}')
+            print(f'...selected attr for {PLOT_MOVE}: {attr}')
             
             # define SUB
-            if 'lfp' in SRC: sub = attr.split('_')[2]  # exclude lfp side
-            elif SRC == 'ecog': sub = attr.split('_')[1]  # exclude lfp side
+            if 'lfp' in SRC: sub = attr.split('_')[2]  # exclude lfp side PSD
+            elif SRC == 'ecog': sub = attr.split('_')[1]  # exclude lfp side PSD
+            else: sub = attr.split('_')[1]  # extract sub from Coherences
             if not sub.startswith('0') and not sub.startswith('1'): continue
 
             # define EPHYS-side
@@ -332,7 +335,7 @@ def prep_RestVsMove_psds(SRC, PLOT_MOVE, PSD_DICT, BASELINE,
             elif 'ecog' in attr: EPHYS_SIDE = PSD_DICT[cond].ecog_sides[sub]
 
             # for contra/ ipsi, split movements (not for REST and ALLMOVE)
-            if MOVE_SPLIT != 'ALL':
+            if MOVE_SPLIT != 'ALL' and FEATURE == 'PSD':
                 if any(['tapleft' in attr, 'leftonly' in attr]):
                     MOVE_SIDE = 'left'
                 elif any(['tapright' in attr, 'rightonly' in attr]):
@@ -353,7 +356,9 @@ def prep_RestVsMove_psds(SRC, PLOT_MOVE, PSD_DICT, BASELINE,
             
             try:
                 if SRC == 'ecog': bl_attr = f'ecog_{sub}_baseline'
-                else: bl_attr = f'lfp_{EPHYS_SIDE}_{sub}_baseline'
+                elif SRC == 'lfp': bl_attr = f'lfp_{EPHYS_SIDE}_{sub}_baseline'
+                else: bl_attr = f'{SRC}_{sub}_baseline'
+
                 bl = getattr(BASELINE, bl_attr)
                 if len(bl.shape) == 2: bl = bl.mean(axis=0)
             except:
@@ -362,10 +367,6 @@ def prep_RestVsMove_psds(SRC, PLOT_MOVE, PSD_DICT, BASELINE,
 
             temp_psd = ((temp_psd - bl) / bl) * 100
             if RETURN_STATE_ARRAYS: print(f'...arr shape {attr}: {temp_psd.shape}')
-
-            # # if SPLITTED MOVE, SELECT IPSICONTRA
-            # if not 'rest' in 'attr':
-
 
             # include LID-state:
             temp_lid = attr.split('_')[-1]
@@ -389,11 +390,10 @@ def prep_RestVsMove_psds(SRC, PLOT_MOVE, PSD_DICT, BASELINE,
 
 
 def get_restMove_stats(
-    SOURCE, MOVE_TYPE,
+    SOURCE, MOVE_TYPE, FEATURE,
     epoch_values, epoch_ids, epoch_freqs,
     STAT_BL_epochs,
     STAT_BL_subs,
-    REST_u30_BASE: bool = True,
     STATS_VERSION='2Hz',
     STAT_LID_COMPARE='categs',
     ALPHA=.01,
@@ -408,8 +408,10 @@ def get_restMove_stats(
                                ALPHA=ALPHA,)
     
     # define naming of stats file
-    dfname = f'restVsMove_1secWins_{MOVE_TYPE.upper()}_{SOURCE}.csv'  # mov is source
-    
+    dfname = f'restVsMove_1secWins_{MOVE_TYPE.upper()}_{SOURCE.lower()}.csv'  # mov is source
+    if FEATURE.lower() != 'psd':
+        dfname = dfname.replace('.csv', f'_{FEATURE.lower()}.csv')
+
     if REST_u30_BASELINE:
         dfname = 'u30_' + dfname
 
@@ -468,19 +470,18 @@ def get_restMove_stats(
     
         # CALCULATE LMM COEFFS and SIGN
         # get STATS (coeffs, sign-bools) based on grouped data
-        skip_f = False
-        for i_f, f in enumerate(epoch_freqs):
-            if skip_f:
-                skip_f = False
-                continue
-            if epoch_freqs[i_f + 1] == f + 1:
-                f_values = np.mean(stat_values[i][:, i_f:i_f + 2], axis=1)
-                skip_f = True
-                n_freqs = 2
-            else:
-                f_values = stat_values[i][:, i_f]
-                n_freqs = 1
-
+        if STATS_VERSION == '2Hz': f_hop = 2
+        elif STATS_VERSION == '4Hz': f_hop = 4
+        
+        start_fs = np.concatenate(
+            [np.arange(4, 35, f_hop), np.arange(60, 90, f_hop)]
+        )
+        MULTI_COMP_N = 0
+        for f in start_fs:
+            MULTI_COMP_N += 1
+            f_sel = np.logical_and(epoch_freqs >= f,
+                                   epoch_freqs < (f + f_hop))
+            f_values = np.mean(stat_values[i][:, f_sel], axis=1)
             (coeff, pval) = run_mixEff_wGroups(
                 dep_var=f_values,
                 indep_var=stat_labels[i],
@@ -488,8 +489,13 @@ def get_restMove_stats(
                 TO_ZSCORE=False,
             )
             # add to lists
-            stat_coefs.extend([coeff] * n_freqs)
-            stat_pvals.extend([pval] * n_freqs)
+            stat_coefs.extend([coeff] * sum(f_sel))  # add for n involved freqs
+            stat_pvals.extend([pval] * sum(f_sel))
+            print(f'...added {f} - {f + f_hop} Hz (n={sum(f_sel)})')
+        assert len(stat_pvals) == len(epoch_freqs), (
+            f'n pvalues mismatch with n freqs ({len(stat_pvals), len(epoch_freqs)})'
+        )
+        print(f'SUCCESSFUL STAT ADDING, N multi-comp: {MULTI_COMP_N}')
         
         # add all freqs to df
         stat_df[f'{lidlabels[i]}_u30_coef'] = stat_coefs
@@ -503,13 +509,14 @@ def get_restMove_stats(
 def plot_stats_categs(
     stat_df, ax, PLOT_MOVE_TYPE,
     lw=8, ALPHA=.01, basegroup: str = 'u30',
-    STAT_BINS_HZ: int = 2,
+    STATS_VERSION: str = '4Hz', Y_BASE: int = 150,
 ):
-    ALPHA /= (stat_df.shape[0] / STAT_BINS_HZ)
+    if STATS_VERSION == '4Hz': N_MULTI_COMP = 16
+    elif STATS_VERSION == '2Hz': N_MULTI_COMP = 32
+    ALPHA /= N_MULTI_COMP
     print(f'multi-comparison corrected ALPHA = {ALPHA}')
     # get groups
     lid_cats = np.unique([k.split('_')[0] for k in stat_df.keys()])
-    Y_BASE = 150
     lid_cats_sort = [c for c in cond_colors.keys() if c in lid_cats]
 
     for i_cat, cat in enumerate(lid_cats_sort):  # loop over CATEGs to show

@@ -62,10 +62,13 @@ def get_allSpecStates_Psds(
     incl_tap: bool = True,
     incl_lidmove: bool = True,
     incl_free: bool = True,
+    ONLY_CREATE: bool = False,
     verbose: bool = False,
 ):
     """
-    
+    Arguments:
+        - FEATURE: from 'POWER', 'COH_STNs', 'COH_STNECOG'
+        - COH_TYPE: ICOH / SQCOH
     Returns:
         - PSDs: dict with all conditions
         - BLs: baseline class
@@ -111,7 +114,8 @@ def get_allSpecStates_Psds(
         RETURN_PSD_1sec=RETURN_PSD_1sec,
         verbose=verbose,
     )
-
+    if ONLY_CREATE: return
+    
     PSDs = {
         cond: get_selectedEphys(
             FEATURE=FEATURE,
@@ -203,6 +207,8 @@ class get_selectedEphys:
                 'selected_COH_states'
             )
 
+        # set epoch length to be given into calclulate coherence
+        COH_epoch = 5  # in seconds
 
         ### INCLUDE FREE
         if self.EXTRACT_FREE:
@@ -357,6 +363,7 @@ class get_selectedEphys:
                                 ephys_arr1=tempsig1,
                                 ephys_arr2=tempsig2,
                                 sfreq=sub_class.fs,
+                                PSD_WIN_sec=COH_epoch,
                                 SETTINGS=self.SETTINGS,
                                 band_names=sub_class.band_names,
                                 RETURN_PSD_1sec=self.RETURN_PSD_1sec,
@@ -417,6 +424,7 @@ class get_selectedEphys:
                                     ephys_arr1=tempsig1,
                                     ephys_arr2=tempsig2,
                                     sfreq=sub_class.fs,
+                                    PSD_WIN_sec=COH_epoch,
                                     SETTINGS=self.SETTINGS,
                                     band_names=sub_class.band_names,
                                     RETURN_PSD_1sec=self.RETURN_PSD_1sec,
@@ -424,12 +432,12 @@ class get_selectedEphys:
                                 if len(sqcoh_temp) == 0: continue  # array shorter than 1 second
                                 np.save(os.path.join(states_picklepath,
                                                     f'{sub}_{self.FEATURE}_rest_nolid{time_code}'
-                                                    f'{tempsig1.shape[0]}samples_sqCOH.npy'),
+                                                    f'_{tempsig1.shape[0]}samples_sqCOH.npy'),
                                         sqcoh_temp, allow_pickle=True)
                                 # setattr(self, f'{src}_{sub}_rest_nolid{time_code}_sqcoh', sqcoh_temp)
                                 np.save(os.path.join(states_picklepath,
                                                     f'{sub}_{self.FEATURE}_rest_nolid{time_code}'
-                                                    f'{tempsig1.shape[0]}samples_iCOH.npy'),
+                                                    f'_{tempsig1.shape[0]}samples_iCOH.npy'),
                                         icoh_temp, allow_pickle=True)
                                 # setattr(self, f'{src}_{sub}_rest_nolid{time_code}_icoh', icoh_temp)
                                 SIG1[time_code], SIG2[time_code] = False, False
@@ -483,6 +491,7 @@ class get_selectedEphys:
                                     ephys_arr1=tempsig1,
                                     ephys_arr2=tempsig2,
                                     sfreq=sub_class.fs,
+                                    PSD_WIN_sec=COH_epoch,
                                     SETTINGS=self.SETTINGS,
                                     band_names=sub_class.band_names,
                                     RETURN_PSD_1sec=self.RETURN_PSD_1sec,
@@ -490,12 +499,12 @@ class get_selectedEphys:
                                 if len(sqcoh_temp) == 0: continue  # array shorter than 1 second
                                 np.save(os.path.join(states_picklepath,
                                                     f'{sub}_{self.FEATURE}_dyskRest_{lid_code}lid'
-                                                    f'{tempsig1.shape[0]}samples_sqCOH.npy'),
+                                                    f'_{tempsig1.shape[0]}samples_sqCOH.npy'),
                                         sqcoh_temp, allow_pickle=True)
                                 # setattr(self, f'{src}_{sub}_dyskRest_{lid_code}lid_sqcoh', sqcoh_temp)
                                 np.save(os.path.join(states_picklepath,
                                                     f'{sub}_{self.FEATURE}_dyskRest_{lid_code}lid'
-                                                    f'{tempsig1.shape[0]}samples_iCOH.npy'),
+                                                    f'_{tempsig1.shape[0]}samples_iCOH.npy'),
                                         icoh_temp, allow_pickle=True)
                                 # setattr(self, f'{src}_{sub}_dyskRest_{lid_code}lid_icoh', icoh_temp)
                                 SIG1[f'rest_{lid_code}'], SIG2[f'rest_{lid_code}'] = False, False     
@@ -578,6 +587,7 @@ class get_selectedEphys:
                                         ephys_arr1=tempsig1,
                                         ephys_arr2=tempsig2,
                                         sfreq=sub_class.fs,
+                                        PSD_WIN_sec=COH_epoch,
                                         SETTINGS=self.SETTINGS,
                                         band_names=sub_class.band_names,
                                         RETURN_PSD_1sec=self.RETURN_PSD_1sec,
@@ -585,12 +595,12 @@ class get_selectedEphys:
                                     if len(sqcoh_temp) == 0: continue  # array shorter than 1 second
                                     np.save(os.path.join(states_picklepath,
                                                         f'{sub}_{self.FEATURE}_dyskmove{move_code}_{lid_code}lid'
-                                                        f'{tempsig1.shape[0]}samples_sqCOH.npy'),
+                                                        f'_{tempsig1.shape[0]}samples_sqCOH.npy'),
                                             sqcoh_temp, allow_pickle=True)
                                     # setattr(self, f'{src}_{sub}_dyskmove{move_code}_{lid_code}lid_sqcoh', psdtemp)
                                     np.save(os.path.join(states_picklepath,
                                                         f'{sub}_{self.FEATURE}_dyskmove{move_code}_{lid_code}lid'
-                                                        f'{tempsig1.shape[0]}samples_iCOH.npy'),
+                                                        f'_{tempsig1.shape[0]}samples_iCOH.npy'),
                                             icoh_temp, allow_pickle=True)
                                     # setattr(self, f'{src}_{sub}_dyskmove_{lid_code}lid_icoh', psdtemp)
                                     (SIG1[f'dysk_{move_code}_{lid_code}'],
@@ -641,6 +651,7 @@ class get_selectedEphys:
                                     ephys_arr1=tempsig1,
                                     ephys_arr2=tempsig2,
                                     sfreq=sub_class.fs,
+                                    PSD_WIN_sec=COH_epoch,
                                     SETTINGS=self.SETTINGS,
                                     band_names=sub_class.band_names,
                                     RETURN_PSD_1sec=self.RETURN_PSD_1sec,
@@ -648,12 +659,12 @@ class get_selectedEphys:
                                 if len(sqcoh_temp) == 0: continue  # array shorter than 1 second
                                 np.save(os.path.join(states_picklepath,
                                                     f'{sub}_{self.FEATURE}_tap{tap_side}_noLid'
-                                                    f'{tempsig1.shape[0]}samples_sqCOH.npy'),
+                                                    f'_{tempsig1.shape[0]}samples_sqCOH.npy'),
                                         sqcoh_temp, allow_pickle=True)
                                 # setattr(self, f'{src}_{sub}_dyskmove{move_code}_{lid_code}lid_sqcoh', psdtemp)
                                 np.save(os.path.join(states_picklepath,
                                                     f'{sub}_{self.FEATURE}_tap{tap_side}_noLid'
-                                                    f'{tempsig1.shape[0]}samples_iCOH.npy'),
+                                                    f'_{tempsig1.shape[0]}samples_iCOH.npy'),
                                         icoh_temp, allow_pickle=True)
                                 # setattr(self, f'{src}_{sub}_dyskmove_{lid_code}lid_icoh', psdtemp)
                                 (SIG1[f'tap{tap_side}_nolid'],
@@ -703,6 +714,7 @@ class get_selectedEphys:
                                         ephys_arr1=tempsig1,
                                         ephys_arr2=tempsig2,
                                         sfreq=sub_class.fs,
+                                        PSD_WIN_sec=COH_epoch,
                                         SETTINGS=self.SETTINGS,
                                         band_names=sub_class.band_names,
                                         RETURN_PSD_1sec=self.RETURN_PSD_1sec,
@@ -710,12 +722,12 @@ class get_selectedEphys:
                                     if len(sqcoh_temp) == 0: continue  # array shorter than 1 second
                                     np.save(os.path.join(states_picklepath,
                                                         f'{sub}_{self.FEATURE}_tap{tap_side}_{lid_code}lid'
-                                                        f'{tempsig1.shape[0]}samples_sqCOH.npy'),
+                                                        f'_{tempsig1.shape[0]}samples_sqCOH.npy'),
                                             sqcoh_temp, allow_pickle=True)
                                     # setattr(self, f'{src}_{sub}_dyskmove{move_code}_{lid_code}lid_sqcoh', psdtemp)
                                     np.save(os.path.join(states_picklepath,
                                                         f'{sub}_{self.FEATURE}_tap{tap_side}_{lid_code}lid'
-                                                        f'{tempsig1.shape[0]}samples_iCOH.npy'),
+                                                        f'_{tempsig1.shape[0]}samples_iCOH.npy'),
                                             icoh_temp, allow_pickle=True)
                                     # setattr(self, f'{src}_{sub}_dyskmove_{lid_code}lid_icoh', psdtemp)
                                     (SIG1[f'tap{tap_side}_{lid_code}'],
@@ -778,8 +790,9 @@ class get_selectedEphys:
 
             # ADD SPECIFIC STATE AFTER CREATION
             LOADED_BOOL, sub_state_tups = load_sub_states(
-                self.STATE_SEL, sub, states_picklepath,
-                FEATURE=self.FEATURE,
+                state=self.STATE_SEL, sub=sub,
+                pickled_state_path=states_picklepath,
+                FEATURE=self.FEATURE, COH_TYPE=self.COH_TYPE,
             )
             if LOADED_BOOL:
                 # if succesful, list contains tuples with source, array
@@ -971,7 +984,7 @@ def load_sub_states(state, sub, pickled_state_path,
     if 'COH' in FEATURE:
         sub_state_files = [f for f in sub_state_files
                            if FEATURE.lower() in f.lower()]
-        assert COH_TYPE.lower() in ['icoh', 'sqcoh'], 'incorrect COH_TYPE'
+        assert COH_TYPE.lower() in ['icoh', 'sqcoh'], f'incorrect COH_TYPE ({COH_TYPE})'
 
     if verbose: print(f'for ({sub}, {state}) selected: {sub_state_files}')
     
@@ -1025,14 +1038,13 @@ def load_sub_states(state, sub, pickled_state_path,
 
 if __name__ == '__main__':
     
-    COH_FT = 'COH_STNs'  # 'COH_STNECOG',
-    for COH_TYPE in ['sqcoh', 'icoh']: 
-        (
-            PSDs_1s, BLs_1s
-        ) = get_allSpecStates_Psds(
-            FEATURE=COH_FT,
+    for COH_SRC in ['COH_STNECOG', 'COH_STNs', ]:
+        COH_TYPE = 'SQCOH'  # not relevant to create
+        get_allSpecStates_Psds(
+            FEATURE=COH_SRC,
             COH_TYPE=COH_TYPE,
             RETURN_PSD_1sec=True,
             incl_free=False,
+            ONLY_CREATE=True,
             verbose=False,
         )

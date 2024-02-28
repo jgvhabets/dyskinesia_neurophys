@@ -398,7 +398,8 @@ def get_ssd_coh_from_array(
         new_sqcoh = np.array([np.nan] * len(new_f))
         new_icoh = np.array([np.nan] * len(new_f))
     elif RETURN_PSD_1sec:
-        n_wins = ephys_arr1.shape[0] // sfreq  # number of a sec windows fitting in data
+        win_samples = sfreq * PSD_WIN_sec
+        n_wins = ephys_arr1.shape[0] // win_samples  # number of a sec windows fitting in data
         new_sqcoh = np.array([[np.nan] * len(new_f)] * n_wins)
         new_icoh = np.array([[np.nan] * len(new_f)] * n_wins)
 
@@ -413,34 +414,34 @@ def get_ssd_coh_from_array(
 
         if RETURN_PSD_1sec:
             # reshape in 2d array with 1 sec windows
-            sig1 = sig1[:sfreq * n_wins]
-            sig2 = sig2[:sfreq * n_wins]
+            sig1 = sig1[:win_samples * n_wins]
+            sig2 = sig2[:win_samples * n_wins]
             try:
-                sig1 = sig1.reshape((n_wins, sfreq))
-                sig2 = sig2.reshape((n_wins, sfreq))
+                sig1 = sig1.reshape((n_wins, win_samples))
+                sig2 = sig2.reshape((n_wins, win_samples))
             except ValueError:
                 # if one sample short this can happen (trxy with one window less)
                 n_wins -= 1
                 for sig in [sig1, sig2]:
-                    sig = sig[:sfreq * n_wins]
-                    sig = sig.reshape((n_wins, sfreq))
+                    sig = sig[:win_samples * n_wins]
+                    sig = sig.reshape((n_wins, win_samples))
                 new_sqcoh = new_sqcoh[:n_wins, :]
                 new_icoh = new_icoh[:n_wins, :]
 
             # if no data left
             if sig1.shape[0] == 0 or sig2.shape[0] == 0:
                 return [], [], []
-
+            # if only one epoch
             elif len(sig1.shape) == 1 or len(sig2.shape) == 1:
                 freqs, _, icoh, _, sqcoh = calc_coherence(
                     sig1=sig1, sig2=sig2, fs=sfreq,
-                    nperseg=sfreq * PSD_WIN_sec,
+                    nperseg=sfreq,
                 )
                 icoh = np.atleast_2d(icoh)
                 sqcoh = np.atleast_2d(sqcoh)
                 if icoh.shape[0] > icoh.shape[1]: icoh = icoh.T
                 if sqcoh.shape[0] > sqcoh.shape[1]: sqcoh = sqcoh.T
-            
+            # if multiple epochs in array
             else:
                 icoh_list, coh_list = [], []
 
@@ -448,13 +449,14 @@ def get_ssd_coh_from_array(
                 for s1, s2 in zip(sig1, sig2):
                     freqs, _, icoh, _, sqcoh = calc_coherence(
                         sig1=s1, sig2=s2, fs=sfreq,
-                        nperseg=sfreq * PSD_WIN_sec,
+                        nperseg=sfreq,
                     )
                     icoh_list.append(icoh)
                     coh_list.append(sqcoh)
                 icoh = np.array(icoh_list)
                 sqcoh = np.array(coh_list)
-
+        
+        # do not return single epochs
         else:        
             # calculate Coherences
             freqs, _, icoh, _, sqcoh = calc_coherence(

@@ -174,13 +174,15 @@ def calc_coherence(
     # calculate coherencies (Nolte ea 2004)
     coherency = S_xy / np.sqrt(S_xx * S_yy)
 
-    coh = coherency.real  # take real part for coherence
-    sq_coh = S_xy.real**2 / (S_xx * S_yy)  # squared coherence, used by Gilron 2021
+    # coh = coherency.copy().real  # take real part for coherence
+    coh = None
+    sq_coh = np.abs(S_xy)**2 / (S_xx * S_yy)  # squared coherence, used by Gilron 2021
     icoh = np.imag(coherency)  # take imaginary (pos and neg)
-    abs_icoh = abs(icoh)  # take absolute value
+    abs_icoh = np.abs(icoh)  # take absolute value
+    # abs_icoh[abs_icoh < 0] = abs_icoh[abs_icoh < 0] * -1
 
     # get rid of 3rd dimensionality
-    if len(coh.shape) == 3: coh = coh[:, 0, :]
+    # if len(coh.shape) == 3: coh = coh[:, 0, :]
     if len(icoh.shape) == 3: icoh = icoh[:, 0, :]
     if len(abs_icoh.shape) == 3: abs_icoh = abs_icoh[:, 0, :]
     if len(sq_coh.shape) == 3: sq_coh = sq_coh[:, 0, :]
