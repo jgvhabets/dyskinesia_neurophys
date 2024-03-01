@@ -53,21 +53,38 @@ def prep_and_plot_restvsmove(
         raise ValueError('FEATURE should be PSD / ICOH / SQCOH')
     
     # prep figure
-    n_cols = 2
-    if MOVESIDES_SPLITTED: n_cols += 1
+    n_rows, n_cols = 1, 2
+    kw_params = {'sharey': 'row'}
+    if MOVESIDES_SPLITTED == True:
+        n_cols += 1
+    
+    elif MOVESIDES_SPLITTED == '4panel':
+        n_cols, n_rows = 2, 2
+        kw_params['sharex'] = 'col'
+
+    
     if FEATURE == 'PSD': YLIM = (-60, 175)
     else: YLIM = (-50, 100)
 
-    fig, axes = plt.subplots(1, n_cols, figsize=(6*n_cols, 4),
-                             sharey='row',)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols,
+                                                      4*n_rows),
+                             **kw_params)
+    
+    if MOVESIDES_SPLITTED == '4panel':
+        axes = axes.flatten()
     
     for i_ax, ax in enumerate(axes):
         # define correct prep function
         if i_ax == 0: PLOT_MOVE = 'REST'
         
-        elif MOVESIDES_SPLITTED and i_ax == 1: PLOT_MOVE = 'CONTRA'
+        elif MOVESIDES_SPLITTED == True and i_ax == 1: PLOT_MOVE = 'CONTRA'
 
-        elif MOVESIDES_SPLITTED and i_ax == 2: PLOT_MOVE = 'IPSI'
+        elif MOVESIDES_SPLITTED == True and i_ax == 2: PLOT_MOVE = 'IPSI'
+
+        elif MOVESIDES_SPLITTED == '4panel':
+            if i_ax == 1: PLOT_MOVE = 'ALLMOVE'
+            if i_ax == 2: PLOT_MOVE = 'CONTRA'
+            if i_ax == 3: PLOT_MOVE = 'IPSI'
 
         else: PLOT_MOVE = 'ALLMOVE'
    
@@ -113,12 +130,17 @@ def prep_and_plot_restvsmove(
             STAT_PER_LID_CAT=STAT_PER_LID_CAT,
             YLIM=YLIM,
             )
+        if MOVESIDES_SPLITTED == '4panel' and i_ax in [1, 3]:
+            y_ax = ax.axes.get_yaxis()
+            ylab = y_ax.get_label()
+            ylab.set_visible(False)
     
     plt.tight_layout()
 
     if SAVE_PLOT:
         FIG_NAME = f'{SOURCE}_{FEATURE}_restVsMove'
-        if MOVESIDES_SPLITTED: FIG_NAME += 'Split'
+        if MOVESIDES_SPLITTED == True: FIG_NAME += 'Split'
+        elif MOVESIDES_SPLITTED == '4panel': FIG_NAME += '4Panel'
 
         if INCL_STATS:
             FIG_NAME += f'_stats{STAT_LID_COMPARE}'

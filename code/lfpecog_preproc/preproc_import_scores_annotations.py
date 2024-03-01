@@ -16,6 +16,27 @@ import traces
 # Import own functions
 from utils.utils_fileManagement import get_onedrive_path, get_project_path
 
+
+def get_info_xcl(med_info: bool = False,
+                 n_subs=21):
+
+    if not med_info: sheet = 'recording_info'
+    elif med_info: sheet = 'med_info'
+
+    data_path = get_onedrive_path('data')
+    f = 'recording_mainfile.xlsx'
+
+    xldat = read_excel(os.path.join(data_path, f),
+                      sheet_name=sheet,)
+    
+    nan_rows = np.all(isna(xldat), axis=1)
+    xldat = xldat[~nan_rows]
+    xldat = xldat.iloc[:21]
+
+
+    return xldat
+
+
 def run_import_clinInfo(
     sub: str,
     return_CDRS: bool = True,
