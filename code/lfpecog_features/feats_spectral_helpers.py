@@ -6,6 +6,50 @@ data
 
 # Import public packages and functions
 import numpy as np
+from pandas import read_excel
+from os.path import join
+
+from utils.utils_fileManagement import get_project_path
+
+
+def get_indiv_band_peaks(SRC='lfp'):
+    # save indiv peak data frame as excel for readable output
+    df = read_excel(join(
+        get_project_path('results'),
+                         'features', 'SSD_feats_broad_v6', 'v4.0',
+                         f'indiv_peak_df_{SRC}.xlsx'
+    ), index_col=0,)
+    
+    return df
+
+
+def peak_shift_gamma(
+    gamma_peak, f_arr, value_arr
+):
+    # define shift
+    fshift = 75 - gamma_peak
+
+    # blank irrelevant freqs
+    nansel = [f >= 35 and f < 60 for f in f_arr]
+    value_arr[nansel] = [np.nan] * sum(nansel)
+    newvalues = value_arr.copy()
+
+    # gamma select and blank all new gamma values
+    f_sel = [f >= 60 and f <= 90 for f in f_arr]
+    newvalues[f_sel] = [np.nan] * sum(f_sel)
+
+    # loop over all original gamma freqs and values
+    for og_f, og_p in zip(f_arr[f_sel], value_arr[f_sel]):
+        # calculate new imaginary freqs
+        new_f = og_f + fshift
+        if np.logical_and(new_f >= 60, new_f < 90):
+            # if new freq is within gamma range to visualize
+            i_new = np.where(f_arr == new_f)[0][0]
+            # assign orig freq-value to new-freq index
+            newvalues[i_new] = og_p
+    
+    return newvalues
+
 
 def resample_spectral_freqs(
     psd, freqs, newBinWidth, method: str = 'mean'

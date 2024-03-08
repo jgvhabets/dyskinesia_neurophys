@@ -766,7 +766,7 @@ def plot_STN_PSD_vs_LID(
     ### PLOTTING PART
     if LAT_or_SCALE == 'LAT_UNI':
         plot_unilateral_LID(plt_ax_to_return=plt_ax_to_return,
-                            datatype='STN',
+                            datatype='ECOG',
                             psds_to_plot=psds_to_plot,
                             tf_freqs=tf_freqs,
                             n_uni_subs=n_uni_subs,
@@ -986,7 +986,7 @@ def plot_scaling_LID(
                 # one significance shade for all severities
                 if SHOW_SIGN:
                     print(f'SHOW SIGN part in plotting, ps: {ps}')
-                    print(f'length ps = {len(ps)}, 68 freqs?' ({[(p, type(p)) for p in ps]}))
+                    print(f'length ps = {len(ps)}, 68 freqs? ({[(p, type(p)) for p in ps]})')
                     sig_mask = np.array(ps) < (.05 / 68)  # 68 freqs compared
                     loop_ax.fill_between(x=x_axis, y1=-50, y2=100,
                                          alpha=.05, color=colors[-1],
@@ -1190,12 +1190,15 @@ def break_x_axis_psds_ticks(tf_freqs, PSD, PSD_sd=False,
         - xticks: x-array for plotting
         - corr labels for ticks
     """
-    if isinstance(PSD[0], int): PSD = PSD.astype(float)
     
     del_sel = np.logical_and(tf_freqs > x_break[0],
                              tf_freqs < x_break[1])
 
-    if isinstance(PSD, list): PSD = np.array(PSD)
+    if isinstance(PSD, list):
+        PSD = np.array(PSD)
+
+    if isinstance(PSD, np.ndarray):
+        if isinstance(PSD[0], int): PSD = PSD.astype(float)
 
     if isinstance(PSD, dict):
         del_sel = np.logical_or(del_sel, np.isnan(PSD['mean']))
@@ -1247,9 +1250,10 @@ def break_x_axis_psds_ticks(tf_freqs, PSD, PSD_sd=False,
     xlabels[len(xlabels) - len(high_ticks):] = high_ticks
 
     # correct missing NaNs (necessary during sign True/False arras)
-    if not np.isnan(PSD).any():
-        for i, lab in enumerate(xlabels):
-            if lab == '' and PSD[i] == True: PSD[i] = False
+    if isinstance(PSD, np.ndarray):
+        if not any(isna(PSD)):
+            for i, lab in enumerate(xlabels):
+                if lab == '' and PSD[i] == True: PSD[i] = False
 
     if isinstance(PSD, dict): return PSD, xticks, xlabels
     elif isinstance(PSD, np.ndarray):

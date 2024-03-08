@@ -869,9 +869,16 @@ def get_clean2d(data3d, times=None):
 
 if __name__ == '__main__':
     # CREATE FEATURE FILES
-    for MOV_SEL in ['INDEP', 'DEPEND']:
-        # loading/ creating/ saving in ssdFeats script
-        _, _, _, _ = get_moveSpec_predArrays(
-            MOV_SEL=MOV_SEL, LOAD_SOURCES=['STN',],
-            POWER_METHOD='ENV',
+    # for MOV_SEL in ['INDEP', 'DEPEND']:
+    #     # loading/ creating/ saving in ssdFeats script
+    #     _, _, _, _ = get_moveSpec_predArrays(
+    #         MOV_SEL=MOV_SEL, LOAD_SOURCES=['STN',],
+    #         POWER_METHOD='ENV',
+    #     )
+
+    _, _, _, _ = get_moveSpec_predArrays(
+            MOV_SEL='ALL', LOAD_SOURCES=['STN', 'ECOG', 'CONN'],
+            INCL_ECOG=True,
+            POWER_METHOD='welch',
+            FT_VERSION='v8',
         )

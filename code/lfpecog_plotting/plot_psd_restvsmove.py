@@ -19,7 +19,9 @@ from lfpecog_analysis.prep_stats_movLidspecPsd import (
     get_REST_stat_grouped_data
 )
 from lfpecog_analysis.psd_lid_stats import calc_lmem_freqCoeffs, run_mixEff_wGroups
-
+from lfpecog_features.feats_spectral_helpers import (
+    get_indiv_band_peaks, peak_shift_gamma
+)
 
 cond_colors = {
     'nolid': 'green',
@@ -33,6 +35,7 @@ cond_colors = {
 def prep_and_plot_restvsmove(
     PSD_DICT, BASELINE, SOURCE,
     FEATURE: str = 'PSD',
+    BASE_METHOD: str = 'OFF_perc_change',
     MOVESIDES_SPLITTED: bool = False,
     SAVE_PLOT: bool = False,
     SHOW_PLOT: bool = True,
@@ -42,6 +45,10 @@ def prep_and_plot_restvsmove(
     REST_u30_BASELINE: bool = True,
     STATS_VERSION: str = '2Hz',
     STAT_LID_COMPARE: str = 'categs',
+    MIN_SUBS_FOR_MEAN: int = 0,
+    SMOOTH_WIN: int = 0,
+    PEAK_SHIFT_GAMMA: bool = False,
+    PLOT_ALL_LINES: bool = False,
     ADD_TO_FIG_NAME = False,
 ):
     # check feature and source input
@@ -58,24 +65,29 @@ def prep_and_plot_restvsmove(
     if MOVESIDES_SPLITTED == True:
         n_cols += 1
     
-    elif MOVESIDES_SPLITTED == '4panel':
+    elif MOVESIDES_SPLITTED in ['4panel', 'StnEcog4']:
         n_cols, n_rows = 2, 2
         kw_params['sharex'] = 'col'
 
     
     if FEATURE == 'PSD': YLIM = (-60, 175)
     else: YLIM = (-50, 100)
+    if BASE_METHOD == 'perc_spectral': YLIM = (0, 30)
+    elif BASE_METHOD == 'OFF_zscore': YLIM = (-.75, 1.25)
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols,
                                                       4*n_rows),
                              **kw_params)
     
-    if MOVESIDES_SPLITTED == '4panel':
+    if MOVESIDES_SPLITTED in ['4panel', 'StnEcog4']:
         axes = axes.flatten()
     
     for i_ax, ax in enumerate(axes):
         # define correct prep function
-        if i_ax == 0: PLOT_MOVE = 'REST'
+        if i_ax == 0:
+            PLOT_MOVE = 'REST'
+            if MOVESIDES_SPLITTED == 'StnEcog4':
+                SOURCE = 'lfp'
         
         elif MOVESIDES_SPLITTED == True and i_ax == 1: PLOT_MOVE = 'CONTRA'
 
@@ -85,16 +97,28 @@ def prep_and_plot_restvsmove(
             if i_ax == 1: PLOT_MOVE = 'ALLMOVE'
             if i_ax == 2: PLOT_MOVE = 'CONTRA'
             if i_ax == 3: PLOT_MOVE = 'IPSI'
+        
+        elif MOVESIDES_SPLITTED == 'StnEcog4':
+            if i_ax == 1:
+                SOURCE = 'lfp'
+                PLOT_MOVE = 'ALLMOVE'
+            if i_ax == 2:
+                SOURCE = 'ecog'
+                PLOT_MOVE = 'REST'
+            if i_ax == 3:
+                SOURCE = 'ecog'
+                PLOT_MOVE = 'ALLMOVE'
 
         else: PLOT_MOVE = 'ALLMOVE'
    
         # execute prep function
-        print(f'\n\n###### PREP {PLOT_MOVE}, {SOURCE}')
+        print(f'\n\n###### (ax={i_ax}) PREP {PLOT_MOVE}, {SOURCE}')
         psd_arrs, psd_freqs, psd_subs = prep_RestVsMove_psds(
             SRC=SOURCE, FEATURE=FEATURE,
             PLOT_MOVE=PLOT_MOVE,
             PSD_DICT=PSD_DICT,
             BASELINE=BASELINE,
+            BASE_METHOD=BASE_METHOD,
             SPLIT_CONTRA_IPSI=False,
             RETURN_IDS=True,
         )
@@ -128,9 +152,13 @@ def prep_and_plot_restvsmove(
             stat_df=stat_df,
             INCL_STATS=INCL_STATS,
             STAT_PER_LID_CAT=STAT_PER_LID_CAT,
+            PLOT_ALL_SUBS=PLOT_ALL_LINES,
+            MIN_SUBS_FOR_MEAN=MIN_SUBS_FOR_MEAN,
+            SMOOTH_WIN=SMOOTH_WIN,
+            PEAK_SHIFT_GAMMA=PEAK_SHIFT_GAMMA,
             YLIM=YLIM,
             )
-        if MOVESIDES_SPLITTED == '4panel' and i_ax in [1, 3]:
+        if MOVESIDES_SPLITTED in ['4panel', 'StnEcog4'] and i_ax in [1, 3]:
             y_ax = ax.axes.get_yaxis()
             ylab = y_ax.get_label()
             ylab.set_visible(False)
@@ -159,24 +187,80 @@ def prep_and_plot_restvsmove(
     else: plt.close()
 
 
+def smooth_broken_psd(x_freqs, y_psd,
+                      incl_ranges=[[4, 35], [60, 90]],
+                      SMOOTH_BIN=2):
+    # n neighbours to include n_bin
+    n_bin = SMOOTH_BIN - 1
+
+    new_y, new_x = [], []
+
+    for i_f, (f, y) in enumerate(zip(x_freqs, y_psd)):
+        # check bin within range
+        if (i_f + SMOOTH_BIN) > len(x_freqs): continue
+        # if full bin is within ranges
+        if any(
+            [np.logical_and(
+                f >= r[0] and (x_freqs[i_f + n_bin]) >= r[0],
+                f <= r[1] and (x_freqs[i_f + n_bin]) <= r[1]
+            ) for r in incl_ranges]
+        ):
+            # calc smoothed value
+            new_y.append(np.mean(y_psd[i_f:i_f+SMOOTH_BIN]))
+            new_x.append(f)
+
+    new_y = np.array(new_y)
+    new_x = np.array(new_x)
+
+    return new_x, new_y
+
+
+
 def plot_moveLidSpec_PSDs(
     psd_arrs, psd_freqs, psd_subs,
-    PLOT_MOVE_TYPE, SOURCE, stat_df,
+    PLOT_MOVE_TYPE, SOURCE,
+    stat_df=False,
     AX=None, FEATURE: str = 'PSD',
     STATS_VERSION: str = '4Hz',
     PLOT_ALL_SUBS: bool = False,
     INCL_STATS: bool = False,
     STAT_PER_LID_CAT: bool = True,
+    MIN_SUBS_FOR_MEAN: int = 0,
+    SMOOTH_WIN: int = 0,
     YLIM: tuple = (-75, 200),
+    PEAK_SHIFT_GAMMA: bool = True,
 ):
     """
     Plot either rest, or movement on single axis
     """
     print(f'######### START PLOTTING {PLOT_MOVE_TYPE}')
 
-    XTICKS = [4, 12, 20, 28, 34, 60, 70, 80, 89]  # 89 will be labeled 90
+    if PLOT_MOVE_TYPE == 'unilatLID':
+        cond_colors = {
+            'ipsi_mildlid': 'cornflowerblue',  # lightsteelblue
+            'ipsi_moderatelid': 'mediumblue',
+            # 'ipsi_severelid': 'darkblue',
+            'contra_mildlid': 'yellowgreen',  # palegreen
+            'contra_moderatelid': 'forestgreen',
+            # 'contra_severelid' : 'forestgreen'
+        }
+    else:
+        cond_colors = {
+            'nolid': 'green',
+            'nolidbelow30': 'limegreen',
+            'nolidover30': 'darkgreen',
+            'alllid': 'blue', 'mildlid': 'orange',
+            'moderatelid': 'red', 'severelid': 'purple',
+        }
+
+    XTICKS = [4, 12, 20, 30, 60, 70, 80, 89]  # 89 will be labeled 90
+    if SMOOTH_WIN > 0: XTICKS[-1] = XTICKS[-1] - SMOOTH_WIN
     ls = 'solid'
     FS = 16  # fontsize
+    xplot_store, xlabs_store = [], []  # to store longest arr
+
+    if PEAK_SHIFT_GAMMA:
+        peak_df = get_indiv_band_peaks(SRC=SOURCE)
     
     # LOOP OVER LID-CATEGORIES/ GROUPS
     for lid in psd_arrs.keys():
@@ -186,42 +270,81 @@ def plot_moveLidSpec_PSDs(
         if n_subs == 0: continue
         
         sub_means = []
+        meansub_ids = []
         for s in uniq_subs_cat:
             sub_sel = np.array(psd_subs[lid]) == s
-            sub_epochs = list(compress(psd_arrs[lid], sub_sel))
-            sub_epochs = np.array([row for arr in sub_epochs for row in arr])
-            sub_means.append(np.mean(sub_epochs, axis=0))
+            if PLOT_MOVE_TYPE != 'unilatLID':
+                sub_epochs = list(compress(psd_arrs[lid], sub_sel))
+                sub_epochs = np.array([row for arr in sub_epochs for row in arr])
+            elif PLOT_MOVE_TYPE == 'unilatLID':
+                sub_epochs = psd_arrs[lid][sub_sel]
+            sub_m = np.mean(sub_epochs, axis=0)
+            if PEAK_SHIFT_GAMMA:
+                gamma_peak = peak_df.loc[f'({s}): all']['narrow_gamma']                
+                sub_m = peak_shift_gamma(gamma_peak, psd_freqs, sub_m)
+            
+            sub_means.append(sub_m)
+            meansub_ids.append(s)
 
         sub_means = np.array(sub_means)
+        # print(f'sub_means shape {sub_means.shape}')
+
+        if len(sub_means) < MIN_SUBS_FOR_MEAN:
+            PLOT_ALL_SUBS = True
+        else:
+            PLOT_ALL_SUBS = False
         
         # PLOT GROUP MEAN, mean of sub-means
         if not PLOT_ALL_SUBS:
-            m = np.mean(sub_means, axis=0)
-            sd = np.std(sub_means, axis=0)
-            sem = np.std(sub_means, axis=0) / np.sqrt(n_subs)
-            
+            m = np.nanmean(sub_means, axis=0)
+            sd = np.nanstd(sub_means, axis=0)
+            sem = np.nanstd(sub_means, axis=0) / np.sqrt(n_subs)
+            x_plot = psd_freqs.copy()
+            # print(x_plot)
+
+            # SMOOTH LINES
+            if SMOOTH_WIN > 0:
+                x_plot, m = smooth_broken_psd(x_plot.copy(), m)
+                _, sem = smooth_broken_psd(psd_freqs.copy(), sem)
+            # print(x_plot)
+
             # break and nan-pad x-axis
             m, sem, x_plot, xlabs = break_x_axis_psds_ticks(
-                tf_freqs=psd_freqs,
+                tf_freqs=x_plot,
                 PSD=m, PSD_sd=sem,
                 x_break = (35, 60), nan_pad = 5
             )
+            # print(x_plot)
+            # print(xlabs)
+            # print()
             lab = lid.replace('lid', ' LID')  #  add spaces for readability
             lab = lab.replace('below30', ' < 30min')
             lab = lab.replace('over30', ' > 30min')
+            lab = lab.replace('_', ' ')
             # plot mean line of LID severity
             AX.plot(x_plot, m,
                     color=cond_colors[lid], alpha=.8, ls=ls,
                     label=f"{lab} (n={n_subs})",)
             # plot variance shades (LID severity)
+            if 'ipsi' not in lid:
+                kw_pms = {'alpha': .3, 'color': cond_colors[lid]}
+            elif 'ipsi' in lid:
+                kw_pms = {'alpha': .3, 'edgecolor': cond_colors[lid],
+                          'facecolor': 'none', 'hatch': '//'}    
             AX.fill_between(x_plot, y1=m-sem, y2=m+sem, # PSDs[cond].freqs, 
-                            color=cond_colors[lid], alpha=.3,)
+                            **kw_pms,)
 
         elif PLOT_ALL_SUBS:
             for i_m, m in enumerate(sub_means):
+                sub_line = meansub_ids[i_m]
+                x_plot = psd_freqs.copy()
+                # SMOOTH
+                if SMOOTH_WIN > 0:
+                    x_plot, m = smooth_broken_psd(x_plot.copy(), m)
+
                 # break and nan-pad x-axis
                 m, x_plot, xlabs = break_x_axis_psds_ticks(
-                    tf_freqs=psd_freqs, PSD=m,
+                    tf_freqs=x_plot, PSD=m,
                     x_break = (35, 60), nan_pad = 5
                 )
                 lab = lid.replace('lid', ' LID')  #  add spaces for readability
@@ -229,10 +352,21 @@ def plot_moveLidSpec_PSDs(
                 lab = lab.replace('over30', ' > 30min')
                 # plot mean line of LID severity
                 if i_m == 0:
-                    AX.plot(x_plot, m, color=cond_colors[lid], lw=.5,
-                            alpha=.8, label=f"{lab} (n={n_subs})",)
+                    AX.plot(x_plot, m, color=cond_colors[lid],
+                            lw=2, alpha=.5, ls='--',
+                            label=f"{lab} (n={n_subs})",)
+                    print(f'\nSUB-{sub_line} is DOTTED single')
                 else:
-                    AX.plot(x_plot, m, color=cond_colors[lid], alpha=.8, lw=.5,)
+                    AX.plot(x_plot, m,
+                            lw=2, alpha=.5,
+                            color=cond_colors[lid],)
+                    print(f'\nSUB-{sub_line} is SOLID single')
+
+        if len(xlabs) > len(xlabs_store):
+            xlabs_store = xlabs
+            xplot_store = x_plot
+    xlabs = xlabs_store
+    x_plot = xplot_store
 
     # plot significancies shades (once per AX)
     if INCL_STATS and STAT_PER_LID_CAT:
@@ -247,6 +381,11 @@ def plot_moveLidSpec_PSDs(
     src_title = SOURCE.replace('lfp', 'stn')
     if PLOT_MOVE_TYPE == 'REST':
         ax_title = (f'{src_title.upper()} changes: Rest')
+    elif PLOT_MOVE_TYPE == 'unilatLID':
+        if src_title == 'stn':
+            ax_title = (f'Unilat. Dyskinesia:\nSubthalamic lateralization')
+        else:
+            ax_title = (f'Unilat. Dyskinesia:\nCortical lateralization')
     else:
         ax_title = (f'{src_title.upper()} changes: Movement')
     ax_title = ax_title.replace('STNS', 'Inter-Subthalamic')
@@ -258,10 +397,9 @@ def plot_moveLidSpec_PSDs(
         )
     AX.set_title(ax_title, weight='bold', size=FS,)
 
-
     xtick_sel = np.where([x in XTICKS for x in xlabs])[0]
     xticks = x_plot[xtick_sel]
-    xlabs = np.array(xlabs)[xtick_sel]
+    xlabs = np.array(xlabs).copy()[xtick_sel]
     xlabs[-1] = 90  # mark last tick with 90 (instead of 89)
 
     AX.axhline(0, xmin=0, xmax=1, color='gray', alpha=.3,)
@@ -291,6 +429,7 @@ def plot_moveLidSpec_PSDs(
 
 def prep_RestVsMove_psds(SRC, PLOT_MOVE, PSD_DICT, BASELINE,
                          FEATURE: str = 'PSD',
+                         BASE_METHOD: str = 'OFF_perc_change',
                          RETURN_IDS: bool = False,
                          RETURN_STATE_ARRAYS: bool = False,
                          SPLIT_CONTRA_IPSI: bool = False,):
@@ -311,7 +450,10 @@ def prep_RestVsMove_psds(SRC, PLOT_MOVE, PSD_DICT, BASELINE,
             CONTRA/IPSI-lateral movements (axcols)
     """
     print(f'start prep MOVEMENT spec psdsPLOTMOVE: {PLOT_MOVE}')
-    assert PLOT_MOVE in ['REST', 'CONTRA', 'IPSI', 'ALLMOVE']
+    assert PLOT_MOVE in ['REST', 'CONTRA', 'IPSI', 'ALLMOVE'], 'incorrect PLOT_MOVE'
+    assert BASE_METHOD in [
+        'OFF_perc_change', 'perc_spectral', 'OFF_zscore'
+    ], 'incorrect BASE_METHOD'
 
     if PLOT_MOVE == 'ALLMOVE':
         ATTR_CODE = ['DYSKMOVE', 'TAP']
@@ -373,21 +515,34 @@ def prep_RestVsMove_psds(SRC, PLOT_MOVE, PSD_DICT, BASELINE,
                 # print(f'...INCLUDE {attr} for {MOVE_SPLIT}')
 
             # get psd arr and correct for baseline
-            temp_psd = getattr(PSD_DICT[cond], attr)
-            print(f'...SHAPE temp psd {temp_psd.shape}')
+            temp_psd = getattr(PSD_DICT[cond], attr).copy()
+            # print(f'...SHAPE temp psd {temp_psd.shape}')
             
-            try:
-                if SRC == 'ecog': bl_attr = f'ecog_{sub}_baseline'
-                elif SRC == 'lfp': bl_attr = f'lfp_{EPHYS_SIDE}_{sub}_baseline'
-                else: bl_attr = f'{SRC}_{sub}_baseline'
+            if BASE_METHOD in ['OFF_perc_change', 'OFF_zscore']:
+                try:
+                    if SRC == 'ecog': bl_attr = f'ecog_{sub}_baseline'
+                    elif SRC == 'lfp': bl_attr = f'lfp_{EPHYS_SIDE}_{sub}_baseline'
+                    else: bl_attr = f'{SRC}_{sub}_baseline'
 
-                bl = getattr(BASELINE, bl_attr)
-                if len(bl.shape) == 2: bl = bl.mean(axis=0)
-            except:
-                print(f'### WARNING no baseline {SRC, EPHYS_SIDE} sub {sub}')
-                continue
+                    bl = getattr(BASELINE, bl_attr)
+                    if len(bl.shape) == 2:
+                        bl_sd = np.std(bl, axis=0)
+                        bl = bl.mean(axis=0)
+                except:
+                    print(f'### WARNING no baseline {SRC, EPHYS_SIDE} sub {sub}')
+                    continue
+                if BASE_METHOD == 'OFF_perc_change':
+                    temp_psd = ((temp_psd - bl) / bl) * 100
+                elif BASE_METHOD == 'OFF_zscore':
+                    temp_psd = (temp_psd - bl) / bl_sd
+                    # temp_psd = temp_psd
 
-            temp_psd = ((temp_psd - bl) / bl) * 100
+            elif BASE_METHOD == 'perc_spectral':
+                spec_sums = np.sum(temp_psd, axis=1)
+                # temp_psd = ((temp_psd.T / spec_sums) * 100).T
+                temp_psd = np.array([row_psd / row_sum for row_psd, row_sum
+                                     in zip(temp_psd, spec_sums)]) * 100
+
             if RETURN_STATE_ARRAYS: print(f'...arr shape {attr}: {temp_psd.shape}')
 
             # include LID-state:
