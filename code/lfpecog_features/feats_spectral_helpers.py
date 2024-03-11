@@ -31,11 +31,14 @@ def peak_shift_gamma(
 
     # blank irrelevant freqs
     nansel = [f >= 35 and f < 60 for f in f_arr]
-    value_arr[nansel] = [np.nan] * sum(nansel)
+    if sum(nansel) > 0:
+        value_arr[nansel] = [np.nan] * sum(nansel)
+ 
     newvalues = value_arr.copy()
 
     # gamma select and blank all new gamma values
     f_sel = [f >= 60 and f <= 90 for f in f_arr]
+    
     newvalues[f_sel] = [np.nan] * sum(f_sel)
 
     # loop over all original gamma freqs and values

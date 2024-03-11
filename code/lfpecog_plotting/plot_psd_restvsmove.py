@@ -59,13 +59,17 @@ def prep_and_plot_restvsmove(
     else:
         raise ValueError('FEATURE should be PSD / ICOH / SQCOH')
     
+    if MOVESIDES_SPLITTED == 'COH_4panel':
+        store_PSD = PSD_DICT
+        store_BL = BASELINE
+
     # prep figure
     n_rows, n_cols = 1, 2
     kw_params = {'sharey': 'row'}
     if MOVESIDES_SPLITTED == True:
         n_cols += 1
     
-    elif MOVESIDES_SPLITTED in ['4panel', 'StnEcog4']:
+    elif MOVESIDES_SPLITTED in ['4panel', 'StnEcog4', 'COH_4panel']:
         n_cols, n_rows = 2, 2
         kw_params['sharex'] = 'col'
 
@@ -79,7 +83,7 @@ def prep_and_plot_restvsmove(
                                                       4*n_rows),
                              **kw_params)
     
-    if MOVESIDES_SPLITTED in ['4panel', 'StnEcog4']:
+    if MOVESIDES_SPLITTED in ['4panel', 'StnEcog4','COH_4panel']:
         axes = axes.flatten()
     
     for i_ax, ax in enumerate(axes):
@@ -88,6 +92,10 @@ def prep_and_plot_restvsmove(
             PLOT_MOVE = 'REST'
             if MOVESIDES_SPLITTED == 'StnEcog4':
                 SOURCE = 'lfp'
+            elif MOVESIDES_SPLITTED == 'COH_4panel':
+                SOURCE = 'STNs'
+                PSD_DICT = store_PSD[SOURCE]
+                BASELINE = store_BL[SOURCE]
         
         elif MOVESIDES_SPLITTED == True and i_ax == 1: PLOT_MOVE = 'CONTRA'
 
@@ -108,6 +116,19 @@ def prep_and_plot_restvsmove(
             if i_ax == 3:
                 SOURCE = 'ecog'
                 PLOT_MOVE = 'ALLMOVE'
+        
+        elif MOVESIDES_SPLITTED == 'COH_4panel':
+            if i_ax == 1:
+                SOURCE = 'STNs'
+                PLOT_MOVE = 'ALLMOVE'
+            if i_ax == 2:
+                SOURCE = 'STNECOG'
+                PLOT_MOVE = 'REST'
+            if i_ax == 3:
+                SOURCE = 'STNECOG'
+                PLOT_MOVE = 'ALLMOVE'
+            PSD_DICT = store_PSD[SOURCE]
+            BASELINE = store_BL[SOURCE] 
 
         else: PLOT_MOVE = 'ALLMOVE'
    
@@ -144,11 +165,12 @@ def prep_and_plot_restvsmove(
             stat_df = False
 
         # plot AX
-        print(f'\n....PLOT {PLOT_MOVE}')
+        print(f'\n....PLOT {PLOT_MOVE} {FEATURE}')
         plot_moveLidSpec_PSDs(
             psd_arrs, psd_freqs=psd_freqs, psd_subs=psd_subs,
             SOURCE=SOURCE, FEATURE=FEATURE,
             AX=ax, PLOT_MOVE_TYPE=PLOT_MOVE,
+            BASE_METHOD=BASE_METHOD,
             stat_df=stat_df,
             INCL_STATS=INCL_STATS,
             STAT_PER_LID_CAT=STAT_PER_LID_CAT,
@@ -169,6 +191,7 @@ def prep_and_plot_restvsmove(
         FIG_NAME = f'{SOURCE}_{FEATURE}_restVsMove'
         if MOVESIDES_SPLITTED == True: FIG_NAME += 'Split'
         elif MOVESIDES_SPLITTED == '4panel': FIG_NAME += '4Panel'
+        elif MOVESIDES_SPLITTED == 'COH_4panel': FIG_NAME = f'COH4panel_{FEATURE}'
 
         if INCL_STATS:
             FIG_NAME += f'_stats{STAT_LID_COMPARE}'
@@ -219,7 +242,7 @@ def smooth_broken_psd(x_freqs, y_psd,
 def plot_moveLidSpec_PSDs(
     psd_arrs, psd_freqs, psd_subs,
     PLOT_MOVE_TYPE, SOURCE,
-    stat_df=False,
+    stat_df=False, BASE_METHOD='OFF_perc_change',
     AX=None, FEATURE: str = 'PSD',
     STATS_VERSION: str = '4Hz',
     PLOT_ALL_SUBS: bool = False,
@@ -239,10 +262,10 @@ def plot_moveLidSpec_PSDs(
         cond_colors = {
             'ipsi_mildlid': 'cornflowerblue',  # lightsteelblue
             'ipsi_moderatelid': 'mediumblue',
-            # 'ipsi_severelid': 'darkblue',
+            'ipsi_severelid': 'darkblue',
             'contra_mildlid': 'yellowgreen',  # palegreen
             'contra_moderatelid': 'forestgreen',
-            # 'contra_severelid' : 'forestgreen'
+            'contra_severelid' : 'darkgreen'
         }
     else:
         cond_colors = {
@@ -255,12 +278,16 @@ def plot_moveLidSpec_PSDs(
 
     XTICKS = [4, 12, 20, 30, 60, 70, 80, 89]  # 89 will be labeled 90
     if SMOOTH_WIN > 0: XTICKS[-1] = XTICKS[-1] - SMOOTH_WIN
+    if PEAK_SHIFT_GAMMA: XTICKS = XTICKS[:-4] + [65, 75, 85]
+    
     ls = 'solid'
     FS = 16  # fontsize
     xplot_store, xlabs_store = [], []  # to store longest arr
 
     if PEAK_SHIFT_GAMMA:
-        peak_df = get_indiv_band_peaks(SRC=SOURCE)
+        if SOURCE in ['STNs', 'STNECOG']: peak_src = 'lfp'
+        else: peak_src = SOURCE
+        peak_df = get_indiv_band_peaks(SRC=peak_src)
     
     # LOOP OVER LID-CATEGORIES/ GROUPS
     for lid in psd_arrs.keys():
@@ -268,26 +295,30 @@ def plot_moveLidSpec_PSDs(
         uniq_subs_cat = np.unique(psd_subs[lid])
         n_subs = len(uniq_subs_cat)
         if n_subs == 0: continue
-        
+
+        print(f'### PLOT {lid} ({cond_colors[lid]})')
+
         sub_means = []
         meansub_ids = []
+        # loop over available subjects
         for s in uniq_subs_cat:
             sub_sel = np.array(psd_subs[lid]) == s
-            if PLOT_MOVE_TYPE != 'unilatLID':
-                sub_epochs = list(compress(psd_arrs[lid], sub_sel))
-                sub_epochs = np.array([row for arr in sub_epochs for row in arr])
-            elif PLOT_MOVE_TYPE == 'unilatLID':
+            if isinstance(psd_arrs[lid], np.ndarray):
                 sub_epochs = psd_arrs[lid][sub_sel]
+            elif isinstance(psd_arrs[lid], list):
+                sub_epochs = list(compress(psd_arrs[lid], sub_sel))
+            elif PLOT_MOVE_TYPE == 'unilatLID':
+                sub_epochs = np.array([row for arr in sub_epochs for row in arr])
             sub_m = np.mean(sub_epochs, axis=0)
+
             if PEAK_SHIFT_GAMMA:
                 gamma_peak = peak_df.loc[f'({s}): all']['narrow_gamma']                
                 sub_m = peak_shift_gamma(gamma_peak, psd_freqs, sub_m)
-            
+            # add mean and id code for subject            
             sub_means.append(sub_m)
             meansub_ids.append(s)
 
         sub_means = np.array(sub_means)
-        # print(f'sub_means shape {sub_means.shape}')
 
         if len(sub_means) < MIN_SUBS_FOR_MEAN:
             PLOT_ALL_SUBS = True
@@ -300,13 +331,11 @@ def plot_moveLidSpec_PSDs(
             sd = np.nanstd(sub_means, axis=0)
             sem = np.nanstd(sub_means, axis=0) / np.sqrt(n_subs)
             x_plot = psd_freqs.copy()
-            # print(x_plot)
 
             # SMOOTH LINES
             if SMOOTH_WIN > 0:
                 x_plot, m = smooth_broken_psd(x_plot.copy(), m)
                 _, sem = smooth_broken_psd(psd_freqs.copy(), sem)
-            # print(x_plot)
 
             # break and nan-pad x-axis
             m, sem, x_plot, xlabs = break_x_axis_psds_ticks(
@@ -314,9 +343,7 @@ def plot_moveLidSpec_PSDs(
                 PSD=m, PSD_sd=sem,
                 x_break = (35, 60), nan_pad = 5
             )
-            # print(x_plot)
-            # print(xlabs)
-            # print()
+
             lab = lid.replace('lid', ' LID')  #  add spaces for readability
             lab = lab.replace('below30', ' < 30min')
             lab = lab.replace('over30', ' > 30min')
@@ -353,14 +380,14 @@ def plot_moveLidSpec_PSDs(
                 # plot mean line of LID severity
                 if i_m == 0:
                     AX.plot(x_plot, m, color=cond_colors[lid],
-                            lw=2, alpha=.5, ls='--',
+                            lw=2, alpha=.3,
                             label=f"{lab} (n={n_subs})",)
-                    print(f'\nSUB-{sub_line} is DOTTED single')
+                    # print(f'\nSUB-{sub_line} is DOTTED single')
                 else:
                     AX.plot(x_plot, m,
-                            lw=2, alpha=.5,
+                            lw=2, alpha=.3,
                             color=cond_colors[lid],)
-                    print(f'\nSUB-{sub_line} is SOLID single')
+                    # print(f'\nSUB-{sub_line} is SOLID single')
 
         if len(xlabs) > len(xlabs_store):
             xlabs_store = xlabs
@@ -386,6 +413,8 @@ def plot_moveLidSpec_PSDs(
             ax_title = (f'Unilat. Dyskinesia:\nSubthalamic lateralization')
         else:
             ax_title = (f'Unilat. Dyskinesia:\nCortical lateralization')
+    elif PLOT_MOVE_TYPE == 'overall':
+        ax_title = (f'{src_title.upper()} changes')
     else:
         ax_title = (f'{src_title.upper()} changes: Movement')
     ax_title = ax_title.replace('STNS', 'Inter-Subthalamic')
@@ -401,6 +430,8 @@ def plot_moveLidSpec_PSDs(
     xticks = x_plot[xtick_sel]
     xlabs = np.array(xlabs).copy()[xtick_sel]
     xlabs[-1] = 90  # mark last tick with 90 (instead of 89)
+    if PEAK_SHIFT_GAMMA:
+        xlabs[-3:] = ['-10  ', 'Gamma\npeak', '  +10']
 
     AX.axhline(0, xmin=0, xmax=1, color='gray', alpha=.3,)
     AX.set_xticks(xticks)
@@ -421,7 +452,10 @@ def plot_moveLidSpec_PSDs(
         ylab = rf"$\bfabs.$" + " " + rf"$\bfimag.$" + " " + rf"$\bfCoherence$"
     elif FEATURE == 'SQCOH':
         ylab = rf"$\bfsquared$" + " " + rf"$\bfCoherence$"    
-    ylab += "\n(% change vs Med-OFF)"
+    if BASE_METHOD == 'OFF_perc_change':
+        ylab += "\n(% change vs Med-OFF)"
+    elif BASE_METHOD == 'OFF_zscore':
+        ylab += "\n(z-score, based on Med-OFF)"
     AX.set_ylabel(ylab, size=FS, )
 
 

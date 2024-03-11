@@ -372,7 +372,8 @@ def get_ssd_psd_from_array(
 
 
 def get_ssd_coh_from_array(
-    ephys_arr1, ephys_arr2, sfreq, SETTINGS, band_names,
+    ephys_arr1, ephys_arr2, sfreq,
+    band_names, SETTINGS=None, f_range_list = None, 
     PSD_WIN_sec: int = 1, RETURN_PSD_1sec: bool = False,
 ):
     """
@@ -388,6 +389,8 @@ def get_ssd_coh_from_array(
     """
     # skip too short samples
     if ephys_arr1.shape[0] < sfreq: return [], [], []
+
+    if SETTINGS: f_range_list = list(SETTINGS['SPECTRAL_BANDS'].values())
 
     # create new freq array to return
     new_f = np.concatenate([np.arange(4, 35),
@@ -405,7 +408,7 @@ def get_ssd_coh_from_array(
 
     # calculate per freq-band
     for i, band in enumerate(band_names):
-        f_range = list(SETTINGS['SPECTRAL_BANDS'].values())[i]
+        f_range = f_range_list[i]
         sig1 = ephys_arr1[:, i]  # select band signal (SSD)
         sig2 = ephys_arr2[:, i]  # select band signal (SSD)
         nan_sel = np.logical_or(np.isnan(sig1), np.isnan(sig2))
@@ -461,7 +464,7 @@ def get_ssd_coh_from_array(
             # calculate Coherences
             freqs, _, icoh, _, sqcoh = calc_coherence(
                 sig1=sig1, sig2=sig2, fs=sfreq,
-                nperseg=sfreq * PSD_WIN_sec,
+                nperseg=sfreq,
             )
 
         # select out relevant freqs related to ssd bands

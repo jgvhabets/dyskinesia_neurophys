@@ -14,6 +14,9 @@ from utils.utils_fileManagement import (
     get_project_path, make_object_jsonable
 )
 from lfpecog_features.get_ssd_data import get_subject_SSDs
+from lfpecog_preproc.preproc_import_scores_annotations import get_ecog_side
+from lfpecog_analysis.psd_analysis_classes import select_coh_values, get_ssd_coh_from_array
+from lfpecog_features.feats_spectral_features import calc_coherence
 # from lfpecog_analysis.process_connectivity import (
 #     get_conn_values_sub_side
 # )   # necessary for GET_CONNECTIVITY = True in get_all_sdd_timeFreqs()
@@ -150,6 +153,78 @@ def get_SSD_timeFreq(
         return dict_out
 
 
+def get_COH_timeFreq(
+    sub, DATA_VERSION='v4.0', FT_VERSION='v4',
+    WIN_LEN=10, WIN_OVERLAP=0.5, SSD_BROAD=True,
+    FORCE_PSD_CREATION=False,
+    COH_TYPE: str = 'sqCOH',
+):
+    dict_out = {}
+
+    ssd_folder = 'SSD_feats'
+    if SSD_BROAD: ssd_folder += '_broad'
+    ssd_folder += f'_{FT_VERSION}'
+    path = join(get_project_path('results'),
+                            'features', ssd_folder,
+                            DATA_VERSION,
+                            f'windows_{WIN_LEN}s_{WIN_OVERLAP}overlap_COH',)
+    filename = f'SSD_COH_{sub}.json'
+    
+    if not exists(path):
+        makedirs(path)
+        create_PSDs = True
+    elif np.logical_and(exists(path),
+                        filename.replace('COH', COH_TYPE) not in listdir(path)):
+        create_PSDs = True
+    else:
+        create_PSDs = False
+    
+    if FORCE_PSD_CREATION: create_PSDs = True
+
+    if create_PSDs:
+        print(f'START CREATING SSD COHs ({COH_TYPE}) for sub-{sub} (fts: {FT_VERSION}) in get_COH_timeFreq()')
+        ssd_subClass = get_subject_SSDs(
+            sub=sub,
+            incl_stn=True,
+            incl_ecog=True,
+            ft_setting_fname=f'ftExtr_spectral_{FT_VERSION}.json',
+        )
+        COH_sources = {'STNs': ['lfp_left', 'lfp_right']}
+        if sub.startswith('0'):
+             ecog_side = get_ecog_side(sub)
+             COH_sources['STNECOG'] = [f'lfp_{ecog_side}', f'ecog_{ecog_side}']
+        
+        for coh_source, source_list in COH_sources.items():
+            ssd_sig1 = getattr(ssd_subClass, source_list[0])
+            ssd_sig2 = getattr(ssd_subClass, source_list[1])
+
+            sqcohArr, icohArr, tf_times, min_f, max_f = create_COH_timeFreqArray(ssd_sig1, ssd_sig2)
+            
+            for tfArr in [sqcohArr, icohArr]:
+                tf_values = tfArr.values
+                tf_freqs = np.array(tfArr.index)
+
+                source_dict = {'values': tf_values,
+                               'times': tf_times,
+                               'freqs': tf_freqs}
+                source_dict = make_object_jsonable(source_dict)
+                dict_out[coh_source] = source_dict
+            # save dict as json
+            with open(join(path, filename.replace('COH', coh_source)), 'w') as f:
+                json.dump(dict_out, f)
+        
+        return dict_out    
+    
+    elif not create_PSDs:
+
+        print(f'load existing powers for sub-{sub} (fts: {FT_VERSION}, {filename})')
+
+        # load dict from json
+        with open(join(path, filename.replace('COH', COH_TYPE)), 'r') as f:
+            dict_out = json.load(f)
+        
+        return dict_out
+
 
 def get_cont_ssd_arr(subSourceSSD, bw,
                      winLen_sec=10,):
@@ -200,6 +275,94 @@ def get_cont_ssd_arr(subSourceSSD, bw,
     )
 
     return new_arr, new_timestamps, new_times_sec
+
+
+
+def create_COH_timeFreqArray(
+    ssd_sig1, ssd_sig2,
+    COH_single_epochs_sec=1, COH_windows_sec=10,):
+    """
+    Input:
+        - subSourceSSD: should be e.g. ssdXXX.lfp_left
+    """
+    fs = ssd_sig1.fs
+    bands = ssd_sig1.settings['SPECTRAL_BANDS']
+    min_f = min([min(r) for r in bands.values()])
+    max_f = max([max(r) for r in bands.values()])
+
+    for i, bw in enumerate(bands.keys()):
+        print(f'create_COH_timefreq: {bw}')
+        arr1, arr2, time_wins = [], [], []
+        # convert windows with overlap into continuous array
+        cont_arr1, cont_time_arr1, cont_time_secs1 = get_cont_ssd_arr(
+            subSourceSSD=ssd_sig1, bw=bw, winLen_sec=10,
+        )
+        cont_arr2, cont_time_arr2, cont_time_secs2 = get_cont_ssd_arr(
+            subSourceSSD=ssd_sig2, bw=bw, winLen_sec=10,
+        )
+        sig1, sig2 = select_coh_values(
+            cont_arr1, cont_arr2, cont_time_arr1, cont_time_arr2
+        )
+        cont_time = cont_time_arr1[np.isin(cont_time_arr1, cont_time_arr2)]
+        cont_time_secs = cont_time_secs1[np.isin(cont_time_secs1, cont_time_secs2)]
+
+        n_samples_win = COH_windows_sec * fs
+        t0 = round(cont_time[0])
+        while t0 < (cont_time[-1] - COH_windows_sec):
+            win_sel = np.logical_and(cont_time > t0, cont_time < (t0 + COH_windows_sec))
+            if sum(win_sel) < (.5 * n_samples_win): continue
+            win1 = [np.nan] * n_samples_win
+            win2 = win1.copy()
+            win1[:sum(win_sel)] = sig1[win_sel]
+            win2[:sum(win_sel)] = sig2[win_sel]
+            arr1.append(win1)
+            arr2.append(win2)
+            time_wins.append(t0)
+            t0 += COH_windows_sec
+        
+        arr1 = np.array(arr1)
+        arr2 = np.array(arr2)
+        sqcoh_all, icoh_all = [], []
+
+        for sig1, sig2 in zip(arr1, arr2):
+            sig1 = sig1[~np.isnan(sig1)]
+            sig2 = sig2[~np.isnan(sig2)]
+            # calc coherence
+            freqs, _, icoh, _, sqcoh = calc_coherence(
+                sig1=sig1, sig2=sig2, fs=fs,
+                nperseg=fs*COH_single_epochs_sec,
+            )
+            icoh = np.atleast_2d(icoh)
+            sqcoh = np.atleast_2d(sqcoh)
+            if icoh.shape[0] > icoh.shape[1]: icoh = icoh.T
+            if sqcoh.shape[0] > sqcoh.shape[1]: sqcoh = sqcoh.T
+
+            sqcoh_all.append(sqcoh.ravel())
+            icoh_all.append(icoh.ravel())
+        
+        sqcoh_all = np.array(sqcoh_all)
+        icoh_all = np.array(icoh_all)
+        
+        # add current bandwidth to sum-array
+        if i == 0:
+            sqcoh_timefreq = DataFrame(
+                data=np.zeros((max_f + 1 - min_f, sqcoh_all.shape[0])),
+                columns=time_wins,
+                index=np.arange(min_f, max_f + 1)
+            )
+            icoh_timefreq = sqcoh_timefreq.copy()
+        # define freq-ranges for band
+        bw_range = bands[bw]
+        if bw == 'hi_beta': bw_range[1] = 50
+        if bw in ['gamma', 'gamma1']: bw_range[0] = 50
+        # select and add PSD values for ranges
+        sel = sqcoh_all.T[bw_range[0]:bw_range[1] + 1, :]
+        sqcoh_timefreq.loc[bw_range[0]:bw_range[1]] = sel
+        # add icoh
+        sel = icoh_all.T[bw_range[0]:bw_range[1] + 1, :]
+        icoh_timefreq.loc[bw_range[0]:bw_range[1]] = sel
+
+    return sqcoh_timefreq, icoh_timefreq, time_wins, min_f, max_f
 
 
 def create_SSD_timeFreqArray(subSourceSSD, win_len_sec=1,):
