@@ -11,10 +11,19 @@ from itertools import product
 from lfpecog_plotting.plot_psd_restvsmove import (
     plot_moveLidSpec_PSDs
 )
-from utils.utils_fileManagement import get_project_path
+from utils.utils_fileManagement import (
+    get_project_path, get_avail_ssd_subs
+)
 from lfpecog_preproc.preproc_import_scores_annotations import (
     get_ecog_side, get_cdrs_specific
 )
+from lfpecog_analysis.get_SSD_timefreqs import (
+    get_all_ssd_timeFreqs
+)
+from lfpecog_analysis.psd_analysis_classes import (
+    get_selectedEphys
+)
+
 
 
 cond_colors = {
@@ -41,6 +50,13 @@ def plot_overall_PSD_COH(
         - psd_arrs, sub_arrs, ps_freqs: all dict containing
             lfp and ecog from def prep_10sPSDs_lidCategs()
     """
+    DATA_VERSION='v4.0'
+    FT_VERSION='v6'
+    IGNORE_PTS=['011', '104', '106']
+
+    SUBS = get_avail_ssd_subs(DATA_VERSION=DATA_VERSION,
+                              FT_VERSION=FT_VERSION,
+                              IGNORE_PTS=IGNORE_PTS)
 
     n_rows, n_cols = 2, 2
     kw_params = {'sharey': 'row'}
@@ -55,15 +71,53 @@ def plot_overall_PSD_COH(
                             **kw_params)
     axes = axes.flatten()
 
-    for i_src, src in enumerate(['lfp', 'ecog']):
-        psd_arr = psd_arr_dict[src]
-        sub_arr = sub_arr_dict[src]
-        ps_freqs = ps_freqs_dict[src]
+    for i_ax, (ft, src, ax) in enumerate(zip(
+        ['POWER', 'POWER', 'sqCOH', 'sqCOH'],
+        ['lfp', 'ecog', 'STNs', 'STNECOG'],
+        axes
+    )):
+        if ft == 'POWER':
+            # use priorly created arrays with  10-sec PREP has to lead to psd_arrs, psd_freqs, psd_subs
+            psd_arr = psd_arr_dict[src]
+            sub_arr = sub_arr_dict[src]
+            ps_freqs = ps_freqs_dict[src]
 
-        # ### 10-sec PREP has to lead to psd_arrs, psd_freqs, psd_subs
-        for arr in [psd_arr, sub_arr]:
-            if 'nolid' in list(arr.keys()):
-                del(arr['nolid'])  # leave only 30min no lids in
+            # ### 10-sec PREP has to lead to psd_arrs, psd_freqs, psd_subs
+            for arr in [psd_arr, sub_arr]:
+                if 'nolid' in list(arr.keys()):
+                    del(arr['nolid'])  # leave only 30min no lids in
+        
+        elif ft == 'sqCOH':
+            # get timefreq values and baseline for coherences
+            COH_TFs = get_all_ssd_timeFreqs(
+                SUBS=SUBS, COH_SOURCE=src,
+                FEATURE=ft,
+                FT_VERSION=FT_VERSION,
+                DATA_VERSION=DATA_VERSION,
+                GET_CONNECTIVITY=False,  # 'trgc'
+            )
+            coh_BLs = get_selectedEphys(
+                FEATURE=f'COH_{src}',
+                COH_TYPE=ft,
+                STATE_SEL='baseline',
+                MIN_SEL_LENGTH=10,
+                LOAD_PICKLE=True,
+                USE_EXT_HD=True,
+                PREVENT_NEW_CREATION=False,
+                RETURN_PSD_1sec=True,
+                verbose=False,
+            )
+            # convert into arrays for plot
+            (psd_arr,
+             ps_freqs,
+             sub_arr) = prep_10sPSDs_lidCategs(
+                TFs=COH_TFs, SOURCE=src,
+                FEATURE=ft,
+                BASELINE=coh_BLs,
+                IPSI_CONTRA_UNILID=False,
+                BASE_METHOD=BASE_METHOD,
+            )
+
 
         plot_moveLidSpec_PSDs(
             psd_arrs=psd_arr.copy(),
@@ -71,7 +125,7 @@ def plot_overall_PSD_COH(
             psd_subs=sub_arr.copy(),
             SOURCE=src,
             PLOT_MOVE_TYPE='overall',
-            AX=axes[i_src],
+            AX=ax,
             INCL_STATS=INCL_STATS,
             YLIM=YLIM,
             PEAK_SHIFT_GAMMA=PEAKSHIFT_GAMMA,
@@ -79,9 +133,10 @@ def plot_overall_PSD_COH(
             # MIN_SUBS_FOR_MEAN=4,
         )
 
-    y_ax = axes[1].axes.get_yaxis()
-    ylab = y_ax.get_label()
-    ylab.set_visible(False)
+        if i_ax in [1, 3]:
+            y_ax = axes[1].axes.get_yaxis()
+            ylab = y_ax.get_label()
+            ylab.set_visible(False)
         
     plt.tight_layout()
 
@@ -221,6 +276,7 @@ def get_unilat_lid_timesscores(subs):
 
 def prep_10sPSDs_lidCategs(
     SOURCE, TFs, BASELINE,
+    FEATURE: str = 'POWER',
     IPSI_CONTRA_UNILID: bool = False,
     unilid_subs=None,
     BASE_METHOD: str = 'Z'
@@ -233,9 +289,13 @@ def prep_10sPSDs_lidCategs(
         - BASELINE: class with baseline PSDs from
             psd_analysis_classes.get_selectedEphys()
     """
-    sources = ['lfp_left', 'lfp_right', 'ecog']
+    if FEATURE == 'POWER':
+        sources = ['lfp_left', 'lfp_right', 'ecog']
+    else:
+        sources = ['STNs', 'STNECOG']
+        # print(f'START, {FEATURE}, {sources}')
     lid_states = ['nolidbelow30', 'nolidover30', 'nolid',
-                'mildlid', 'moderatelid', 'severelid']
+                  'mildlid', 'moderatelid', 'severelid']
     lid_categ_ranges = {'nolid': [0, 0],
                         'mildlid': [1, 3],
                         'moderatelid': [4, 7],
@@ -252,7 +312,7 @@ def prep_10sPSDs_lidCategs(
             ['contra', 'ipsi'], lid_states[-3:]
         )}
 
-    #ä loop over selected uni-LID subjects and sources
+    # loop over selected uni-LID subjects and sources
     if not IPSI_CONTRA_UNILID: loop_subs = TFs.keys()
     else: loop_subs = unilid_subs
 
@@ -261,7 +321,7 @@ def prep_10sPSDs_lidCategs(
 
         if IPSI_CONTRA_UNILID: sub, lidside = sub_code.split('_')
         else: sub = sub_code
-        if sub.startswith('1') and 'ecog' in src: continue
+        if sub.startswith('1') and 'ecog' in src.lower(): continue
 
         if src == 'ecog':  # IPSI_CONTRA_UNILID and 
             ephysside = get_ecog_side(sub)
@@ -271,6 +331,10 @@ def prep_10sPSDs_lidCategs(
         psx = TFs[sub][src].values.T
         ps_times = TFs[sub][src].times / 60
         ps_freqs = TFs[sub][src].freqs
+        assert psx.shape == (len(ps_times), len(ps_freqs)), (
+            f'incorrect psx data loaded {sub}, {src} -> '
+            f'psx: {psx.shape} t: {len(ps_times)}, f: {len(ps_freqs)}'
+        )
         # select relevant freqs
         sel1 = np.logical_and(ps_freqs >= 4, ps_freqs < 35)
         sel2 = np.logical_and(ps_freqs >= 60, ps_freqs < 90)
@@ -278,15 +342,20 @@ def prep_10sPSDs_lidCategs(
         psx = psx[:, f_sel]
         ps_freqs = ps_freqs[f_sel]
 
+
         # split values for unilat-LID
         if not IPSI_CONTRA_UNILID:
             lid_times, lid_scores = get_cdrs_specific(
                 sub=sub, INCL_CORE_CDRS=True, side='both'
             )
+            # print('lid scores', lid_scores.values)
+            # print('lid times', lid_times.values)
+            # print('pstimes', ps_times)
             # match ephys values with uniLID epochs
             near_time_idx = [np.argmin(abs(lid_times - t))
                              for t in ps_times]
             ps_scores = lid_scores[near_time_idx]
+
             
         elif IPSI_CONTRA_UNILID:
             # define orientation of hemisphere to unilat-LID
@@ -311,9 +380,9 @@ def prep_10sPSDs_lidCategs(
         
         # baseline correct
         try:
-            if 'ecog' in src: bl_attr = f'ecog_{sub}_baseline'
-            elif 'lfp' in src: bl_attr = f'{src}_{sub}_baseline'
-            
+            if 'ecog_' in src: bl_attr = f'ecog_{sub}_baseline'
+            elif 'lfp_' in src: bl_attr = f'{src}_{sub}_baseline'
+            else: bl_attr = f'{src}_{sub}_baseline'
             bl = getattr(BASELINE, bl_attr)
             if len(bl.shape) == 2: bl_m = np.mean(bl, axis=0)
             if len(bl.shape) == 1: bl_m = bl
@@ -333,8 +402,10 @@ def prep_10sPSDs_lidCategs(
 
         # select values into LID categories
         for lidkey, cdrs_range in lid_categ_ranges.items():
+            # print(f'SELECT OUT {lidkey} (){cdrs_range}')
             cat_sel = np.logical_and(ps_scores >= cdrs_range[0],
                                      ps_scores <= cdrs_range[1])
+            # print(sum(cat_sel))
             if sum(cat_sel) == 0: continue
             cat_psx = psx[cat_sel, :]
             cat_times = ps_times[cat_sel]

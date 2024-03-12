@@ -814,9 +814,14 @@ def select_coh_values(SIG1, SIG2, times1, times2):
     sel1 = np.isin(times1, times2)
     sel2 = np.isin(times2, times1)
 
-    SIG1 = SIG1[sel1, :]
-    SIG2 = SIG2[sel2, :]
-    
+    if len(SIG1.shape) == 2:
+        SIG1 = SIG1[sel1, :]
+        SIG2 = SIG2[sel2, :]
+        
+    elif len(SIG1.shape) == 1:
+        SIG1 = SIG1[sel1]
+        SIG2 = SIG2[sel2]
+        
     assert len(SIG1) == len(SIG2), 'coherence arrays must have same length'
 
     return SIG1, SIG2
