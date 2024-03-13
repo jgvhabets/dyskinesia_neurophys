@@ -123,6 +123,7 @@ def plot_overall_PSD_COH(
             psd_arrs=psd_arr.copy(),
             psd_freqs=ps_freqs.copy(),
             psd_subs=sub_arr.copy(),
+            FEATURE=ft,
             SOURCE=src,
             PLOT_MOVE_TYPE='overall',
             AX=ax,

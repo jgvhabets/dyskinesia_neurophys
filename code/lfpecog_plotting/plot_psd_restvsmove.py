@@ -448,11 +448,11 @@ def plot_moveLidSpec_PSDs(
     # set axis labels
     # rf"$\bf{SOURCE_SEL.upper()}$" + " " +
     AX.set_xlabel('Frequency (Hz)', size=FS, weight='bold',)
-    if FEATURE == 'PSD':
+    if FEATURE.upper() in ['PSD', 'POWER']:
         ylab = rf"$\bfSpectral$" + " " + rf"$\bfPower$"  # + "\n(% vs Med-OFF)"
-    elif FEATURE == 'ICOH':
+    elif FEATURE.upper() == 'ICOH':
         ylab = rf"$\bfabs.$" + " " + rf"$\bfimag.$" + " " + rf"$\bfCoherence$"
-    elif FEATURE == 'SQCOH':
+    elif FEATURE.upper() == 'SQCOH':
         ylab = rf"$\bfsquared$" + " " + rf"$\bfCoherence$"    
     if BASE_METHOD == 'OFF_perc_change':
         ylab += "\n(% change vs Med-OFF)"
