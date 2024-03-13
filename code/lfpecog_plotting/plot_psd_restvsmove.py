@@ -294,7 +294,6 @@ def plot_moveLidSpec_PSDs(
         # get and average correct PSDs (subject means)
         uniq_subs_cat = np.unique(psd_subs[lid])
         n_subs = len(uniq_subs_cat)
-        print(uniq_subs_cat)
         if n_subs == 0:
             print(f'no unqiue subs for {lid}, {PLOT_MOVE_TYPE}, {SOURCE}')
             continue
@@ -312,7 +311,6 @@ def plot_moveLidSpec_PSDs(
                 sub_epochs = list(compress(psd_arrs[lid], sub_sel))
             elif PLOT_MOVE_TYPE == 'unilatLID':
                 sub_epochs = np.array([row for arr in sub_epochs for row in arr])
-            print(s, lid, len(sub_epochs))
             sub_m = np.mean(sub_epochs, axis=0)
 
             if PEAK_SHIFT_GAMMA:
@@ -353,7 +351,6 @@ def plot_moveLidSpec_PSDs(
             lab = lab.replace('over30', ' > 30min')
             lab = lab.replace('_', ' ')
             # plot mean line of LID severity
-            print(f'PLOT: {x_plot}, {m}')
             AX.plot(x_plot, m,
                     color=cond_colors[lid], alpha=.8, ls=ls,
                     label=f"{lab} (n={n_subs})",)
@@ -431,11 +428,7 @@ def plot_moveLidSpec_PSDs(
         )
     AX.set_title(ax_title, weight='bold', size=FS,)
 
-    try:
-        xtick_sel = np.where([x in XTICKS for x in xlabs])[0]
-    except TypeError:
-        print(XTICKS)
-        print(xlabs)
+    xtick_sel = np.where([x in XTICKS for x in xlabs])[0]
     xticks = x_plot[xtick_sel]
     xlabs = np.array(xlabs).copy()[xtick_sel]
     xlabs[-1] = 90  # mark last tick with 90 (instead of 89)

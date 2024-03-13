@@ -61,7 +61,7 @@ def plot_overall_PSD_COH(
     n_rows, n_cols = 2, 2
     kw_params = {'sharey': 'row'}
 
-    if BASE_METHOD == 'percChange': YLIM = (-60, 175)
+    if BASE_METHOD == 'percChange': YLIM = (-50, 100)
     elif BASE_METHOD == 'Z': YLIM = (-.5, 1.5)
     elif BASE_METHOD == 'no': YLIM = (0, .1)
 
@@ -380,22 +380,42 @@ def prep_10sPSDs_lidCategs(
         
         # baseline correct
         try:
-            if 'ecog_' in src: bl_attr = f'ecog_{sub}_baseline'
-            elif 'lfp_' in src: bl_attr = f'{src}_{sub}_baseline'
-            else: bl_attr = f'{src}_{sub}_baseline'
-            bl = getattr(BASELINE, bl_attr)
-            if len(bl.shape) == 2: bl_m = np.mean(bl, axis=0)
-            if len(bl.shape) == 1: bl_m = bl
+            # power baselines from movement selection
+            if FEATURE == 'POWER':
+                if 'ecog_' in src:
+                    bl_attr = f'ecog_{sub}_baseline'
+                elif 'lfp_' in src:
+                    bl_attr = f'{src}_{sub}_baseline'
+                # coherence baseline from 10-sec epochs, smaller movement-selected data not comparable
+                # else: bl_attr = f'{src}_{sub}_baseline'
+                bl = getattr(BASELINE, bl_attr)
+                if len(bl.shape) == 2: bl_m = np.mean(bl, axis=0)
+                if len(bl.shape) == 1: bl_m = bl
+            
+            elif 'COH' in FEATURE:
+                # take baseline over 10-sec epochs, first 5 minutes, no Dyskinesia
+                bl = psx[np.logical_and(ps_times < 5, ps_scores.values == 0)]
+                bl_m = np.mean(bl, axis=0)
+
             
         except:
             print(f'### WARNING no baseline {src} sub {sub}')
             continue
+
         if BASE_METHOD == 'percChange':
+            # print(f'BASELINING % CHANGE {sub}')
+            # plt.plot(ps_freqs, bl_m, lw=3, alpha=.5, label='BASE')
+            # plt.plot(ps_freqs, np.mean(psx, axis=0), lw=3, alpha=.5, label=f'psx (n={len(psx)})')
+            # plt.plot(ps_freqs, bl_m, label=f'BASE 2 (n={len(bl)})')
+            # plt.legend()
+            # plt.show()
             psx = ((psx - bl_m) / bl_m) * 100
+
         elif BASE_METHOD == 'Z':
             assert len(bl.shape) == 2, 'Z-score not possible, only mean BASELINE provided'
             bl_sd = np.std(bl, axis=0)
             psx = ((psx - bl_m) / bl_sd)
+        
         else:
             print(f'\n### NO BASELINING DONE IN GENERAL: {BASE_METHOD}')
 

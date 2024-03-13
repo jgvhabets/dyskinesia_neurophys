@@ -60,6 +60,7 @@ def get_all_ssd_timeFreqs(
             if verbose: print(f'...loaded subject-{sub} Time-Frequency data')
 
         elif not GET_CONNECTIVITY and FEATURE == 'sqCOH':
+            if sub.startswith('1') and COH_SOURCE == 'STNECOG': continue
             # get all timefreq SSD data per sub
             psd_sub = get_COH_timeFreq(
                 sub=sub, COH_TYPE=FEATURE,
@@ -335,10 +336,6 @@ def create_COH_timeFreqArray(
     sel_windows1 = np.isin(win_times1, win_times2)
     sel_windows2 = np.isin(win_times2, win_times1)
     sel_win_times = win_times1[sel_windows1]
-
-
-    print(f'windows sel: 1) {sum(sel_windows1)} / {len(sel_windows1)},'
-          f' 2) {sum(sel_windows2)} / {len(sel_windows2)}')
     
     for i_bw, bw in enumerate(bands.keys()):
         sqcoh_bw, icoh_bw, coh_times = [], [], []
@@ -376,8 +373,6 @@ def create_COH_timeFreqArray(
                 index=np.arange(min_f, max_f + 1)
             )
             icoh_timefreq = sqcoh_timefreq.copy()
-            print(f'START COH calc: DF: {sqcoh_timefreq.shape}')
-        print(f'sqCOH array: {sqcoh_bw.shape}')
     
         # define freq-ranges for band
         bw_range = bands[bw].copy()
