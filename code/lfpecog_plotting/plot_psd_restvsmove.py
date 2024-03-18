@@ -86,6 +86,9 @@ def prep_and_plot_restvsmove(
     if MOVESIDES_SPLITTED in ['4panel', 'StnEcog4','COH_4panel']:
         axes = axes.flatten()
     
+    if INCL_STATS and MOVESIDES_SPLITTED == 'StnEcog4':
+        REST_BLs, REST_BL_subs = {}, {}
+    
     for i_ax, ax in enumerate(axes):
         # define correct prep function
         if i_ax == 0:
@@ -144,7 +147,7 @@ def prep_and_plot_restvsmove(
             RETURN_IDS=True,
         )
 
-        if INCL_STATS:
+        if INCL_STATS and MOVESIDES_SPLITTED != 'StnEcog4':
             if PLOT_MOVE == 'REST' and REST_u30_BASELINE:
                 STAT_BL_epochs = list(psd_arrs.values())[0]
                 STAT_BL_subs = list(psd_subs.values())[0]
@@ -161,6 +164,45 @@ def prep_and_plot_restvsmove(
                 STAT_LID_COMPARE=STAT_LID_COMPARE,
                 ALPHA=ALPHA,
             )
+
+        elif INCL_STATS and MOVESIDES_SPLITTED == 'StnEcog4':
+            # StnEcog4 plots STN Rest-MOVE, ECoG Rest-Move
+            # only plots sig in move plot, move vs rest difference
+            if PLOT_MOVE == 'REST':
+                # take all nolid as baseline
+                print(f'\n\n#### {SOURCE, PLOT_MOVE}')
+                print(f'...add {list(psd_arrs.keys())[:2]} as baseline')
+                nolid_epochs = list(psd_arrs.values())[:2]
+                REST_BLs[SOURCE] = {
+                    'nolid': np.array([row for l in nolid_epochs for row in l]),
+                    'mildlid': psd_arrs['mildlid'],
+                    'moderatelid': psd_arrs['moderatelid'],
+                    'severelid': psd_arrs['severelid']
+                }
+                nolid_subs = list(psd_subs.values())[:2]
+                REST_BL_subs[SOURCE] = {
+                    'nolid': np.array([s for l in nolid_subs for s in l]),
+                    'mildlid': psd_subs['mildlid'],
+                    'moderatelid': psd_subs['moderatelid'],
+                    'severelid': psd_subs['severelid']
+                }
+                stat_df = False
+
+            elif PLOT_MOVE == 'ALLMOVE':
+                # FIX
+                stat_df = get_restMove_stats(
+                    SOURCE=SOURCE, FEATURE=FEATURE,
+                    MOVE_TYPE='10secMove',
+                    STAT_BL_epochs=REST_BLs[SOURCE],
+                    STAT_BL_subs=REST_BL_subs[SOURCE],
+                    epoch_values=psd_arrs,
+                    epoch_ids=psd_subs,
+                    epoch_freqs=psd_freqs,
+                    STATS_VERSION=STATS_VERSION,
+                    STAT_LID_COMPARE=STAT_LID_COMPARE,
+                    ALPHA=ALPHA,
+                )
+
         else:
             stat_df = False
 
@@ -309,10 +351,14 @@ def plot_moveLidSpec_PSDs(
                 sub_epochs = psd_arrs[lid][sub_sel]
             elif isinstance(psd_arrs[lid], list):
                 sub_epochs = list(compress(psd_arrs[lid], sub_sel))
+                if sum(sub_sel) > 0:
+                    sub_epochs = [row for l in sub_epochs for row in l]
+                else:
+                    continue
             elif PLOT_MOVE_TYPE == 'unilatLID':
                 sub_epochs = np.array([row for arr in sub_epochs for row in arr])
             sub_m = np.mean(sub_epochs, axis=0)
-
+            
             if PEAK_SHIFT_GAMMA:
                 gamma_peak = peak_df.loc[f'({s}): all']['narrow_gamma']                
                 sub_m = peak_shift_gamma(gamma_peak, psd_freqs, sub_m)
@@ -320,7 +366,7 @@ def plot_moveLidSpec_PSDs(
             sub_means.append(sub_m)
             meansub_ids.append(s)
 
-        sub_means = np.array(sub_means)
+        sub_means = np.array(sub_means,)
 
         if len(sub_means) < MIN_SUBS_FOR_MEAN:
             PLOT_ALL_SUBS = True
@@ -399,12 +445,15 @@ def plot_moveLidSpec_PSDs(
 
     # plot significancies shades (once per AX)
     if INCL_STATS and STAT_PER_LID_CAT:
-        if FEATURE == 'PSD': y_legend_gap = 60
+        if FEATURE.upper() == 'PSD': y_legend_gap = 60
         else: y_legend_gap = 35
-        plot_stats_categs(stat_df=stat_df, ax=AX,
-                          PLOT_MOVE_TYPE=PLOT_MOVE_TYPE,
-                          Y_BASE=YLIM[1] - y_legend_gap, lw=5,
-                          STATS_VERSION=STATS_VERSION,)
+        if isinstance(stat_df, bool):
+            if stat_df == False: print(f'\n cannot plot STATS for {PLOT_MOVE_TYPE}, {SOURCE}')
+        else:
+            plot_stats_categs(stat_df=stat_df, ax=AX,
+                              PLOT_MOVE_TYPE=PLOT_MOVE_TYPE,
+                              Y_BASE=YLIM[1] - y_legend_gap, lw=5,
+                              STATS_VERSION=STATS_VERSION,)
 
     # add title (once per AX)
     src_title = SOURCE.replace('lfp', 'stn')
@@ -615,14 +664,23 @@ def get_restMove_stats(
     # prevent circular import
     from lfpecog_analysis.prep_stats_movLidspecPsd import get_stat_folder
 
+    # Define correct paths and Naming
     stat_dir = get_stat_folder(STAT_LID_COMPARE=STAT_LID_COMPARE,
                                STAT_DATA_EXT_PATH=True,
                                STATS_VERSION=STATS_VERSION,
                                ALPHA=ALPHA,)
     
     # define naming of stats file
-    dfname = f'restVsMove_1secWins_{MOVE_TYPE.upper()}_{SOURCE.lower()}.csv'  # mov is source
-    if FEATURE.lower() != 'psd':
+    if '10sec' not in MOVE_TYPE:
+        dfname = f'restVsMove_1secWins_{MOVE_TYPE.upper()}_{SOURCE.lower()}.csv'  # mov is source
+    elif MOVE_TYPE == '10sec':
+        dfname = f'PSDs10s_{SOURCE.upper()}_{FEATURE.upper()}.csv'
+    elif MOVE_TYPE == '10secMove':
+        dfname = f'PSDs10sMove_{SOURCE.upper()}_{FEATURE.upper()}.csv'
+    elif MOVE_TYPE == '10secUnilat':
+        dfname = f'PSDs10sUnilat_{SOURCE.upper()}_{FEATURE.upper()}.csv'    
+
+    if FEATURE.lower() != 'psd' and MOVE_TYPE != '10sec':
         dfname = dfname.replace('.csv', f'_{FEATURE.lower()}.csv')
 
     if REST_u30_BASELINE:
@@ -642,10 +700,19 @@ def get_restMove_stats(
 
     print('...load rest psds as baseline for movement')
 
+    print(f'KEYS: {epoch_values.keys()}')
+    print(f'KEYS: {STAT_BL_epochs.keys()}')
+
+    # allocate data of TEST categories
     if MOVE_TYPE == 'REST' and len(epoch_values) == 5:
         lidlabels = list(epoch_values.keys())[1:]
         epoch_values = list(epoch_values.values())[1:]
         epoch_ids = list(epoch_ids.values())[1:]
+    
+    elif MOVE_TYPE == '10sec' and len(epoch_values) == 5:
+        lidlabels = list(epoch_values.keys())[2:]
+        epoch_values = list(epoch_values.values())[2:]
+        epoch_ids = list(epoch_ids.values())[2:]
     
     else:
         lidlabels = list(epoch_values.keys())
@@ -654,32 +721,73 @@ def get_restMove_stats(
 
     print(f'merge epoch values for LMM, lidlabels: {lidlabels}')
 
-    # define baseline values (under30, no LID, rest)
-    BL_values = np.array([row for l in STAT_BL_epochs for row in l])
-    BL_subs = []
-    for og_values, og_sub in zip(STAT_BL_epochs, STAT_BL_subs):
-        BL_subs.extend([og_sub] * len(og_values))
-    BL_subs = np.array(BL_subs)
-    BL_labels = np.array([0] * len(BL_values))
-    assert len(BL_labels) == len(BL_subs), (
-        f'baseline subs ({len(BL_subs)}) and labels ({len(BL_labels)}) mismatch'
-    )
+    ## allocate data for BASELINE values (under30, no LID, rest)
+    if '10sec' not in MOVE_TYPE:
+        BL_values = np.array([row for l in STAT_BL_epochs for row in l])
+        BL_subs = []
+        for og_values, og_sub in zip(STAT_BL_epochs, STAT_BL_subs):
+            BL_subs.extend([og_sub] * len(og_values))
+        BL_subs = np.array(BL_subs)
+        BL_labels = np.array([0] * len(BL_values))
+        assert len(BL_labels) == len(BL_subs), (
+            f'baseline subs ({len(BL_subs)}) and labels ({len(BL_labels)}) mismatch'
+        )
 
+    elif MOVE_TYPE == '10sec':
+        BL_values = STAT_BL_epochs
+        BL_subs = STAT_BL_subs
+        BL_labels = np.array([0] * len(BL_values))
+        assert len(BL_labels) == len(BL_subs), (
+            f'baseline subs ({len(BL_subs)}) and labels ({len(BL_labels)}) mismatch'
+        )
+    
+    elif MOVE_TYPE in ['10secMove', '10secUnilat']:
+        BL_values_dict = list(STAT_BL_epochs.values())  # contains nolid, mild, mid, severe
+        BL_subs_dict = list(STAT_BL_subs.values())
+    
+    # Extract data per CATEGORY and CALCULATE STATS
     stat_df = DataFrame(index=epoch_freqs)
 
     stat_values, stat_labels, stat_ids = {}, {}, {}
 
     for i, values in enumerate(epoch_values):
+        print(f'...start loop {i}: {lidlabels[i]}')
+        if lidlabels[i] == 'contra_severelid': continue  # no severe data during unilat
         # empty list to store lid-category
         stat_coefs, stat_pvals = [], []
-        cat_subs = []  # add sub id for every epoch row in category data
-        for s, l in zip(epoch_ids[i], values): cat_subs.extend([s] * len(l))
-        values = np.array([row for l in values for row in l])
+        
+        if '10sec' not in MOVE_TYPE:  # use for move-sel data
+            cat_subs = []  # add sub id for every epoch row in category data
+            for s, l in zip(epoch_ids[i], values): cat_subs.extend([s] * len(l))
+            values = np.array([row for l in values for row in l])
+        
+        elif MOVE_TYPE == '10sec':
+            cat_subs = epoch_ids[i]
+
+        elif MOVE_TYPE == '10secUnilat':
+            BL_values = BL_values_dict[i]
+            BL_labels = np.array([0] * len(BL_values))
+            BL_subs = BL_subs_dict[i]
+            cat_subs = epoch_ids[i]
+
+        elif MOVE_TYPE == '10secMove':
+            cat_subs = []  # add sub id for every epoch row in category data
+            for s, l in zip(epoch_ids[i], values): cat_subs.extend([s] * len(l))
+            values = np.array([row for l in values for row in l])
+            # match baseline to category (subs have to be multiplied by cat-data-lengths)
+            BL_subs = []
+            for s, l in zip(BL_subs_dict[i], BL_values_dict[i]):
+                BL_subs.extend([s] * len(l))
+            BL_values = np.array([row for l in BL_values_dict[i] for row in l])
+            BL_labels = np.array([0] * len(BL_values))
+            assert len(BL_labels) == len(BL_subs), (
+                f'baseline subs ({len(BL_subs)}) and labels ({len(BL_labels)}) mismatch'
+            )
+        
+        print(f'\n...INCLUDED: [1] values: {len(values)}, base-values: {len(BL_values)}')
         stat_values[i] = np.concatenate([values, BL_values], axis=0)
         stat_labels[i] = np.concatenate([[1] * len(values), BL_labels])  # binary comparison per category
         stat_ids[i] = np.concatenate([cat_subs, BL_subs])
-
-        print(f'STAT DATA {lidlabels[i]}: {stat_values[i].shape}, {stat_labels[i].shape}, {stat_ids[i].shape}')
     
         # CALCULATE LMM COEFFS and SIGN
         # get STATS (coeffs, sign-bools) based on grouped data
@@ -687,13 +795,16 @@ def get_restMove_stats(
         elif STATS_VERSION == '4Hz': f_hop = 4
         
         start_fs = np.concatenate(
-            [np.arange(4, 35, f_hop), np.arange(60, 90, f_hop)]
+            [np.arange(4, 30, f_hop), np.arange(60, 86, f_hop)]
         )
         MULTI_COMP_N = 0
         for f in start_fs:
             MULTI_COMP_N += 1
+            if f == 28: end_f = 35
+            elif f == 84: end_f = 90
+            else: end_f = f + f_hop
             f_sel = np.logical_and(epoch_freqs >= f,
-                                   epoch_freqs < (f + f_hop))
+                                   epoch_freqs < end_f)
             f_values = np.mean(stat_values[i][:, f_sel], axis=1)
             (coeff, pval) = run_mixEff_wGroups(
                 dep_var=f_values,
@@ -704,7 +815,7 @@ def get_restMove_stats(
             # add to lists
             stat_coefs.extend([coeff] * sum(f_sel))  # add for n involved freqs
             stat_pvals.extend([pval] * sum(f_sel))
-            print(f'...added {f} - {f + f_hop} Hz (n={sum(f_sel)})')
+            print(f'...added {f} - {end_f} Hz (n={sum(f_sel)}, p={pval}, coeff={coeff})')
         assert len(stat_pvals) == len(epoch_freqs), (
             f'n pvalues mismatch with n freqs ({len(stat_pvals), len(epoch_freqs)})'
         )
@@ -724,16 +835,23 @@ def plot_stats_categs(
     lw=8, ALPHA=.01, basegroup: str = 'u30',
     STATS_VERSION: str = '4Hz', Y_BASE: int = 150,
 ):
-    if STATS_VERSION == '4Hz': N_MULTI_COMP = 16
+    if STATS_VERSION == '4Hz': N_MULTI_COMP = 14
     elif STATS_VERSION == '2Hz': N_MULTI_COMP = 32
     ALPHA /= N_MULTI_COMP
     print(f'multi-comparison corrected ALPHA = {ALPHA}')
     # get groups
+    # if PLOT_MOVE_TYPE == 'unilatLID':  # first string is "contra"
+    #     lid_cats = np.unique([k.split('_')[1] for k in stat_df.keys()])
+    # else:
     lid_cats = np.unique([k.split('_')[0] for k in stat_df.keys()])
     lid_cats_sort = [c for c in cond_colors.keys() if c in lid_cats]
 
     for i_cat, cat in enumerate(lid_cats_sort):  # loop over CATEGs to show
+        print(f'...PLOT {i_cat} - {cat}')
         # extract pvalues (and coeffs)
+        # if PLOT_MOVE_TYPE == 'unilatLID':
+        #     sign_bools = stat_df[f'contra_{cat}_{basegroup}_pval'].values < ALPHA
+        # else:
         sign_bools = stat_df[f'{cat}_{basegroup}_pval'].values < ALPHA
         sign_bools = sign_bools.astype(float)
         

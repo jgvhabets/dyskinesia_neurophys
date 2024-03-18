@@ -9,7 +9,7 @@ import numpy as np
 from itertools import product
 
 from lfpecog_plotting.plot_psd_restvsmove import (
-    plot_moveLidSpec_PSDs
+    plot_moveLidSpec_PSDs, get_restMove_stats
 )
 from utils.utils_fileManagement import (
     get_project_path, get_avail_ssd_subs
@@ -44,6 +44,7 @@ def plot_overall_PSD_COH(
     INCL_STATS = False,
     PEAKSHIFT_GAMMA = True,
     SMOOTH_WIN: int = 0,
+    ALPHA = .01,
 ):
     """
     Aeguments:
@@ -81,11 +82,7 @@ def plot_overall_PSD_COH(
             psd_arr = psd_arr_dict[src]
             sub_arr = sub_arr_dict[src]
             ps_freqs = ps_freqs_dict[src]
-
-            # ### 10-sec PREP has to lead to psd_arrs, psd_freqs, psd_subs
-            for arr in [psd_arr, sub_arr]:
-                if 'nolid' in list(arr.keys()):
-                    del(arr['nolid'])  # leave only 30min no lids in
+            
         
         elif ft == 'sqCOH':
             # get timefreq values and baseline for coherences
@@ -117,6 +114,33 @@ def plot_overall_PSD_COH(
                 IPSI_CONTRA_UNILID=False,
                 BASE_METHOD=BASE_METHOD,
             )
+        
+        # ### 10-sec PREP has to lead to psd_arrs, psd_freqs, psd_subs
+        for arr in [psd_arr, sub_arr]:
+            if 'nolid' in list(arr.keys()):
+                del(arr['nolid'])  # leave only 30min no lids in
+
+        if INCL_STATS:
+            # take all nolid as baseline
+            STAT_BL_epochs = list(psd_arr.values())[:2]
+            STAT_BL_epochs = np.array([row for l in STAT_BL_epochs for row in l])
+            STAT_BL_subs = list(sub_arr.values())[:2]
+            STAT_BL_subs = np.array([s for l in STAT_BL_subs for s in l])
+            # load or calculate stats
+            stat_df = get_restMove_stats(
+                SOURCE=src, FEATURE=ft,
+                MOVE_TYPE='10sec',
+                STAT_BL_epochs=STAT_BL_epochs,
+                STAT_BL_subs=STAT_BL_subs,
+                epoch_values=psd_arr,
+                epoch_ids=sub_arr,
+                epoch_freqs=ps_freqs,
+                STATS_VERSION='4Hz',
+                STAT_LID_COMPARE='categs',
+                ALPHA=ALPHA,
+                REST_u30_BASELINE=False,
+            )
+        
 
 
         plot_moveLidSpec_PSDs(
@@ -128,6 +152,7 @@ def plot_overall_PSD_COH(
             PLOT_MOVE_TYPE='overall',
             AX=ax,
             INCL_STATS=INCL_STATS,
+            stat_df=stat_df,
             YLIM=YLIM,
             PEAK_SHIFT_GAMMA=PEAKSHIFT_GAMMA,
             SMOOTH_WIN=SMOOTH_WIN,
@@ -208,6 +233,38 @@ def plot_unilatLID_PSD_10s(
             BASE_METHOD=BASE_METHOD,
         )
 
+        if INCL_STATS:
+            # split data in two groups for stats: ipsi vs contra
+            ipsi_arr = {k: v for k,v in psd_arrs.items() if 'ipsi' in k}
+            ipsi_arr = {
+                'alllid': np.concatenate([arr for arr in ipsi_arr.values()
+                                          if len(arr.shape) == 2], axis=0)}
+            contra_arr = {k: v for k,v in psd_arrs.items() if 'contra' in k}
+            contra_arr = {
+                'alllid': np.concatenate([arr for arr in contra_arr.values()
+                                          if len(arr.shape) == 2], axis=0)}
+            ipsi_subs = {k: v for k,v in sub_arrs.items() if 'ipsi' in k}
+            ipsi_subs = {'alllid': np.concatenate([arr for arr in ipsi_subs.values()
+                                                   if len(arr) > 0], axis=0)}
+            contra_subs = {k: v for k,v in sub_arrs.items() if 'contra' in k}
+            contra_subs = {'alllid': np.concatenate([arr for arr in contra_subs.values()
+                                                   if len(arr) > 0], axis=0)}
+            
+            # load or calculate stats
+            stat_df = get_restMove_stats(
+                SOURCE=src, FEATURE='psd',
+                MOVE_TYPE='10secUnilat',
+                STAT_BL_epochs=ipsi_arr,
+                STAT_BL_subs=ipsi_subs,
+                epoch_values=contra_arr,
+                epoch_ids=contra_subs,
+                epoch_freqs=ps_freqs,
+                STATS_VERSION='4Hz',
+                STAT_LID_COMPARE='categs',
+                ALPHA=.01,
+                REST_u30_BASELINE=False,
+            )
+
         plot_moveLidSpec_PSDs(
             psd_arrs=psd_arrs,
             psd_freqs=ps_freqs,
@@ -216,6 +273,7 @@ def plot_unilatLID_PSD_10s(
             PLOT_MOVE_TYPE='unilatLID',
             AX=ax,
             INCL_STATS=INCL_STATS,
+            stat_df=stat_df,
             PEAK_SHIFT_GAMMA=PEAKSHIFT_GAMMA,
             SMOOTH_WIN=SMOOTH_WIN,
         )
