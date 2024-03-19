@@ -84,10 +84,10 @@ if __name__ == "__main__":
     for loc in ["STN", "ECOG"]:
 
         if loc == "ECOG":
-            with open(os.path.join("lfpecog_decode_cebra", "X_cross_val_data_ECOG_AND_STN.pickle"), 'rb') as f:
+            with open(os.path.join("data", "X_cross_val_data_ECOG_AND_STN.pickle"), 'rb') as f:
                 X_cross_val_data = pickle.load(f)
         else:
-            with open(os.path.join("lfpecog_decode_cebra", "X_cross_val_data_STN.pickle"), 'rb') as f:
+            with open(os.path.join("data", "featLabels_ftv6_Cdrs_Ecog.P"), 'rb') as f:
                 X_cross_val_data = pickle.load(f)
 
         X_all = X_cross_val_data['X_all']
