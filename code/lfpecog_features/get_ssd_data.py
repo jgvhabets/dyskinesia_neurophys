@@ -20,7 +20,7 @@ from itertools import compress
 from pandas import DataFrame, isna
 from scipy.signal import welch
 
-# import meet.meet as meet  # https://github.com/neurophysics/meet
+import meet.meet as meet  # https://github.com/neurophysics/meet
 
 from utils.utils_windowing import get_windows
 from lfpecog_preproc.preproc_import_scores_annotations import get_ecog_side
@@ -32,6 +32,9 @@ from utils.utils_fileManagement import (
 from lfpecog_features.feats_helper_funcs import (
     check_matrix_properties, regularize_matrix
 )
+from lfpecog_features.feats_spectral_helpers import get_indiv_band_peaks
+
+
 
 def get_SSD_component(
     data_2d, fband_interest, s_rate,
@@ -199,9 +202,13 @@ class SSD_bands_windowed:
         except FileNotFoundError:
             print('\n\t...windowed SSD data doesnot exist yet'
                   f' for {self.datasource} of sub-{self.sub}')
+            if self.settings['FT_VERSION'] == 'v8': HD_STORAGE = True
+            if self.settings['FT_VERSION'] == 'v6': HD_STORAGE = False
+
             create_SSDs(sub=self.sub, settings=self.settings,
                         incl_ecog=self.incl_ecog,
-                        incl_stn=self.incl_stn)
+                        incl_stn=self.incl_stn,
+                        READ_EXT_HD=HD_STORAGE,)
             print('\t...created SSD windowed-data and meta-info'
                   f' for {self.datasource} of sub-{self.sub}')
             # use newly created data
@@ -300,6 +307,7 @@ def load_windowed_ssds(sub, dType, settings: dict):
 
     
     return data_ssd, meta_ssd
+
 
 
 
@@ -593,7 +601,16 @@ class create_SSDs():
                 
                 # loop over defined frequency bands
                 for bw in SETTINGS['SPECTRAL_BANDS']:
-                    f_range = SETTINGS['SPECTRAL_BANDS'][bw]
+                    # get individual gamma peak during dysk-movement (or tap-movement if no dysk)
+                    if SETTINGS['FT_VERSION'] == 'v8' and bw == 'gammPeak':
+                        if 'lfp' in dType: peak_df = get_indiv_band_peaks('lfp')
+                        if 'ecog' in dType: peak_df = get_indiv_band_peaks('ecog')
+                        f = peak_df.loc[f'({self.sub}): dysk']['narrow_gamma']
+                        if np.isnan(f):
+                            f = peak_df.loc[f'({self.sub}): tap']['narrow_gamma']
+                        f_range = [int(f - 2), int(f + 2)]
+                    else:
+                        f_range = SETTINGS['SPECTRAL_BANDS'][bw]
                     
                     try:
                         # print(f'\tSSD for {bw}')
@@ -613,8 +630,6 @@ class create_SSDs():
                             ssd_filt_data = np.concatenate([
                                 ssd_filt_data, [np.nan] * n_pad
                             ])
-                            # print(f'padded n={n_pad}')
-                            # TODO: remove NaNs in feature selection
                         
                         ssd_arr_2d.append(ssd_filt_data)  # add band to current window
 

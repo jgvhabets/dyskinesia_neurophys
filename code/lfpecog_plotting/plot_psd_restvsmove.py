@@ -37,6 +37,7 @@ def prep_and_plot_restvsmove(
     FEATURE: str = 'PSD',
     BASE_METHOD: str = 'OFF_perc_change',
     MOVESIDES_SPLITTED: bool = False,
+    LID_BINARY: bool = False,
     SAVE_PLOT: bool = False,
     SHOW_PLOT: bool = True,
     INCL_STATS: bool = True,
@@ -147,6 +148,15 @@ def prep_and_plot_restvsmove(
             RETURN_IDS=True,
         )
 
+        if LID_BINARY:
+            lidcats = ['mild', 'moderate', 'severe']
+            psd_arrs['alllid'] = np.concatenate([psd_arrs[f'{c}lid']
+                                                 for c in lidcats], axis=0)
+            psd_subs['alllid'] = np.concatenate([psd_subs[f'{c}lid']
+                                                 for c in lidcats])
+            for c in lidcats: del(psd_arrs[c], psd_subs[c])
+            
+
         if INCL_STATS and MOVESIDES_SPLITTED != 'StnEcog4':
             if PLOT_MOVE == 'REST' and REST_u30_BASELINE:
                 STAT_BL_epochs = list(psd_arrs.values())[0]
@@ -212,6 +222,7 @@ def prep_and_plot_restvsmove(
             psd_arrs, psd_freqs=psd_freqs, psd_subs=psd_subs,
             SOURCE=SOURCE, FEATURE=FEATURE,
             AX=ax, PLOT_MOVE_TYPE=PLOT_MOVE,
+            LID_BINARY=LID_BINARY,
             BASE_METHOD=BASE_METHOD,
             stat_df=stat_df,
             INCL_STATS=INCL_STATS,
@@ -294,6 +305,7 @@ def plot_moveLidSpec_PSDs(
     SMOOTH_WIN: int = 0,
     YLIM: tuple = (-75, 200),
     PEAK_SHIFT_GAMMA: bool = True,
+    LID_BINARY: bool = False,
 ):
     """
     Plot either rest, or movement on single axis
@@ -308,6 +320,12 @@ def plot_moveLidSpec_PSDs(
             'contra_mildlid': 'yellowgreen',  # palegreen
             'contra_moderatelid': 'forestgreen',
             'contra_severelid' : 'darkgreen'
+        }
+    elif LID_BINARY:
+        cond_colors = {
+            'alllid': 'darkorchid',
+            'nolidbelow30': 'limegreen',
+            'nolidover30': 'darkgreen'
         }
     else:
         cond_colors = {
@@ -479,6 +497,7 @@ def plot_moveLidSpec_PSDs(
 
     xtick_sel = np.where([x in XTICKS for x in xlabs])[0]
     xticks = x_plot[xtick_sel]
+    xticks[-1] = x_plot[-1]  # fix last tick to end of array
     xlabs = np.array(xlabs).copy()[xtick_sel]
     xlabs[-1] = 90  # mark last tick with 90 (instead of 89)
     if PEAK_SHIFT_GAMMA:
