@@ -328,7 +328,9 @@ def plot_moveLidSpec_PSDs(
             'ipsi_severelid': 'darkblue',
             'contra_mildlid': 'burlywood',  # palegreen
             'contra_moderatelid': 'peru',
-            'contra_severelid' : 'darkgreen'
+            'contra_severelid' : 'darkgreen',
+            'ipsi_alllid': 'lightskyblue',
+            'contra_alllid': 'burlywood'
         }
     elif LID_BINARY:
         cond_colors = {
@@ -419,13 +421,18 @@ def plot_moveLidSpec_PSDs(
                 PSD=m, PSD_sd=sem,
                 x_break = (35, 60), nan_pad = 5
             )
-
+            # edit legend labels for readibility
             lab = lid.replace('lid', ' LID')  #  add spaces for readability
             lab = lab.replace('below30', ' < 30min')
             lab = lab.replace('over30', ' > 30min')
             lab = lab.replace('_', ' ')
-            # plot mean line of LID severity
-            AX.plot(x_plot, m,
+            lab = lab.replace('ipsi all', 'Ipsilateral to')
+            lab = lab.replace('contra all', 'Contralateral to')
+            
+            if LID_BINARY: lw=3
+            else: lw=1
+            
+            AX.plot(x_plot, m, lw=lw,
                     color=cond_colors[lid], alpha=.8, ls=ls,
                     label=f"{lab} (n={n_subs})",)
             # plot variance shades (LID severity)
@@ -518,8 +525,14 @@ def plot_moveLidSpec_PSDs(
     AX.set_xticks(xticks)
     AX.set_xticklabels(xlabs, fontsize=FS,)
     AX.set_ylim(YLIM)
-    AX.legend(fontsize=FS - 6, frameon=False, ncol=2,
-              bbox_to_anchor=(.5, .99), loc='upper center')
+
+    # Legend
+    if PLOT_MOVE_TYPE == 'unilatLID':
+        AX.legend(fontsize=FS - 2, frameon=False, ncol=1,
+                  bbox_to_anchor=(.5, .99), loc='upper center')
+    else:
+        AX.legend(fontsize=FS - 6, frameon=False, ncol=2,
+                  bbox_to_anchor=(.5, .99), loc='upper center')
     AX.tick_params(size=FS, labelsize=FS,)
     for s in ['right', 'top']: AX.spines[s].set_visible(False)
     # AX.text(x=xticks[len(xticks) // 2] + 2, y=-73, s='//', size=16, color='k')

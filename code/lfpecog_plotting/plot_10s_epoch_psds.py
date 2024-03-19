@@ -191,6 +191,7 @@ def plot_unilatLID_PSD_10s(
     SAVE_PLOT = True,
     FIG_DATE = '000',
     BASE_METHOD: str = 'percChange',
+    LID_BINARY: bool = False,
     SHOW_PLOT = False,
     INCL_STATS = False,
     SMOOTH_WIN: int = 0,
@@ -213,7 +214,8 @@ def plot_unilatLID_PSD_10s(
     n_rows, n_cols = 1, 2
     kw_params = {'sharey': 'row'}
 
-    if BASE_METHOD == 'percChange': YLIM = (-60, 175)
+    if BASE_METHOD == 'percChange' and not LID_BINARY: YLIM = (-60, 175)
+    elif BASE_METHOD == 'percChange' and LID_BINARY: YLIM = (-35, 75)
     elif BASE_METHOD == 'Z': YLIM = (-.5, 1.5)
 
     fig, axes = plt.subplots(n_rows, n_cols,
@@ -233,7 +235,7 @@ def plot_unilatLID_PSD_10s(
             BASE_METHOD=BASE_METHOD,
         )
 
-        if INCL_STATS:
+        if INCL_STATS or LID_BINARY:
             # split data in two groups for stats: ipsi vs contra
             ipsi_arr = {k: v for k,v in psd_arrs.items() if 'ipsi' in k}
             ipsi_arr = {
@@ -248,23 +250,32 @@ def plot_unilatLID_PSD_10s(
                                                    if len(arr) > 0], axis=0)}
             contra_subs = {k: v for k,v in sub_arrs.items() if 'contra' in k}
             contra_subs = {'alllid': np.concatenate([arr for arr in contra_subs.values()
-                                                   if len(arr) > 0], axis=0)}
+                                                    if len(arr) > 0], axis=0)}
             
-            # load or calculate stats
-            stat_df = get_restMove_stats(
-                SOURCE=src, FEATURE='psd',
-                MOVE_TYPE='10secUnilat',
-                STAT_BL_epochs=ipsi_arr,
-                STAT_BL_subs=ipsi_subs,
-                epoch_values=contra_arr,
-                epoch_ids=contra_subs,
-                epoch_freqs=ps_freqs,
-                STATS_VERSION='4Hz',
-                STAT_LID_COMPARE='categs',
-                ALPHA=.01,
-                REST_u30_BASELINE=False,
-            )
-        
+            if LID_BINARY:
+                psd_arrs = {'ipsi_alllid': ipsi_arr['alllid'],
+                            'contra_alllid': contra_arr['alllid']}
+                sub_arrs = {'ipsi_alllid': ipsi_subs['alllid'],
+                            'contra_alllid': contra_subs['alllid']}
+            
+            if INCL_STATS:
+                # load or calculate stats
+                stat_df = get_restMove_stats(
+                    SOURCE=src, FEATURE='psd',
+                    MOVE_TYPE='10secUnilat',
+                    STAT_BL_epochs=ipsi_arr,
+                    STAT_BL_subs=ipsi_subs,
+                    epoch_values=contra_arr,
+                    epoch_ids=contra_subs,
+                    epoch_freqs=ps_freqs,
+                    STATS_VERSION='4Hz',
+                    STAT_LID_COMPARE='categs',
+                    ALPHA=.01,
+                    REST_u30_BASELINE=False,
+                )
+            else:
+                stat_df = False
+
         else:
             stat_df = False
 
@@ -274,7 +285,9 @@ def plot_unilatLID_PSD_10s(
             psd_subs=sub_arrs,
             SOURCE=src,
             PLOT_MOVE_TYPE='unilatLID',
+            LID_BINARY=LID_BINARY,
             AX=ax,
+            YLIM=YLIM,
             INCL_STATS=INCL_STATS,
             stat_df=stat_df,
             PEAK_SHIFT_GAMMA=PEAKSHIFT_GAMMA,
@@ -289,6 +302,7 @@ def plot_unilatLID_PSD_10s(
 
     if SAVE_PLOT:
         FIG_NAME = f'{FIG_DATE}_Lateral_unilatLID_stnecog'
+        if LID_BINARY: FIG_NAME += 'BINARY'
         if BASE_METHOD == 'Z': FIG_NAME += '_offZ'
         if BASE_METHOD == 'percChange': FIG_NAME += '_percChange'
         if PEAKSHIFT_GAMMA: FIG_NAME += '_gammaShift'
