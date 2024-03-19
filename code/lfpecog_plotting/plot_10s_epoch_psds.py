@@ -264,6 +264,9 @@ def plot_unilatLID_PSD_10s(
                 ALPHA=.01,
                 REST_u30_BASELINE=False,
             )
+        
+        else:
+            stat_df = False
 
         plot_moveLidSpec_PSDs(
             psd_arrs=psd_arrs,

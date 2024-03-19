@@ -45,10 +45,12 @@ class FeatLidClass:
     WIN_OVERLAP_part: float = 0.5
     TO_CALC_CORR: bool = False
     CORR_TARGET: str = 'CDRS'
+    get_FEATS_EXT_HD: bool = False
+    verbose: bool = False
 
     def __post_init__(self,):
 
-        if self.FT_VERSION in ['v4', 'v5', 'v6']:
+        if self.FT_VERSION in ['v4', 'v5', 'v6', 'v8',]:
             self.DATA_VERSION = 'v4.0'
         if self.FT_VERSION in ['v7',]:
             self.DATA_VERSION = 'v4.2'
@@ -76,6 +78,8 @@ class FeatLidClass:
                 INCL_STN=self.INCL_STN,
                 INCL_ECOG=self.INCL_ECOG,
                 FT_VERSION=self.FT_VERSION,
+                FEATS_on_EXTHD=self.get_FEATS_EXT_HD,
+                verbose=self.verbose,
             )
 
             # LOAD CLINICAL SCORES AND CORRESPONDING WINDOW SELECTION
@@ -167,6 +171,7 @@ def load_feature_df_for_pred(
     INCL_ECOG: bool = True,
     EXCL_IPSI_ECOG: int = False,
     FT_VERSION: str = 'v6',
+    FEATS_on_EXTHD: bool = False,
     verbose: bool = False,
 ):
     """

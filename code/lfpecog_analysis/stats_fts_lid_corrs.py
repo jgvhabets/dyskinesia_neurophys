@@ -18,7 +18,7 @@ from utils.utils_fileManagement import (get_project_path,
 
 
 
-def replace_gammas_for_maxGamma(df):
+def replace_gammas_for_maxGamma(df, lfp_side=False,):
 
     gamma_keys = [k for k in list(df.keys()) if any(
         ['gamma1' in k, 'gamma2' in k, 'gamma3' in k]
@@ -26,13 +26,13 @@ def replace_gammas_for_maxGamma(df):
     if len(gamma_keys) == 0: return df
 
     # check local spectral features
-    for source, var in product(['lfp', 'ecog'],
+    for source, var in product(['lfp', 'lfp_right', 'lfp_left', 'ecog'],
                                ['mean_psd', 'variation']):
         g_keys = [k for k in gamma_keys
                   if source in k and var in k]
         if len(g_keys) > 0:
-            new_name = g_keys[0].replace('gamma1', 'gamma')
-            df[new_name] = df[g_keys].max(axis=1)
+            new_name = g_keys[0].replace('gamma1', 'gammaBroad')
+            df[new_name] = df[g_keys].mean(axis=1)
 
     # check coherences
     for source, var in product(['STN_STN', 'STN_ECOG'],
@@ -40,8 +40,8 @@ def replace_gammas_for_maxGamma(df):
         g_keys = [k for k in gamma_keys
                   if source in k and var in k]
         if len(g_keys) > 0:
-            new_name = g_keys[0].replace('gamma1', 'gamma')
-            df[new_name] = df[g_keys].max(axis=1)
+            new_name = g_keys[0].replace('gamma1', 'gammaBroad')
+            df[new_name] = df[g_keys].mean(axis=1)
 
     df = df.drop(columns=gamma_keys)
 

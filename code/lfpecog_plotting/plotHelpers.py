@@ -6,6 +6,32 @@ Function to assisst making pretty Plots
 
 from os.path import join
 import json
+from numpy.random import uniform
+
+
+def get_plot_jitter(x_temp, y_temp, jit_width=.5, ZERO_SPACE=True):
+    """
+    if ZERO_SPACE: x_temp 0's are shifted to -1's
+    """
+    # jitter X, CDRS scores
+    x_jitter = uniform(
+        low=-jit_width, high=jit_width, size=len(x_temp)
+    )
+    # move to -1 x-axis and increase jitter for no dyskinesia
+    if ZERO_SPACE:
+        nolid_sel = x_temp == 0  # select current samples with CDRS == 0
+        x_temp[nolid_sel] -= 1   # set base at -1 on x-axis
+        x_jitter[nolid_sel] = uniform(
+            low=-jit_width * 3, high=jit_width * 3, size=sum(nolid_sel)
+        )  # double the jitter
+    
+    # jitter Y, movement z-scores
+    y_jitter = uniform(
+        low=-jit_width, high=jit_width, size=len(y_temp)
+    )
+
+    return x_jitter, y_jitter
+
 
 def remove_duplicate_legend(
     legend_handles_labels

@@ -21,6 +21,50 @@ from lfpecog_features.moveDetection_preprocess import (
     signalvectormagn
 )
 
+
+def get_task_minutes(DATA=False, SUBS=False,
+                     STORE_JSON: bool = False,
+                     LOAD_JSON: bool = True,):
+    """
+    uses DATA from predArrays.get_move_selected_env_arrays()
+    
+    """
+    if LOAD_JSON:
+        assert isinstance(SUBS, list), 'insert sub list to load json'
+    else:
+        assert not isinstance(DATA, bool), 'DATA should be given to create and store JSON'
+    
+    task_minutes = {}
+    for sub in SUBS:
+
+        if LOAD_JSON:
+            with open(join(
+                get_project_path('results'),
+                'task_minutes.json'
+            ), 'r') as f:
+                task_minutes[sub] = json.load(f)
+            continue
+
+        task_arr = DATA[sub]['lfp_left'][-2]
+        min_arr = np.around(DATA[sub]['lfp_left'][-3] / 60)
+        uniq_min, uniq_idx = np.unique(min_arr, return_index=True)
+        uniq_task = task_arr[uniq_idx]
+
+        task_minutes[sub] = [uniq_min, uniq_task]
+    
+    # SAVE TASK ARRAYS AS JSON
+    if STORE_JSON:
+        json_tasks = make_object_jsonable(task_minutes)
+
+        with open(join(
+            get_project_path('results'),
+            'task_minutes.json'
+        ), 'w') as f:
+            json.dump(json_tasks, f)
+    
+    return task_minutes
+
+
 def get_n_and_length_taps(win_tap_bool, acc_fs):
     """
     Get the number and duration of taps

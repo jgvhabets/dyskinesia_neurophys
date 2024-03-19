@@ -12,6 +12,26 @@ from os.path import join
 from utils.utils_fileManagement import get_project_path
 
 
+def add_mean_gamma_column(df, MAX=False,):
+    """
+    gives round minutes and rest/tap tasks [0, 1],
+    free not included
+    """
+
+    gamma_keys = [k for k in df.keys() if 'gamma1' in k]
+
+
+    for k in gamma_keys:
+        if k.replace('gamma1', 'gammaMean') not in df.keys():
+            g1 = df[k].values
+            g2 = df[k.replace('gamma1', 'gamma2')].values
+            g3 = df[k.replace('gamma1', 'gamma3')].values
+            if not MAX: gamma_mean = np.mean([g1, g2, g3], axis=0)
+            elif MAX: gamma_mean = np.max([g1, g2, g3], axis=0)
+            df[k.replace('gamma1', 'gammaBroad')] = gamma_mean
+            
+
+
 def get_indiv_band_peaks(SRC='lfp'):
     # save indiv peak data frame as excel for readable output
     df = read_excel(join(
@@ -21,6 +41,28 @@ def get_indiv_band_peaks(SRC='lfp'):
     ), index_col=0,)
     
     return df
+
+
+def get_peakish_gamma_part(
+    sub, src: str = 'lfp', peak_sel_state = 'dysk',
+):
+    """
+    only used for FT_VERSION v6 in scatter plot
+    """
+    # all / rest / dysk /tap
+    peak_df = get_indiv_band_peaks(SRC=src,)
+    gamma_peak_f = peak_df.loc[f'({sub}): {peak_sel_state}']['narrow_gamma']
+    if np.isnan(gamma_peak_f):
+        gamma_peak_f = peak_df.loc[f'({sub}): all']['narrow_gamma']
+
+    if gamma_peak_f >= 60 and gamma_peak_f < 70:
+        gamma_key = 'gamma1'
+    elif gamma_peak_f >= 70 and gamma_peak_f < 80:
+        gamma_key = 'gamma2'
+    elif gamma_peak_f >= 80 and gamma_peak_f < 90:
+        gamma_key = 'gamma3'
+    
+    return gamma_key
 
 
 def peak_shift_gamma(

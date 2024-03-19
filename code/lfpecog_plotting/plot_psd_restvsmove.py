@@ -75,7 +75,8 @@ def prep_and_plot_restvsmove(
         kw_params['sharex'] = 'col'
 
     
-    if FEATURE == 'PSD': YLIM = (-60, 175)
+    if FEATURE == 'PSD' and not LID_BINARY: YLIM = (-60, 175)
+    elif FEATURE == 'PSD' and LID_BINARY: YLIM = (-30, 75)
     else: YLIM = (-50, 100)
     if BASE_METHOD == 'perc_spectral': YLIM = (0, 30)
     elif BASE_METHOD == 'OFF_zscore': YLIM = (-.75, 1.25)
@@ -150,11 +151,19 @@ def prep_and_plot_restvsmove(
 
         if LID_BINARY:
             lidcats = ['mild', 'moderate', 'severe']
-            psd_arrs['alllid'] = np.concatenate([psd_arrs[f'{c}lid']
-                                                 for c in lidcats], axis=0)
-            psd_subs['alllid'] = np.concatenate([psd_subs[f'{c}lid']
-                                                 for c in lidcats])
-            for c in lidcats: del(psd_arrs[c], psd_subs[c])
+            lidpsds = [psd_arrs[f'{c}lid'] for c in lidcats]
+            lidpsds = [arr for l in lidpsds for arr in l]
+            lidsubs = [psd_subs[f'{c}lid'] for c in lidcats]
+            lidsubs = [s for l in lidsubs for s in l]
+            psd_arrs['alllid'], psd_subs['alllid'] = [], []
+            for arr, s in zip(lidpsds, lidsubs):
+                psd_subs['alllid'].extend([s] * len(arr))
+                psd_arrs['alllid'].extend([row for row in arr])
+
+            psd_arrs['alllid'] = np.array(psd_arrs['alllid'])
+            psd_subs['alllid'] = np.array(psd_subs['alllid'])
+            
+            for c in lidcats: del(psd_arrs[f'{c}lid'], psd_subs[f'{c}lid'])
             
 
         if INCL_STATS and MOVESIDES_SPLITTED != 'StnEcog4':
@@ -314,18 +323,19 @@ def plot_moveLidSpec_PSDs(
 
     if PLOT_MOVE_TYPE == 'unilatLID':
         cond_colors = {
-            'ipsi_mildlid': 'cornflowerblue',  # lightsteelblue
-            'ipsi_moderatelid': 'mediumblue',
+            'ipsi_mildlid': 'lightskyblue',  # lightsteelblue
+            'ipsi_moderatelid': 'deepskyblue',
             'ipsi_severelid': 'darkblue',
-            'contra_mildlid': 'yellowgreen',  # palegreen
-            'contra_moderatelid': 'forestgreen',
+            'contra_mildlid': 'burlywood',  # palegreen
+            'contra_moderatelid': 'peru',
             'contra_severelid' : 'darkgreen'
         }
     elif LID_BINARY:
         cond_colors = {
             'alllid': 'darkorchid',
             'nolidbelow30': 'limegreen',
-            'nolidover30': 'darkgreen'
+            'nolidover30': 'darkgreen',
+            'nolid': 'darkgreen'
         }
     else:
         cond_colors = {
@@ -419,11 +429,12 @@ def plot_moveLidSpec_PSDs(
                     color=cond_colors[lid], alpha=.8, ls=ls,
                     label=f"{lab} (n={n_subs})",)
             # plot variance shades (LID severity)
-            if 'ipsi' not in lid:
-                kw_pms = {'alpha': .3, 'color': cond_colors[lid]}
-            elif 'ipsi' in lid:
-                kw_pms = {'alpha': .3, 'edgecolor': cond_colors[lid],
-                          'facecolor': 'none', 'hatch': '//'}    
+            if ('ipsi' in lid or 'contra' in lid) and 'moderate' in lid:
+                kw_pms = {'alpha': .5, 'edgecolor': cond_colors[lid],
+                          'facecolor': 'none', 'hatch': '//'}
+            else:
+                kw_pms = {'alpha': .5, 'color': cond_colors[lid]}
+            
             AX.fill_between(x_plot, y1=m-sem, y2=m+sem, # PSDs[cond].freqs, 
                             **kw_pms,)
 
@@ -584,13 +595,13 @@ def prep_RestVsMove_psds(SRC, PLOT_MOVE, PSD_DICT, BASELINE,
     
     # categorize, average, baseline-corr all conditions
     for MOVE, cond in product(ATTR_CODE, PSD_DICT.keys()):
-        print(f'\n\t- {MOVE}, {cond} ({SRC})')
+        # print(f'\n\t- {MOVE}, {cond} ({SRC})')
         if not MOVE.lower() in cond.lower(): continue
         # loop and add subjects
         for attr in vars(PSD_DICT[cond]).keys():
             # skip irelevant attr
             if not MOVE.lower() in attr.lower() or SRC not in attr: continue
-            print(f'...selected attr for {PLOT_MOVE}: {attr}')
+            # print(f'...selected attr for {PLOT_MOVE}: {attr}')
             
             # define SUB
             if 'lfp' in SRC: sub = attr.split('_')[2]  # exclude lfp side PSD
@@ -653,6 +664,8 @@ def prep_RestVsMove_psds(SRC, PLOT_MOVE, PSD_DICT, BASELINE,
             temp_lid = attr.split('_')[-1]
 
             psd_arrs[temp_lid].append(temp_psd)
+            # print(f'...add {len(temp_psd)} to cat {temp_lid}')
+
             # add subject ID to list
             if RETURN_IDS: sub_arrs[temp_lid].append(sub)
             
@@ -661,9 +674,11 @@ def prep_RestVsMove_psds(SRC, PLOT_MOVE, PSD_DICT, BASELINE,
 
     for l in lid_states:
         if len(psd_arrs[l]) == 0:
-            print(f'remove psd/sub-arrs {l}')
+            print(f'remove psd/sub-arrs {l} (length of array zero)')
             del(psd_arrs[l])
             del(sub_arrs[l])
+            continue
+        # print(f'keep {l}, length: {len(psd_arrs[l])}')
 
     if not RETURN_IDS: return psd_arrs, psd_freqs
 

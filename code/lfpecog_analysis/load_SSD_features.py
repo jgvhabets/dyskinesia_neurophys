@@ -42,11 +42,13 @@ class ssdFeatures:
         - incl_coherence: include SSD Coherences values
     """
     settings_json: str = 'ftExtr_spectral_v1.json'
+    FEATS_on_EXTHD: bool = False
     sub_list: list = field(default_factory=lambda: [])
     incl_powers: bool = True
     incl_localPAC: bool = False
     incl_bursts: bool = False
     incl_coherence: bool = True
+    FEATS_on_EXTHD: bool = False
     verbose: bool = False
 
     def __post_init__(self,):
@@ -66,11 +68,11 @@ class ssdFeatures:
 
         # define feature path and check existence
         self.feat_path = join(get_project_path('results'),
-                    'features',
-                    ssd_folder,
-                    self.data_version,
-                    f'windows_{self.win_len_sec}s_'
-                    f'{self.win_overlap_part}overlap')
+                              'features',
+                              ssd_folder,
+                              self.data_version,
+                              f'windows_{self.win_len_sec}s_'
+                              f'{self.win_overlap_part}overlap')
         assert exists(self.feat_path), f'feat_path ({self.feat_path}) does not exist'
         # take all available subjects from feature path if sub_list is not defined
         if self.sub_list == []:
