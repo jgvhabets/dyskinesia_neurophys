@@ -26,7 +26,9 @@ from lfpecog_analysis.specific_ephys_selection import (
 from lfpecog_preproc.preproc_import_scores_annotations import (
     get_ecog_side
 )
-
+from lfpecog_features.feats_spectral_helpers import (
+    get_indiv_gammaPeak_range
+)
 
 def get_baseline_arr_dict(BLs_1s, LOG: bool = False,):
     """
@@ -57,6 +59,7 @@ def get_baseline_arr_dict(BLs_1s, LOG: bool = False,):
 def get_allSpecStates_Psds(
     FEATURE: str = 'POWER',
     COH_TYPE: str = 'None',
+    FT_VERSION: str = 'v6',
     RETURN_PSD_1sec = True,
     incl_rest: bool = True,
     incl_tap: bool = True,
@@ -107,6 +110,7 @@ def get_allSpecStates_Psds(
     BLs = get_selectedEphys(
         FEATURE=FEATURE,
         COH_TYPE=COH_TYPE,
+        FT_VERSION=FT_VERSION,
         STATE_SEL='baseline',
         LOAD_PICKLE=True,
         USE_EXT_HD=True,
@@ -192,19 +196,20 @@ class get_selectedEphys:
         picklepath = os.path.join(
             data_path,
             'windowed_data_classes_10s_0.5overlap',
+            f'ft_{self.FT_VERSION}',
             'selected_ephys_classes_all'
         )
         if self.FEATURE == 'POWER':
             states_picklepath = os.path.join(
                 data_path,
                 'windowed_data_classes_10s_0.5overlap',
-                'selected_psd_states'
+                f'ft_{self.FT_VERSION}', 'selected_psd_states'
             )
         else:
             states_picklepath = os.path.join(
                 data_path,
                 'windowed_data_classes_10s_0.5overlap',
-                'selected_COH_states'
+                f'ft_{self.FT_VERSION}', 'selected_COH_states'
             )
 
         # set epoch length to be given into calclulate coherence
@@ -218,7 +223,8 @@ class get_selectedEphys:
         # print(f'\n#### (no FREE folder) TODO: calculate selectedPsdState (MEANS) incl FREE')
         
         if self.RETURN_PSD_1sec: states_picklepath += '_1secArrays'
-        if not os.path.exists(picklepath): os.makedirs(picklepath)
+        for p in [states_picklepath, picklepath]:
+            if not os.path.exists(p): os.makedirs(p)
         
         self.loaded_subs = []
 
@@ -283,6 +289,7 @@ class get_selectedEphys:
                 if self.PREVENT_NEW_CREATION: continue  # 
                 if self.verbose: print(f'...create new PSD_vs_Move_sub class ({picklename})')
                 sub_class = PSD_vs_Move_sub(sub=sub,
+                                            FT_VERSION=self.FT_VERSION,
                                             PLOT_SELECTION_DATA=self.PLOT_SEL_DATA_PROCESS,
                                             SKIP_NEW_CREATION=self.SKIP_NEW_CREATION,  # (currently: create separate FREE files) classes ideally contain ALL; only give list here for debugging
                                             ADD_FREE_MOVE_SELECTIONS=self.ADD_FREE_MOVE_SELECTIONS,
@@ -319,8 +326,14 @@ class get_selectedEphys:
             # select relevant data (PSDs) for subject
             for src, sel in product(sub_class.ephys_sources,
                                     sub_class.incl_selections):
-                # add baseline per source
-                # TODO PM ADD sub-012 baseline
+                # get indiv gamma peak freq
+                if self.FT_VERSION == 'v8':
+                    if 'lfp' in src: srctemp = 'lfp'
+                    else: srctemp = 'ecog'
+                    indiv_gRange = get_indiv_gammaPeak_range(sub=sub, src=srctemp)
+                else:
+                    indiv_gRange = None
+                    
                 
                 print(f'\n- #### {sel}, {src} ({sub})')
 
@@ -335,6 +348,7 @@ class get_selectedEphys:
                             SETTINGS=self.SETTINGS,
                             band_names=sub_class.band_names,
                             RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                            indiv_gamma_range=indiv_gRange,
                         )
                         if len(psdtemp) == 0: continue  # array shorter than 1 second
                         np.save(os.path.join(states_picklepath,
@@ -367,6 +381,7 @@ class get_selectedEphys:
                                 SETTINGS=self.SETTINGS,
                                 band_names=sub_class.band_names,
                                 RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                indiv_gamma_range=indiv_gRange,
                             )
                             if len(sqcoh_temp) == 0: continue  # array shorter than 1 second
                             np.save(os.path.join(states_picklepath,
@@ -400,6 +415,7 @@ class get_selectedEphys:
                                 SETTINGS=self.SETTINGS,
                                 band_names=sub_class.band_names,
                                 RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                indiv_gamma_range=indiv_gRange,
                             )
                             if len(psdtemp) == 0: continue  # array shorter than 1 second
                             np.save(os.path.join(states_picklepath,
@@ -428,6 +444,7 @@ class get_selectedEphys:
                                     SETTINGS=self.SETTINGS,
                                     band_names=sub_class.band_names,
                                     RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                    indiv_gamma_range=indiv_gRange,
                                 )
                                 if len(sqcoh_temp) == 0: continue  # array shorter than 1 second
                                 np.save(os.path.join(states_picklepath,
@@ -464,6 +481,7 @@ class get_selectedEphys:
                                 SETTINGS=self.SETTINGS,
                                 band_names=sub_class.band_names,
                                 RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                indiv_gamma_range=indiv_gRange,
                             )
                             if len(psdtemp) == 0: continue  # array shorter than 1 second
                             if lid_code == 'lid': lid_code = 'all'
@@ -495,6 +513,7 @@ class get_selectedEphys:
                                     SETTINGS=self.SETTINGS,
                                     band_names=sub_class.band_names,
                                     RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                    indiv_gamma_range=indiv_gRange,
                                 )
                                 if len(sqcoh_temp) == 0: continue  # array shorter than 1 second
                                 np.save(os.path.join(states_picklepath,
@@ -558,6 +577,7 @@ class get_selectedEphys:
                                     SETTINGS=self.SETTINGS,
                                     band_names=sub_class.band_names,
                                     RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                    indiv_gamma_range=indiv_gRange,
                                 )
                                 if len(psdtemp) == 0: continue  # array shorter than 1 second
                                 if lid_code == 'lid': lid_code = 'all'
@@ -591,6 +611,7 @@ class get_selectedEphys:
                                         SETTINGS=self.SETTINGS,
                                         band_names=sub_class.band_names,
                                         RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                        indiv_gamma_range=indiv_gRange,
                                     )
                                     if len(sqcoh_temp) == 0: continue  # array shorter than 1 second
                                     np.save(os.path.join(states_picklepath,
@@ -623,6 +644,7 @@ class get_selectedEphys:
                                 SETTINGS=self.SETTINGS,
                                 band_names=sub_class.band_names,
                                 RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                indiv_gamma_range=indiv_gRange,
                             )
                             if len(psdtemp) == 0: continue  # array shorter than 1 second
                             np.save(os.path.join(states_picklepath,
@@ -655,6 +677,7 @@ class get_selectedEphys:
                                     SETTINGS=self.SETTINGS,
                                     band_names=sub_class.band_names,
                                     RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                    indiv_gamma_range=indiv_gRange,
                                 )
                                 if len(sqcoh_temp) == 0: continue  # array shorter than 1 second
                                 np.save(os.path.join(states_picklepath,
@@ -686,6 +709,7 @@ class get_selectedEphys:
                                     SETTINGS=self.SETTINGS,
                                     band_names=sub_class.band_names,
                                     RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                    indiv_gamma_range=indiv_gRange,
                                 )
                                 if len(psdtemp) == 0: continue  # array shorter than 1 second
                                 np.save(os.path.join(states_picklepath,
@@ -718,6 +742,7 @@ class get_selectedEphys:
                                         SETTINGS=self.SETTINGS,
                                         band_names=sub_class.band_names,
                                         RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                                        indiv_gamma_range=indiv_gRange,
                                     )
                                     if len(sqcoh_temp) == 0: continue  # array shorter than 1 second
                                     np.save(os.path.join(states_picklepath,
@@ -780,6 +805,7 @@ class get_selectedEphys:
                         SETTINGS=self.SETTINGS,
                         band_names=sub_class.band_names,
                         RETURN_PSD_1sec=self.RETURN_PSD_1sec,
+                        indiv_gamma_range=indiv_gRange,
                     )
                     if len(psdtemp) == 0: continue  # array shorter than 1 second
 
@@ -1043,13 +1069,14 @@ def load_sub_states(state, sub, pickled_state_path,
 
 if __name__ == '__main__':
     
-    for COH_SRC in ['COH_STNECOG', 'COH_STNs', ]:
-        COH_TYPE = 'SQCOH'  # not relevant to create
+    for FT in ['POWER', 'COH_STNECOG', 'COH_STNs']:
+
         get_allSpecStates_Psds(
-            FEATURE=COH_SRC,
-            COH_TYPE=COH_TYPE,
+            FEATURE=FT,
+            COH_TYPE='SQCOH',  # not relevant to create
+            FT_VERSION='v8',
             RETURN_PSD_1sec=True,
             incl_free=False,
             ONLY_CREATE=True,
-            verbose=False,
+            verbose=True,
         )

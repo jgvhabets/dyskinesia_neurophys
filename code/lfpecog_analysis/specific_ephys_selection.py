@@ -25,6 +25,9 @@ from lfpecog_analysis.ft_processing_helpers import (
 from lfpecog_features.feats_spectral_features import (
     calc_coherence
 )
+from lfpecog_features.feats_spectral_helpers import (
+    get_indiv_band_peaks
+)
 # from lfpecog_analysis.psd_analysis_classes import PSD_vs_Move_sub
 
 
@@ -294,6 +297,7 @@ def get_ssd_psd_from_array(
     ephys_arr, sfreq, SETTINGS,
     band_names, PSD_WIN_sec: int = 1,
     RETURN_PSD_1sec: bool = False,
+    indiv_gamma_range=None,
 ):
     """
     extracts PSD based on specific SSDd
@@ -323,6 +327,10 @@ def get_ssd_psd_from_array(
     # calculate per freq-band
     for i, band in enumerate(band_names):
         f_range = list(SETTINGS['SPECTRAL_BANDS'].values())[i]
+
+        if SETTINGS['FT_VERSION'] == 'v8' and band == 'gammaPeak':
+            f_range = indiv_gamma_range
+
         sig = ephys_arr[:, i]  # select band signal (SSD)
         sig = sig[~np.isnan(sig)]  # delete NaNs
 
@@ -375,6 +383,7 @@ def get_ssd_coh_from_array(
     ephys_arr1, ephys_arr2, sfreq,
     band_names, SETTINGS=None, f_range_list = None, 
     PSD_WIN_sec: int = 1, RETURN_PSD_1sec: bool = False,
+    indiv_gamma_range=None,
 ):
     """
     extracts Coherences based on specific SSDd
@@ -409,6 +418,10 @@ def get_ssd_coh_from_array(
     # calculate per freq-band
     for i, band in enumerate(band_names):
         f_range = f_range_list[i]
+
+        if SETTINGS['FT_VERSION'] == 'v8' and band == 'gammaPeak':
+            f_range = indiv_gamma_range
+
         sig1 = ephys_arr1[:, i]  # select band signal (SSD)
         sig2 = ephys_arr2[:, i]  # select band signal (SSD)
         nan_sel = np.logical_or(np.isnan(sig1), np.isnan(sig2))

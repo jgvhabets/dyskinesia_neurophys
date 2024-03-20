@@ -37,6 +37,7 @@ from lfpecog_analysis.ft_processing_helpers import (
 from lfpecog_predict.prepare_predict_arrays import (
     get_move_selected_env_arrays
 )
+from lfpecog_features.feats_spectral_helpers import get_indiv_gammaPeak_range
 
 
 def get_moveSpec_predArrays(
@@ -430,6 +431,8 @@ class extract_local_SSD_powers():
                 # loop over defined frequency bands
                 for bw in SETTINGS['SPECTRAL_BANDS']:
                     f_range = SETTINGS['SPECTRAL_BANDS'][bw]
+                    if bw == 'gammaPeak' and SETTINGS['FT_VERSION'] == 'v8':
+                        f_range = get_indiv_gammaPeak_range(self.sub_SSD.sub, dType)
                     
                     # check for unconverted nan array
                     if np.isnan(list(getattr(data, bw)[i_w])).all():
@@ -680,12 +683,19 @@ class extract_SSD_connectivity:
             if self.connectivity_metric == 'PSI':
                 if bw in ['delta', 'alpha']: continue  # no PSI for low frequencies
 
+            if bw == 'gammaPeak' and SETTINGS['FT_VERSION'] == 'v8':
+                if 'ecog' in self.sources.lower(): srctemp = 'ecog'
+                else: src_temp = 'lfp'
+                band_range = get_indiv_gammaPeak_range(self.sub_SSD.sub, src_temp)
+            else:
+                band_range = bands_to_extract[bw]
+
             values = calculate_connectivity_per_band(
                 seed_data=seed_data, target_data=target_data,
                 time_sel_seed=time_sel_seed,
                 time_sel_target=time_sel_target,
                 connectivity_metric=self.connectivity_metric,
-                band_name=bw, band_range=bands_to_extract[bw],
+                band_name=bw, band_range=band_range,
                 incl_sq_coh=SETTINGS['FEATS_INCL']['sq_coh'],
                 incl_imag_coh=SETTINGS['FEATS_INCL']['imag_coh'],
                 coh_segment_sec=SETTINGS['FEATS_INCL']['coherence_segment_sec'],

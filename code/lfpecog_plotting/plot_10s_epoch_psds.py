@@ -140,6 +140,8 @@ def plot_overall_PSD_COH(
                 ALPHA=ALPHA,
                 REST_u30_BASELINE=False,
             )
+        else:
+            stat_df = False
         
 
 

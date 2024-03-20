@@ -431,7 +431,6 @@ def plot_moveLidSpec_PSDs(
             
             if LID_BINARY: lw=3
             else: lw=1
-            
             AX.plot(x_plot, m, lw=lw,
                     color=cond_colors[lid], alpha=.8, ls=ls,
                     label=f"{lab} (n={n_subs})",)
@@ -440,8 +439,9 @@ def plot_moveLidSpec_PSDs(
                 kw_pms = {'alpha': .5, 'edgecolor': cond_colors[lid],
                           'facecolor': 'none', 'hatch': '//'}
             else:
-                kw_pms = {'alpha': .5, 'color': cond_colors[lid]}
-            
+                if PLOT_MOVE_TYPE == 'overall': a = .3
+                else: a = .5
+                kw_pms = {'alpha': a, 'color': cond_colors[lid]}
             AX.fill_between(x_plot, y1=m-sem, y2=m+sem, # PSDs[cond].freqs, 
                             **kw_pms,)
 

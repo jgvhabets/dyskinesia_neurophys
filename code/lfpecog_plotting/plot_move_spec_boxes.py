@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from itertools import product, compress
 import seaborn as sns
-from pandas import DataFrame
+from pandas import DataFrame, read_excel
 from scipy.stats import mannwhitneyu
 
 from utils.utils_fileManagement import (
@@ -24,9 +24,10 @@ from lfpecog_analysis.specific_ephys_selection import (
     get_hemisphere_movement_location
 )
 from lfpecog_analysis.psd_analysis_classes import (
-    get_baseline_arr_dict
+    get_baseline_arr_dict, get_allSpecStates_Psds
 )
 from lfpecog_analysis.psd_lid_stats import run_mixEff_wGroups
+from lfpecog_plotting.plot_psd_restvsmove import prep_RestVsMove_psds
 
 # cond_colors = {
 #     'nolid': 'green',
@@ -51,6 +52,239 @@ ind_peak_bands = ['lo_beta', 'hi_beta', 'narrow_gamma']
 band_labels = ['Theta', 'Alpha', 'low Beta',
             'high Beta', 'broad Gamma', 'peak Gamma']
 
+
+
+def plotBoxes_moveBin_LidBin(
+    PSDs_1s, PSD_BLs_1s,
+    FT_VERSION: str = 'v6',
+    BASE_METHOD = 'OFF_zscore',  # 'OFF_perc_change'
+    SUB_MEANS = True,
+    INCL_SIGN: bool = False,
+    ALPHA = .01,
+    SAVE_FIG = False,
+    FIGDATE = '0000',
+    FIGNAME = 'SpectralBoxes_PowCoh_v0',
+):
+    """
+    per box-row: noLID-noMove; noLID-Move; LID-noMove; LID-Move
+    """
+    FIGNAME = f'{FIGDATE}_{FIGNAME}'
+    if SUB_MEANS: FIGNAME += '_subMeans'
+    if INCL_SIGN: FIGNAME += '_sigs'
+
+    # box settings
+    box_clrs = ['y', 'c', 'peru', 'purple']
+    # row_labels = ['Theta', 'Alpha', 'Beta-low',
+    #               'Beta-high', 'Gamma-peak', 'Gamma-broad']
+    row_labels = ['\u03B8', '\u03B1', '\u03B2 low',
+                  '\u03B2 high', '\u03B3 peak', '\u03B3 broad']  #  
+    col_labels = ['STN Power', 'Inter-STN Coherence',
+                'Cortical Power', 'Cortico-STN Coherence']
+    fsize = 16
+    
+    # get freq bands
+    f_bands = load_ft_ext_cfg(FT_VERSION=FT_VERSION)['SPECTRAL_BANDS']
+    f_bands['gammaBroad'] = [60, 90]
+    del(f_bands['gamma1'], f_bands['gamma2'], f_bands['gamma3'])
+
+    # load STATS if available
+    if INCL_SIGN:
+        statdf_name = f'spectralBoxes_stats_vsLID0MOV0_ft{FT_VERSION}.xlsx'
+        stat_path = os.path.join(get_project_path('results'),
+                                 'stats', 'plot_stats')
+        if statdf_name in os.listdir(stat_path):
+            statdf = read_excel(os.path.join(stat_path, statdf_name),
+                                header=0, index_col=0,)
+            STAT_LOADED = True
+            print(f'...STATS loaded ({statdf_name})')
+        else:
+            statdf = DataFrame(columns=['coef', 'pvalue'])
+            STAT_LOADED = False
+
+
+    fig, axes = plt.subplots(6, 4, figsize=(12, 8),
+                            sharex='col', sharey='row',)
+
+    # BOX PLOT values per LID category (plot only present categories)
+    BOX_SPACING, BOX_WIDTH = .3, .15
+
+    if BASE_METHOD == 'OFF_perc_change' and SUB_MEANS: YLIM = (-25, 75)
+    elif BASE_METHOD == 'OFF_perc_change' and not SUB_MEANS: YLIM = (-50, 200)
+    elif BASE_METHOD == 'OFF_zscore' and SUB_MEANS: YLIM = (-.5, .5)
+    elif BASE_METHOD == 'OFF_zscore' and not SUB_MEANS: YLIM = (-2, 2)
+
+    for i_col, (ft, src) in enumerate(zip(['Power', 'SQCOH', 'Power', 'SQCOH'],
+                                          ['lfp', 'STNs', 'ecog', 'STNECOG'])):
+        print(f'\n...## START {i_col}, data extr {ft, src}')
+        row_values, value_subs = [[], [], [], []], [[], [], [], []]
+        ### get data
+        if ft == 'Power':
+            value_dict, BL_dict = PSDs_1s, PSD_BLs_1s
+        
+        else:
+            (
+                value_dict, BL_dict
+            ) = get_allSpecStates_Psds(
+                FT_VERSION=FT_VERSION,
+                RETURN_PSD_1sec=True,
+                incl_free=False,
+                FEATURE=f'COH_{src}',
+                COH_TYPE=ft,
+            )
+
+        ### Get 4 lists for boxplots
+        for i_move, move_sel in enumerate(['REST', 'ALLMOVE']):
+            (
+                psd_arrs, psd_freqs, psd_subs
+            ) = prep_RestVsMove_psds(
+                SRC=src, FEATURE=ft,
+                PLOT_MOVE=move_sel,
+                PSD_DICT=value_dict,
+                BASELINE=BL_dict,
+                BASE_METHOD=BASE_METHOD,
+                RETURN_IDS=True,
+            )
+            # split LID
+            for lidcat, arr_list in psd_arrs.items():
+                if 'nolid' in lidcat: i_lid = 0
+                else: i_lid = 2
+                for arr, s in zip(arr_list, psd_subs[lidcat]):
+                    value_subs[i_lid + i_move].extend([s] * len(arr))
+                    row_values[i_lid + i_move].extend([r for r in arr])
+
+        row_values = [np.array(l) for l in row_values]
+        value_subs = [np.array(l) for l in value_subs]
+
+        if SUB_MEANS:
+            # gives 4 lists with boolean per subject within list
+            subsel = []
+            for boxsub in value_subs:
+                subsel.append([boxsub == s for s in np.unique(boxsub)])
+
+
+        ### Loop over freq-bands and plot
+        for i_row, (band, f_range) in enumerate(f_bands.items()):
+            
+            print(f'...boxplot-{band}, row {i_row}, {f_range} Hz')
+            if band == 'delta': band = 'theta'
+            if band == 'gammaPeak': continue
+                # # CORRECT PER SUBJECT
+                # f = peak_df.loc['(109): dysk']['narrow_gamma']
+                # if np.isnan(f): f = peak_df.loc['(109): tap']['narrow_gamma']
+        
+            # select relevant freq range from spectral values
+            f_sel = np.logical_and(psd_freqs >= f_range[0],
+                                   psd_freqs < f_range[1])
+            # get power mean over freq-range, per 1-sec epoch
+            box_values = [np.mean(arr[:, f_sel], axis=1) for arr in row_values]
+
+            # get Significancies over all epoch-samples, not only subject-means
+            if INCL_SIGN:
+                sign_list = ['nan', ]  # corresponds with first boxplot-body, is baseline
+                box_key = f'{src}_{band}'
+                if STAT_LOADED:
+                    for k in ['LID0MOV1', 'LID1MOV0', 'LID1MOV1']:
+                        p = statdf.loc[f'{box_key}_{k}']['pvalue']
+                        sign_list.append(p < (ALPHA / len(f_bands)))
+                else:
+                    # perform LMM per Category in comparison with noLID-noMove
+                    base_values = box_values[0]
+                    base_subs = value_subs[0]
+                    # prepare equal lists with all stat info
+                    for cat_values, cat_subs, k in zip(
+                        box_values[1:], value_subs[1:],
+                        ['LID0MOV1', 'LID1MOV0', 'LID1MOV1']
+                    ):
+                        stat_values = np.concatenate([base_values, cat_values])
+                        stat_subids = np.concatenate([base_subs, cat_subs])
+                        stat_labels = np.concatenate([[0] * len(base_subs),
+                                                      [1] * len(cat_subs)])
+                        
+                        assert len(stat_values) == len(stat_labels) == len(stat_subids), (
+                            f'(BOX, LMM) lengths differ: values {len(stat_values)},'
+                            f' labels {len(stat_labels)}, ids {len(stat_subids)}'    
+                        )
+                        
+                        # run linear mixed effect model
+                        coef, pval = run_mixEff_wGroups(dep_var=stat_values,
+                                                        indep_var=stat_labels,
+                                                        groups=stat_subids, TO_ZSCORE=False,)
+                        sign_list.append(pval < (ALPHA / len(f_bands)))
+                        statdf.loc[f'{box_key}_{k}'] = [coef, pval]
+                        print(f'\t...{band} lmm, COEF: {coef}, p: {pval}')
+
+            if SUB_MEANS:
+                row_sub_values = []
+                for box_v, sel_list in zip(box_values, subsel):
+                    box_subs = []
+                    for sel in sel_list:
+                        # add mean of single subject within box
+                        box_subs.append(np.mean(box_v[sel]))
+                    row_sub_values.append(box_subs)
+                box_values = row_sub_values
+
+            # PLOT BOXES
+            box_sel = [len(l) > 0 for l in row_values]
+            boxxticks = np.arange(0, BOX_SPACING*sum(box_sel), BOX_SPACING)
+
+            boxplot = axes[i_row, i_col].boxplot(
+                box_values,
+                positions=boxxticks, widths=BOX_WIDTH,
+                patch_artist=True, showfliers=False, zorder=2,
+            )
+            # make boxplots pretty (incl sign)
+            for i_box, (patch, clr) in enumerate(zip(boxplot['boxes'], box_clrs)):
+                patch.set_facecolor(clr)
+                a = .5
+                if INCL_SIGN:
+                    sig = sign_list[i_box]
+                    if sig == True: a = .8
+                    elif sig == False: a = .25
+                patch.set_alpha(a)
+                print(f'\tsig = {sig}, alpha {a}')
+
+            for median in boxplot['medians']:
+                median.set_color('black')
+            
+            # plot zero line forst for background
+            axes[i_row, i_col].axhline(
+                0, xmin=-BOX_WIDTH, xmax=boxxticks[-1] + 1,
+                color='k', lw=.5, alpha=.5, zorder=1,
+            )
+            
+            # Annotate Rows
+            if i_col == 0:
+                axes[i_row, i_col].set_ylabel(f"{row_labels[i_row]}",
+                                            fontsize=fsize, weight='bold')
+            axes[i_row, i_col].set_ylim(YLIM)
+            axes[i_row, i_col].set_xlim(-BOX_WIDTH,
+                                        BOX_SPACING * 4)
+            axes[i_row, i_col].tick_params(size=fsize, axis='both',)
+            axes[i_row, i_col].spines[['right', 'top', 'bottom']].set_visible(False)
+
+        # Annotate Cols
+        axes[0, i_col].set_title(col_labels[i_col], weight='bold', size=16,)
+        boxxticks = np.arange(0, BOX_SPACING*4, BOX_SPACING)
+        axes[-1, i_col].set_xticks(boxxticks, size=fsize)
+        axes[-1, i_col].set_xticklabels(['LID-\nMOVE-', 'LID-\nMOVE+',
+                                        'LID+\nMOVE-', 'LID+\nMOVE+'],
+                                        size=fsize-4,)
+
+    if not STAT_LOADED:
+        statdf.to_excel(os.path.join(stat_path, statdf_name),)
+        print(f'...saved {statdf_name} in {stat_path}')
+
+    plt.tight_layout()
+
+    if SAVE_FIG:
+        plt.savefig(os.path.join(get_project_path('figures'),
+                                'final_Q1_2024', 'specBandBoxes',
+                                FIGNAME),
+                    dpi=150, facecolor='w',)
+        plt.close()
+
+    else:
+        plt.show()
 
 
 

@@ -32,7 +32,7 @@ from utils.utils_fileManagement import (
 from lfpecog_features.feats_helper_funcs import (
     check_matrix_properties, regularize_matrix
 )
-from lfpecog_features.feats_spectral_helpers import get_indiv_band_peaks
+from lfpecog_features.feats_spectral_helpers import get_indiv_gammaPeak_range
 
 
 
@@ -290,21 +290,21 @@ def load_windowed_ssds(sub, dType, settings: dict):
         
         # define external path on hard-drive
         ext_path = join(get_project_path('data', extern_HD=True),
-                          'windowed_data_classes_'
-                          f'{settings["WIN_LEN_sec"]}s_'
-                          f'{settings["WIN_OVERLAP_part"]}overlap',
-                          settings['DATA_VERSION'],
-                          f'sub-{sub}')
+                        'windowed_data_classes_'
+                        f'{settings["WIN_LEN_sec"]}s_'
+                        f'{settings["WIN_OVERLAP_part"]}overlap',
+                        settings['DATA_VERSION'],
+                        f'sub-{sub}')
 
         # load meta-file
         with open(join(ext_path, f'{ssd_win_fname}.json'), 'r') as meta_f:
             meta_ssd = json.load(meta_f)
         print('...meta-data loaded')
+
         # load data-file                          
         data_ssd = np.load(join(ext_path, f'{ssd_win_fname}.npy'),
                            allow_pickle=True,).astype(np.float64)
         print('...ssd-data loaded')
-
     
     return data_ssd, meta_ssd
 
@@ -602,19 +602,18 @@ class create_SSDs():
                 # loop over defined frequency bands
                 for bw in SETTINGS['SPECTRAL_BANDS']:
                     # get individual gamma peak during dysk-movement (or tap-movement if no dysk)
-                    if SETTINGS['FT_VERSION'] == 'v8' and bw == 'gammPeak':
-                        if 'lfp' in dType: peak_df = get_indiv_band_peaks('lfp')
-                        if 'ecog' in dType: peak_df = get_indiv_band_peaks('ecog')
-                        f = peak_df.loc[f'({self.sub}): dysk']['narrow_gamma']
-                        if np.isnan(f):
-                            f = peak_df.loc[f'({self.sub}): tap']['narrow_gamma']
-                        f_range = [int(f - 2), int(f + 2)]
+                    if SETTINGS['FT_VERSION'] == 'v8' and bw == 'gammaPeak':
+                        f_range = get_indiv_gammaPeak_range(sub=self.sub, src=dType)
+                        print(f'\n\n###################\n'
+                              f'corrected gamma range to indiv: {f_range} (sub-{sub}, {dType})'
+                              f'\n\n###################\n')
                     else:
                         f_range = SETTINGS['SPECTRAL_BANDS'][bw]
                     
                     try:
                         # print(f'\tSSD for {bw}')
-                        (ssd_filt_data,
+                        (
+                            ssd_filt_data,
                             ssd_pattern,
                             ssd_eigvals
                         ) = get_SSD_component(

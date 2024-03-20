@@ -18,7 +18,7 @@ from lfpecog_preproc.preproc_import_scores_annotations import get_ecog_side
 from lfpecog_analysis.psd_analysis_classes import select_coh_values, get_ssd_coh_from_array
 from lfpecog_features.feats_spectral_features import calc_coherence
 from lfpecog_predict.prepare_predict_arrays import get_move_selected_env_arrays
-
+from lfpecog_features.feats_spectral_helpers import get_indiv_gammaPeak_range
 # from lfpecog_analysis.process_connectivity import (
 #     get_conn_values_sub_side
 # )   # necessary for GET_CONNECTIVITY = True in get_all_sdd_timeFreqs()
@@ -156,7 +156,7 @@ def get_SSD_timeFreq(
         
         for source in ssd_subClass.ephys_sources:
             ssd_source_dat = getattr(ssd_subClass, source)
-            timefreqArr, tf_times, min_f, max_f = create_SSD_timeFreqArray(ssd_source_dat)
+            timefreqArr, tf_times, min_f, max_f = create_SSD_timeFreqArray(ssd_source_dat, source)
             tf_values = timefreqArr.values
             tf_freqs = np.array(timefreqArr.index)
 
@@ -229,8 +229,16 @@ def get_COH_timeFreq(
             ssd_arr1 = getattr(ssd_subClass, source_list[0])
             ssd_arr2 = getattr(ssd_subClass, source_list[1])
             # calculate coherences per ssd-band, in timematching frame
+            if FT_VERSION == 'v8':
+                if 'ECOG' in coh_source: srctemp = 'ecog'
+                else: srctemp = 'lfp'
+                gamma_range = get_indiv_gammaPeak_range(sub, srctemp)
+            else:
+                gamma_range = None
+
             (sqcohArr, icohArr, tf_times,
-             min_f, max_f) = create_COH_timeFreqArray(ssd_arr1, ssd_arr2,)
+             min_f, max_f) = create_COH_timeFreqArray(ssd_arr1, ssd_arr2,
+                                                      indiv_gamma_range=gamma_range,)
             
             for tfArr in [sqcohArr, icohArr]:
                 tf_values = tfArr.values
@@ -318,7 +326,7 @@ def get_cont_ssd_arr(subSourceSSD, bw,
 
 
 def create_COH_timeFreqArray(
-    ssd_sig1, ssd_sig2,
+    ssd_sig1, ssd_sig2, indiv_gamma_range=None,
     COH_single_epochs_sec=1, COH_windows_sec=10,):
     """
     Input:
@@ -327,6 +335,9 @@ def create_COH_timeFreqArray(
     fs = 2048
     win_samples = fs * COH_windows_sec
     bands = ssd_sig1.settings['SPECTRAL_BANDS']
+    if 'gammaPeak' in bands.keys() and isinstance(indiv_gamma_range, list):
+        bands['gammaPeak'] = indiv_gamma_range
+
     min_f = min([min(r) for r in bands.values()])
     max_f = max([max(r) for r in bands.values()])
     
@@ -389,18 +400,21 @@ def create_COH_timeFreqArray(
     
 
 
-def create_SSD_timeFreqArray(subSourceSSD, win_len_sec=1,):
+def create_SSD_timeFreqArray(subSourceSSD, source=None, win_len_sec=1,):
     """
     Input:
         - subSourceSSD: should be e.g. ssdXXX.lfp_left
     """
     fs = subSourceSSD.fs
+    sub = subSourceSSD.sub
     bands = subSourceSSD.settings['SPECTRAL_BANDS']
+    if subSourceSSD.settings['FT_VERSION'] == 'v8':
+        bands['gammaPeak'] = get_indiv_gammaPeak_range(sub=sub, src=source)
     min_f = min([min(r) for r in bands.values()])
     max_f = max([max(r) for r in bands.values()])
 
     for i, bw in enumerate(bands.keys()):
-        print(f'create_SSD_timefreq: {bw}')
+        print(f'create_SSD_timefreq: {bw} -> {bands[bw]}')
         # convert windows with overlap into continuous array
         cont_arr, cont_time_arr, cont_time_secs = get_cont_ssd_arr(
             subSourceSSD=subSourceSSD, bw=bw

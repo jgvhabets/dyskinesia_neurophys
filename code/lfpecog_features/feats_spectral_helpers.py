@@ -29,7 +29,24 @@ def add_mean_gamma_column(df, MAX=False,):
             if not MAX: gamma_mean = np.mean([g1, g2, g3], axis=0)
             elif MAX: gamma_mean = np.max([g1, g2, g3], axis=0)
             df[k.replace('gamma1', 'gammaBroad')] = gamma_mean
-            
+
+
+def get_indiv_gammaPeak_range(sub, src):
+    
+    if src not in ['lfp', 'ecog']:
+        if src.startswith('lfp'): src = 'lfp'
+        else: src = 'ecog'
+
+    df = get_indiv_band_peaks(SRC=src)
+
+    f = df.loc[f'({sub}): dysk']['narrow_gamma']
+    
+    if np.isnan(f):
+        f = df.loc[f'({sub}): tap']['narrow_gamma']
+    
+    f_range = [int(f - 2), int(f + 2)]
+
+    return f_range
 
 
 def get_indiv_band_peaks(SRC='lfp'):
