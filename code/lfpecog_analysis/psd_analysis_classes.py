@@ -226,7 +226,7 @@ class get_selectedEphys:
         
         for sub in self.SETTINGS['TOTAL_SUBS']:
             if sub.startswith('1') and self.FEATURE == 'COH_STNECOG':
-                print(f'\n### No ECoG DATA, SKIP sub-{sub} {self.FEATURE}-calculation')
+                if self.verbose: print(f'\n### No ECoG DATA, SKIP sub-{sub} {self.FEATURE}-calculation')
                 continue
         
             # try to load existing states instead of creating/loading full large array files

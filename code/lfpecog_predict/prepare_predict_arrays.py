@@ -125,7 +125,7 @@ def get_group_arrays_for_prediction(
 
 def merge_group_arrays(X_total, y_total_binary,
                        y_total_scale, sub_ids_total,
-                       ft_times_total,
+                       ft_times_total, ext_acc_arr=False,
                        EXCL_CODE=99,):
     """
     Takes lists with subject-arrays and merges all list
@@ -140,16 +140,17 @@ def merge_group_arrays(X_total, y_total_binary,
     # merge all features and labels per Subject together
     for i, (X_sub, y_sub) in enumerate(zip(X_total, y_total_binary)):
         # loop over list with arrays of feats and labels per subject
-
         if i == 0:
+            # create lists
             X_all = X_sub.copy()
             y_all_binary = list(y_sub).copy()
             y_all_scale = list(y_total_scale[i].copy())
             sub_ids = list(sub_ids_total[i].copy())
             ft_times_all = list(ft_times_total[i].copy())
-            print(sub_ids[0], len(sub_ids_total[i]))
+            # print(sub_ids[0], len(sub_ids_total[i]))
 
         else:
+            # add to lists
             X_all = np.concatenate([X_all, X_sub], axis=0)
             y_all_binary.extend(y_sub)
             y_all_scale.extend(y_total_scale[i])
@@ -163,7 +164,7 @@ def merge_group_arrays(X_total, y_total_binary,
 
     # remove all Rows containing NaN Features
     nan_row_sel = np.isnan(X_all).any(axis=1)
-    print(f'removed rows n={sum(nan_row_sel)}')
+    print(f'removed NaN-rows n={sum(nan_row_sel)} out of {len(nan_row_sel)}')
     NAN_SUBS = sub_ids[nan_row_sel]
     
     X_all = X_all[~nan_row_sel]
@@ -171,16 +172,19 @@ def merge_group_arrays(X_total, y_total_binary,
     y_all_scale = y_all_scale[~nan_row_sel]
     sub_ids = sub_ids[~nan_row_sel]
     ft_times_all = ft_times_all[~nan_row_sel]
+    if isinstance(ext_acc_arr, np.ndarray): ext_acc_arr = ext_acc_arr[~nan_row_sel]
 
     # remove all rows not belonging to defined two outcome classes
     # (for example: if 0 is CDRS=0, and 1 is CDRS>=3, then CDRS scores 1 and 2 are excluded)
     excl_score_sel = y_all_binary == EXCL_CODE
-
+    print(f'removed rows based on EXCL_CODE: n={sum(excl_score_sel)} out of {len(excl_score_sel)}')
+    
     X_all = X_all[~excl_score_sel.ravel()]
     y_all_binary = y_all_binary[~excl_score_sel]
     y_all_scale = y_all_scale[~excl_score_sel]
     sub_ids = sub_ids[~excl_score_sel]
     ft_times_all = ft_times_all[~excl_score_sel]
+    if isinstance(ext_acc_arr, np.ndarray): ext_acc_arr = ext_acc_arr[~excl_score_sel.ravel()]
 
     # X_all contains n-windows, n-features
     # y_all contains y-values (n-windows)
@@ -188,7 +192,10 @@ def merge_group_arrays(X_total, y_total_binary,
     print(f'out of n={len(y_all_binary)} samples, n={sum(y_all_binary > 0)} are Dyskinesia'
           f' ({round(sum(y_all_binary > 0) / len(y_all_binary) * 100, 1)} %)')
     
-    return X_all, y_all_binary, y_all_scale, sub_ids, ft_times_all
+    if isinstance(ext_acc_arr, np.ndarray):
+        return X_all, y_all_binary, y_all_scale, sub_ids, ft_times_all, ext_acc_arr
+    else:
+        return X_all, y_all_binary, y_all_scale, sub_ids, ft_times_all
 
 
 
