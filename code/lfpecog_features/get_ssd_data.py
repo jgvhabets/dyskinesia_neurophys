@@ -413,12 +413,16 @@ class create_SSDs():
                                    f'sub-{self.sub}')
         windows_path = join(get_project_path('data', extern_HD=self.READ_EXT_HD,
                                              USER=self.USER),
-                            'windowed_data_classes_'
-                            f'{SETTINGS["WIN_LEN_sec"]}s_'
-                            f'{SETTINGS["WIN_OVERLAP_part"]}overlap',
-                            SETTINGS['DATA_VERSION'],
-                            f'sub-{self.sub}')
-        if not exists(windows_path): makedirs(windows_path)
+                                            'windowed_data_classes_'
+                                            f'{SETTINGS["WIN_LEN_sec"]}s_'
+                                            f'{SETTINGS["WIN_OVERLAP_part"]}overlap',
+                                            SETTINGS['DATA_VERSION'],
+                                            f'sub-{self.sub}')
+        try:
+            if not exists(windows_path): makedirs(windows_path)
+        except:
+            windows_path = windows_path.replace('D:', 'E:')
+            if not exists(windows_path): makedirs(windows_path)
         
         # loop over possible datatypes
         for dType in self.ephys_sources:
@@ -604,9 +608,6 @@ class create_SSDs():
                     # get individual gamma peak during dysk-movement (or tap-movement if no dysk)
                     if SETTINGS['FT_VERSION'] == 'v8' and bw == 'gammaPeak':
                         f_range = get_indiv_gammaPeak_range(sub=self.sub, src=dType)
-                        print(f'\n\n###################\n'
-                              f'corrected gamma range to indiv: {f_range} (sub-{sub}, {dType})'
-                              f'\n\n###################\n')
                     else:
                         f_range = SETTINGS['SPECTRAL_BANDS'][bw]
                     

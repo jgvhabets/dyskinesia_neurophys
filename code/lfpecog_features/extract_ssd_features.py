@@ -684,7 +684,7 @@ class extract_SSD_connectivity:
                 if bw in ['delta', 'alpha']: continue  # no PSI for low frequencies
 
             if bw == 'gammaPeak' and SETTINGS['FT_VERSION'] == 'v8':
-                if 'ecog' in self.sources.lower(): srctemp = 'ecog'
+                if 'ecog' in self.sources.lower(): src_temp = 'ecog'
                 else: src_temp = 'lfp'
                 band_range = get_indiv_gammaPeak_range(self.sub_SSD.sub, src_temp)
             else:

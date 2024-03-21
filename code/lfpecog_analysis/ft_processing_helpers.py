@@ -328,6 +328,41 @@ def load_feature_df_for_pred(
     return features
 
 
+def remove_ipsiECOG_unilatLID(sub, ft_times):
+    """
+    Returns list boolean list to KEEP
+    """
+    if np.max(ft_times) > 90: ft_times /= 60  # convert to minutes
+    # ft_times = np.around(ft_times, decimals=0)  # round on full minutes for fast compare
+
+    lidminutes, ipsi_cdrs = get_cdrs_specific(sub=sub, side='ipsi ecog')
+    _, contra_cdrs = get_cdrs_specific(sub=sub, side='contra ecog')
+    # lidminutes = np.around(lidminutes, decimals=0)
+    # check whether unilat
+    unilat_bool = np.logical_and(ipsi_cdrs > 0, contra_cdrs == 0)
+
+    
+    if unilat_bool.any():
+        # rows_keep = np.isin(ft_times, lidminutes[~unilat_bool].values)
+
+        rows_keep = []
+        
+        for t in ft_times:
+            if np.min(
+                [abs(t - v) for v in lidminutes[unilat_bool].values]
+            ) < np.min(
+                [abs(t - v) for v in lidminutes[~unilat_bool].values]
+            ):
+                # if feature-row-time is closer to uni-dysk to excl:
+                rows_keep.append(False)
+            else:
+                rows_keep.append(True)
+    else:
+        rows_keep = np.ones(len(ft_times)).astype(bool)
+
+    return rows_keep
+
+
 def find_select_nearest_CDRS_for_ephys(
     sub, ft_times, side: str,
     cdrs_rater: str = 'Patricia',

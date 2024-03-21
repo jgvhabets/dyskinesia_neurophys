@@ -32,7 +32,7 @@ from lfpecog_features.feats_spectral_helpers import (
     add_mean_gamma_column
 )
 from lfpecog_plotting.plotHelpers import get_plot_jitter
-
+from lfpecog_analysis.ft_processing_helpers import remove_ipsiECOG_unilatLID
 
 
 def scatter_Feats_LID_MOVE(
@@ -59,9 +59,11 @@ def scatter_Feats_LID_MOVE(
     pow_labels = ['THETA power', 'BETA power', 'GAMMA power'],
     gamma_mean_or_peakband: str = 'mean',  # peak or mean
     ZSCORE_POW: bool = True,
+    SHUFFLE_SCATTERS: bool = True,
     shareX = True,
     ZERO_SPACE: bool = True,
     EXCL_FREE: bool = True,
+    remove_uniLID_ipsiECOG: bool = False,
     task_minutes = None,
 ):
     if POW_or_COH == 'POW':
@@ -111,9 +113,20 @@ def scatter_Feats_LID_MOVE(
             if SRC == 'ecog':
                 if gamma_mean_or_peakband == 'peak': pow_ft = pow_ft.replace('gammaBroad', 'gammaPeak')
 
+                # Remove ipsilat ECoG to unilat LID
+                if remove_uniLID_ipsiECOG:
+                    keep_idx = remove_ipsiECOG_unilatLID(sub=sub, ft_times=times.copy())
+                    x_temp = x_temp[keep_idx]
+                    y_temp = y_temp[keep_idx]
+                    times = times[keep_idx]
+                    scores = scores[keep_idx]
+                    print(f'...sub-{sub} kept {sum(keep_idx)} / {len(keep_idx)} samples for IPSI-unilat ECoG')
+                     
+
                 ecog_side = get_ecog_side(sub)
                 pow_temp = FeatClass.FEATS[sub][pow_ft.replace('ecog', f'ecog_{ecog_side}')].copy()
                 if EXCL_FREE: pow_temp = pow_temp[task_sel]
+                if remove_uniLID_ipsiECOG: pow_temp = pow_temp[keep_idx]
                 # indiv zscore powers
                 if ZSCORE_POW:
                     base_sel = np.logical_and(scores == 0, times < 5)
@@ -159,6 +172,14 @@ def scatter_Feats_LID_MOVE(
         if SRC == 'lfp': a = .3
         else: a = .5
         v_range = (-3, 3)
+
+        if SHUFFLE_SCATTERS:
+            np.random.seed(27)
+            idx = np.arange(len(x_values))
+            np.random.shuffle(idx)
+            x_values = np.array(x_values)[idx]
+            y_values = np.array(y_values)[idx]
+            pow_values = np.array(pow_values)[idx]
 
         scat = axes[i_ft].scatter(x_values, y_values, c=pow_values,
                                   alpha=a, cmap='viridis',

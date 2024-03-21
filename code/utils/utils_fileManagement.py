@@ -38,6 +38,9 @@ def get_project_path(subfolder: str = '',
      
     elif extern_HD:
         path = join('D:\Research_EXT', 'dyskinesia_neurophys')
+        if not exists(path):
+            path = join('E:\Research_EXT', 'dyskinesia_neurophys')
+            assert exists(path), f'EXT HD path not found on D: nor E:, {path}'
     
     if subfolder in ['data', 'code', 'figures', 'results']:
         if subfolder == 'data' and USER.lower() == 'timon':

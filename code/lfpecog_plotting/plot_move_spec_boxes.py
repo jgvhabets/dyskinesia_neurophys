@@ -18,10 +18,10 @@ from lfpecog_preproc.preproc_import_scores_annotations import(
     get_ecog_side
 )
 from lfpecog_features.feats_helper_funcs import (
-    get_indiv_peak_freqs,
+    get_indiv_peak_freqs
 )
-from lfpecog_analysis.specific_ephys_selection import (
-    get_hemisphere_movement_location
+from lfpecog_features.feats_spectral_helpers import (
+    get_indiv_gammaPeak_range
 )
 from lfpecog_analysis.psd_analysis_classes import (
     get_baseline_arr_dict, get_allSpecStates_Psds
@@ -100,6 +100,8 @@ def plotBoxes_moveBin_LidBin(
         else:
             statdf = DataFrame(columns=['coef', 'pvalue'])
             STAT_LOADED = False
+    else:
+        STAT_LOADED = False
 
 
     fig, axes = plt.subplots(6, 4, figsize=(12, 8),
@@ -116,6 +118,7 @@ def plotBoxes_moveBin_LidBin(
     for i_col, (ft, src) in enumerate(zip(['Power', 'SQCOH', 'Power', 'SQCOH'],
                                           ['lfp', 'STNs', 'ecog', 'STNECOG'])):
         print(f'\n...## START {i_col}, data extr {ft, src}')
+        # ORDER: Rest-noLID, Rest-LID; Move-noLId, Move-LID
         row_values, value_subs = [[], [], [], []], [[], [], [], []]
         ### get data
         if ft == 'Power':
@@ -167,16 +170,27 @@ def plotBoxes_moveBin_LidBin(
             
             print(f'...boxplot-{band}, row {i_row}, {f_range} Hz')
             if band == 'delta': band = 'theta'
-            if band == 'gammaPeak': continue
-                # # CORRECT PER SUBJECT
-                # f = peak_df.loc['(109): dysk']['narrow_gamma']
-                # if np.isnan(f): f = peak_df.loc['(109): tap']['narrow_gamma']
-        
+
             # select relevant freq range from spectral values
-            f_sel = np.logical_and(psd_freqs >= f_range[0],
-                                   psd_freqs < f_range[1])
-            # get power mean over freq-range, per 1-sec epoch
-            box_values = [np.mean(arr[:, f_sel], axis=1) for arr in row_values]
+            if band == 'gammaPeak' and FT_VERSION == 'v8':
+                ind_peak_list = [np.zeros(arr.shape[0]) for arr in row_values]
+                # get and allocate gammaPeak per sub
+                for s in np.unique([s for l in value_subs for s in l]):
+                    sub_idx_lists = [sub_arr == s for sub_arr in value_subs]
+                    f_range = get_indiv_gammaPeak_range(sub=s, src=src)
+                    f_sel = np.logical_and(psd_freqs >= f_range[0],
+                                           psd_freqs < f_range[1])
+                    for i_l, sub_l in enumerate(sub_idx_lists):
+                        temp = row_values[i_l][sub_l]
+                        ind_peak_list[i_l][sub_l] = np.mean(temp, axis=1)
+                box_values = ind_peak_list
+                assert all([sum(l == 0) == 0 for l in box_values]), 'ZEROS in gammaPeak'
+
+            else:
+                f_sel = np.logical_and(psd_freqs >= f_range[0],
+                                       psd_freqs < f_range[1])
+                # get power mean over freq-range, per 1-sec epoch
+                box_values = [np.mean(arr[:, f_sel], axis=1) for arr in row_values]
 
             # get Significancies over all epoch-samples, not only subject-means
             if INCL_SIGN:
@@ -241,7 +255,6 @@ def plotBoxes_moveBin_LidBin(
                     if sig == True: a = .8
                     elif sig == False: a = .25
                 patch.set_alpha(a)
-                print(f'\tsig = {sig}, alpha {a}')
 
             for median in boxplot['medians']:
                 median.set_color('black')
@@ -267,10 +280,10 @@ def plotBoxes_moveBin_LidBin(
         boxxticks = np.arange(0, BOX_SPACING*4, BOX_SPACING)
         axes[-1, i_col].set_xticks(boxxticks, size=fsize)
         axes[-1, i_col].set_xticklabels(['LID-\nMOVE-', 'LID-\nMOVE+',
-                                        'LID+\nMOVE-', 'LID+\nMOVE+'],
+                                         'LID+\nMOVE-', 'LID+\nMOVE+'],
                                         size=fsize-4,)
 
-    if not STAT_LOADED:
+    if not STAT_LOADED and INCL_SIGN:
         statdf.to_excel(os.path.join(stat_path, statdf_name),)
         print(f'...saved {statdf_name} in {stat_path}')
 

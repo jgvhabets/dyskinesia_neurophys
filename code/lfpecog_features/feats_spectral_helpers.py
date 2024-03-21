@@ -35,8 +35,9 @@ def get_indiv_gammaPeak_range(sub, src):
     
     if src not in ['lfp', 'ecog']:
         if src.startswith('lfp'): src = 'lfp'
-        else: src = 'ecog'
-
+        elif 'ecog' in src.lower(): src = 'ecog'
+        else: src = 'lfp'
+        
     df = get_indiv_band_peaks(SRC=src)
 
     f = df.loc[f'({sub}): dysk']['narrow_gamma']

@@ -123,6 +123,7 @@ def get_allSpecStates_Psds(
     PSDs = {
         cond: get_selectedEphys(
             FEATURE=FEATURE,
+            FT_VERSION=FT_VERSION,
             COH_TYPE=COH_TYPE,
             STATE_SEL=cond,
             LOAD_PICKLE=True,
@@ -190,9 +191,10 @@ class get_selectedEphys:
         )
 
         self.SETTINGS = load_ft_ext_cfg(FT_VERSION=self.FT_VERSION)
-        data_path = get_project_path('data')
-        if self.USE_EXT_HD:
-            data_path = 'D://Research/CHARITE/projects/dyskinesia_neurophys/data/'
+        data_path = get_project_path('data', extern_HD=self.USE_EXT_HD,)
+
+        # if self.USE_EXT_HD:
+        #     data_path = 'D://Research/CHARITE/projects/dyskinesia_neurophys/data/'
         picklepath = os.path.join(
             data_path,
             'windowed_data_classes_10s_0.5overlap',
@@ -1070,7 +1072,13 @@ def load_sub_states(state, sub, pickled_state_path,
 if __name__ == '__main__':
     
     for FT in ['POWER', 'COH_STNECOG', 'COH_STNs']:
+        
+        if FT in ['POWER', 'COH_STNECOG']:
+            print(f'######### SKIP {FT}, already done')
+            continue
 
+        print(f'######### START {FT}')
+        
         get_allSpecStates_Psds(
             FEATURE=FT,
             COH_TYPE='SQCOH',  # not relevant to create
