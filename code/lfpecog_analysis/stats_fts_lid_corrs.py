@@ -18,7 +18,7 @@ from utils.utils_fileManagement import (get_project_path,
 
 
 
-def replace_gammas_for_maxGamma(df, lfp_side=False,):
+def replace_gammas_for_meanGamma(df, lfp_side=False,):
 
     gamma_keys = [k for k in list(df.keys()) if any(
         ['gamma1' in k, 'gamma2' in k, 'gamma3' in k]

@@ -27,7 +27,9 @@ from lfpecog_analysis.psd_analysis_classes import (
     get_baseline_arr_dict, get_allSpecStates_Psds
 )
 from lfpecog_analysis.psd_lid_stats import run_mixEff_wGroups
-from lfpecog_plotting.plot_psd_restvsmove import prep_RestVsMove_psds
+from lfpecog_plotting.plot_psd_restvsmove import (
+    prep_RestVsMove_psds, prep_and_plot_restvsmove
+)
 
 # cond_colors = {
 #     'nolid': 'green',
@@ -52,6 +54,332 @@ ind_peak_bands = ['lo_beta', 'hi_beta', 'narrow_gamma']
 band_labels = ['Theta', 'Alpha', 'low Beta',
             'high Beta', 'broad Gamma', 'peak Gamma']
 
+
+def plotPsdrestmove_boxStats(
+    FT, ft_dict=None, bl_dict=None,
+    FT_VERSION='v8',
+    SMOOTH_WIN: int = 3,
+    INCL_BOX_SIGN: bool = True,
+    INCL_SIG_REST30: bool = False,
+    FIG_NAME: str = f'0000_Spectra_Boxes',
+):
+    fig, axes = plt.subplots(
+        2, 3, figsize=(16, 6),
+        gridspec_kw={'width_ratios': [2, 2, 4]},
+    )
+    fsize = 16
+
+    axes = axes.flatten()
+
+    if FT == 'Power':
+        sources = ['lfp', 'ecog']
+        ftcode = 'PSD'
+        movecode = 'StnEcog4'
+    elif 'COH' in FT:
+        sources = ['STNs', 'STNECOG']
+        ftcode = FT
+        movecode = 'COH_4panel'
+        
+
+    axes[[0, 1, 3, 4]] = prep_and_plot_restvsmove(
+        AXES_RETURN=axes[[0, 1, 3, 4]],
+        FEATURE=ftcode,
+        SOURCE=sources[0],
+        MOVESIDES_SPLITTED=movecode,
+        LID_BINARY=True,
+        PSD_DICT=ft_dict,
+        BASELINE=bl_dict,
+        REST_u30_BASELINE=False,
+        SMOOTH_WIN=SMOOTH_WIN,
+        INCL_STATS=False,
+    )
+
+    if 'COH' in FT: ft_dict = None
+
+    axBox_moveBin_LidBin(
+        ax=axes[2], ft=FT, src=sources[0],
+        value_dict=ft_dict, BL_dict=bl_dict,
+        INCL_SIGN=INCL_BOX_SIGN, FT_VERSION=FT_VERSION,
+        INCL_SIG_REST30=INCL_SIG_REST30,
+    )
+
+    axBox_moveBin_LidBin(
+        ax=axes[5], ft=FT, src=sources[1],
+        value_dict=ft_dict, BL_dict=bl_dict,
+        INCL_SIGN=INCL_BOX_SIGN,
+        FT_VERSION=FT_VERSION,
+        INCL_SIG_REST30=INCL_SIG_REST30,
+    )
+
+    # Add Legend for Boxes
+    fig.text(0.63, 0.48, 'No Dyskinesia', color='k',
+             weight='bold', size=fsize-4,
+             bbox={'alpha': .3, 'color': 'darkgreen'},)
+    fig.text(0.74, 0.48, 'Dyskinesia', color='k',
+             weight='bold', size=fsize-4,
+             bbox={'alpha': .3, 'color': 'darkorchid'},)
+    fig.text(0.83, 0.48, '   Rest   ', color='k',
+             weight='bold', size=fsize-4,
+             bbox={'edgecolor': 'black',
+             'facecolor': 'None',})
+    fig.text(0.92, 0.48, '   Move   ',color='k',
+             weight='bold', size=fsize-4,
+             bbox={'alpha': .3, 'edgecolor': 'black',
+                   'facecolor': 'None', 'hatch': '///'})
+    
+    plt.tight_layout()
+
+    FIG_PATH = os.path.join(get_project_path('figures'),
+                            'final_Q1_2024',
+                            'FIG_PSD_boxes')
+            
+    plt.savefig(os.path.join(FIG_PATH, FIG_NAME),
+                dpi=300, facecolor='w',)
+
+    plt.close()
+
+
+def axBox_moveBin_LidBin(
+    ax, ft, src,
+    value_dict=None, BL_dict=None,
+    FT_VERSION: str = 'v8',
+    BASE_METHOD = 'OFF_zscore',  # 'OFF_perc_change'
+    SUB_MEANS = True,
+    INCL_SIGN: bool = False,
+    INCL_SIG_REST30: bool = False,
+    ALPHA = .01,
+):
+    """
+    per box-row: noLID-noMove; noLID-Move; LID-noMove; LID-Move
+    """
+    assert ft.upper() in ['POWER', 'SQCOH', 'ICOH'], (
+        'incorrect ft --> ("Power", "SQCOH", "ICOH")'
+    )
+    assert src in ['lfp', 'STNs', 'ecog', 'STNECOG'], (
+        'incorrect src --> "lfp", "STNs", "ecog", "STNECOG"'
+    )
+
+    # box settings
+    box_clrs = ['y', 'c', 'peru', 'purple']
+    box_clrs = ['darkgreen', 'darkorchid', 'darkgreen', 'darkorchid']
+    # row_labels = ['Theta', 'Alpha', 'Beta-low',
+    #               'Beta-high', 'Gamma-peak', 'Gamma-broad']
+    band_labels = {'theta': '\u03B8', 'alpha': '\u03B1',
+                   'lo_beta': '\u03B2\n(low)',
+                   'hi_beta':'\u03B2\n(high)',
+                   'gammaPeak': '\u03B3\n(peak)',
+                   'gammaBroad': '\u03B3\n(broad)'}  #
+    ticklabels = []  # to be filled in order of bands
+    
+    fsize = 16
+    
+    # get freq bands
+    f_bands = load_ft_ext_cfg(FT_VERSION=FT_VERSION)['SPECTRAL_BANDS']
+    f_bands['gammaBroad'] = [60, 90]
+    del(f_bands['gamma1'], f_bands['gamma2'], f_bands['gamma3'])
+
+    # load STATS if available
+    if INCL_SIGN:
+        statdf_name = f'spectralBoxStats_{ft.lower()}_{src.lower()}_ft{FT_VERSION}.xlsx'
+        if INCL_SIG_REST30: statdf_name = statdf_name.replace('.xlsx', '_restU30.xlsx')
+        stat_path = os.path.join(get_project_path('results'),
+                                 'stats', 'plot_stats')
+        if statdf_name in os.listdir(stat_path):
+            statdf = read_excel(os.path.join(stat_path, statdf_name),
+                                header=0, index_col=0,)
+            STAT_LOADED = True
+            print(f'...STATS loaded ({statdf_name})')
+        else:
+            statdf = DataFrame(columns=['coef', 'pvalue'])
+            STAT_LOADED = False
+    else:
+        STAT_LOADED = False
+
+
+    # BOX PLOT values per LID category (plot only present categories)
+    if BASE_METHOD == 'OFF_perc_change' and SUB_MEANS: YLIM = (-25, 75)
+    elif BASE_METHOD == 'OFF_perc_change' and not SUB_MEANS: YLIM = (-50, 200)
+    elif BASE_METHOD == 'OFF_zscore' and SUB_MEANS: YLIM = (-.5, .5)
+    elif BASE_METHOD == 'OFF_zscore' and not SUB_MEANS: YLIM = (-2, 2)
+
+    print(f'\n...## START AX, data extr {ft, src}')
+    # ORDER: Rest-noLID, Rest-LID; Move-noLId, Move-LID
+    row_values, value_subs = [[], [], [], []], [[], [], [], []]
+    
+    ### get data
+    if not BL_dict or not value_dict: 
+        if 'COH' in ft: ftcode = f'COH_{src}'
+        else: ftcode = ft.upper()
+        (value_dict, BL_dict) = get_allSpecStates_Psds(
+            FT_VERSION=FT_VERSION,
+            RETURN_PSD_1sec=True,
+            incl_free=False,
+            FEATURE=ftcode,
+            COH_TYPE=ft,
+        )
+    ### Get 4 lists for boxplots
+    for i_move, move_sel in enumerate(['REST', 'ALLMOVE']):
+        (
+            psd_arrs, psd_freqs, psd_subs
+        ) = prep_RestVsMove_psds(
+            SRC=src, FEATURE=ft.upper(),
+            PLOT_MOVE=move_sel,
+            PSD_DICT=value_dict,
+            BASELINE=BL_dict,
+            BASE_METHOD=BASE_METHOD,
+            RETURN_IDS=True,
+        )
+        print(f'\n....{i_move, move_sel}, psd_arrs keys: {psd_arrs.keys()}')
+        # split LID
+        for lidcat, arr_list in psd_arrs.items():
+            if 'nolid' in lidcat: i_lid = 0
+            else: i_lid = 1
+            for arr, s in zip(arr_list, psd_subs[lidcat]):
+                value_subs[i_lid + (i_move * 2)].extend([s] * len(arr))
+                row_values[i_lid + (i_move * 2)].extend([r for r in arr])
+    # values in 4 lists with order Rest-noLID, Rest-LID; Move-noLID, Move-LID
+    row_values = [np.array(l) for l in row_values]
+    value_subs = [np.array(l) for l in value_subs]
+
+    if SUB_MEANS:
+        # gives 4 lists with boolean per subject within list
+        subsel = []
+        for boxsub in value_subs:
+            subsel.append([boxsub == s for s in np.unique(boxsub)])
+
+
+    ### Loop over freq-bands and plot
+    for i_band, (band, f_range) in enumerate(f_bands.items()):
+        if band == 'delta': band = 'theta'
+        ticklabels.append(band_labels[band])
+
+        # select relevant freq range from spectral values
+        if band == 'gammaPeak' and FT_VERSION == 'v8':
+            ind_peak_list = [np.zeros(arr.shape[0]) for arr in row_values]
+            # get and allocate gammaPeak per sub
+            for s in np.unique([s for l in value_subs for s in l]):
+                sub_idx_lists = [sub_arr == s for sub_arr in value_subs]
+                f_range = get_indiv_gammaPeak_range(sub=s, src=src)
+                f_sel = np.logical_and(psd_freqs >= f_range[0],
+                                        psd_freqs < f_range[1])
+                for i_l, sub_l in enumerate(sub_idx_lists):
+                    temp = row_values[i_l][sub_l]
+                    ind_peak_list[i_l][sub_l] = np.mean(temp, axis=1)
+            box_values = ind_peak_list
+            assert all([sum(l == 0) == 0 for l in box_values]), 'ZEROS in gammaPeak'
+
+        else:
+            f_sel = np.logical_and(psd_freqs >= f_range[0],
+                                    psd_freqs < f_range[1])
+            # get power mean over freq-range, per 1-sec epoch
+            box_values = [np.mean(arr[:, f_sel], axis=1) for arr in row_values]
+
+        # get Significancies over all epoch-samples, not only subject-means
+        if INCL_SIGN:
+            sign_list = []  # corresponds with first boxplot-body, is baseline
+            box_key = f'{src}_{band}'
+            if STAT_LOADED:
+                for k in ['rest_LID', 'move_LID']:
+                    sign_list.append('nan')  # for no-LID box
+                    p = statdf.loc[f'{box_key}_{k}']['pvalue']
+                    sign_list.append(p < (ALPHA / len(f_bands)))
+            else:
+                # perform LMM noLID vs LID (for rest and move sep)
+                for i_stat, k in enumerate(['rest_LID', 'move_LID']):
+                    sign_list.append('nan')  # for no-LID box
+                    base_values = box_values[2 * i_stat]
+                    base_subs = value_subs[(2 * i_stat)]
+                    test_values = box_values[2 * i_stat + 1]
+                    test_subs = value_subs[(2 * i_stat) + 1]
+                    # prepare equal lists with all stat info
+                    stat_values = np.concatenate([base_values, test_values])
+                    stat_subids = np.concatenate([base_subs, test_subs])
+                    stat_labels = np.concatenate([[0] * len(base_subs),
+                                                  [1] * len(test_subs)])
+                        
+                    assert len(stat_values) == len(stat_labels) == len(stat_subids), (
+                        f'(BOX, LMM) lengths differ: values {len(stat_values)},'
+                        f' labels {len(stat_labels)}, ids {len(stat_subids)}'    
+                    )
+                        
+                    # run linear mixed effect model
+                    coef, pval = run_mixEff_wGroups(dep_var=stat_values,
+                                                    indep_var=stat_labels,
+                                                    groups=stat_subids,)
+                    sign_list.append(pval < (ALPHA / len(f_bands)))
+                    statdf.loc[f'{box_key}_{k}'] = [coef, pval]
+                    print(f'\t...{band} lmm, COEF: {coef}, p: {pval}')
+
+        if SUB_MEANS:
+            row_sub_values = []
+            for box_v, sel_list in zip(box_values, subsel):
+                box_subs = []
+                for sel in sel_list:
+                    # add mean of single subject within box
+                    box_subs.append(np.mean(box_v[sel]))
+                row_sub_values.append(box_subs)
+            box_values = row_sub_values
+
+        ### PLOT BOXES
+        BAND_SPACE = 1
+        BAND_TICKS = np.array([0, .15, .4, .55])
+        BOX_WIDTH = .1
+        boxxticks = (i_band * BAND_SPACE) + BAND_TICKS
+        bandtick = np.mean(BAND_TICKS[1:3])
+        boxplot = ax.boxplot(
+            box_values,
+            positions=boxxticks, widths=BOX_WIDTH,
+            patch_artist=True, showfliers=False, zorder=2,
+        )
+
+        # make boxplots pretty (incl sign)
+        for i_box, (patch, clr) in enumerate(zip(boxplot['boxes'], box_clrs)):
+            patch.set_facecolor(clr)
+            a = .5
+            if INCL_SIGN:
+                sig = sign_list[i_box]
+                if sig == True: a = .8
+                elif sig == False: a = .25
+            patch.set_alpha(a)
+
+        for median in boxplot['medians']:
+            median.set_color('black')
+        
+            # dash Movement-side
+        ax.fill_betweenx(y=YLIM, x1=bandtick + i_band, x2=.7 + i_band,
+                         facecolor='None', edgecolor='gray', alpha=.5,
+                         hatch='///',)
+
+        
+    # plot zero line forst for background
+    ax.axhline(0, xmin=-BOX_WIDTH, xmax=BAND_SPACE * (len(f_bands) + 1),
+                color='k', lw=.5, alpha=.5, zorder=1,)
+    for yline in [-.25, -5, .25, .5]:
+        ax.axhline(yline, xmin=-BOX_WIDTH, xmax=BAND_SPACE * (len(f_bands) + 1),
+                    color='k', lw=.3, alpha=.5, zorder=1,)
+            
+    # Annotate Rows
+    if ft.lower() == 'power' and src == 'lfp': ylab = "STN power\n(z-scores)"
+    elif ft.lower() == 'power' and src == 'ecog': ylab = "Cortex power\n(z-scores)"
+    elif 'coh' in ft.lower() and src == 'STNs': ylab = "Inter-STN Coh.\n(z-scores)"
+    elif 'coh' in ft.lower() and src == 'STNECOG': ylab = "Cortico-STN Coh.\n(z-scores)"
+    if ft.lower() == 'sqcoh': ylab = ylab.replace('Coh.', 'sq. COH')
+    elif ft.lower() == 'icoh': ylab = ylab.replace('Coh.', 'imag. COH')
+    ax.set_ylabel(ylab, fontsize=fsize-2, weight='bold')
+    ax.set_ylim(YLIM)
+    ax.set_xlim(-BOX_WIDTH, BAND_SPACE * (len(f_bands)))
+    ax.tick_params(size=fsize-4, axis='both', labelsize=fsize-4,)
+    ax.spines[['right', 'top', 'bottom']].set_visible(False)
+
+    # Annotate Bands
+    boxxticks = np.arange(bandtick, bandtick + len(f_bands), 1)
+    ax.set_xticks(boxxticks, size=fsize)
+    ax.set_xticklabels(ticklabels, size=fsize, weight='bold',)
+
+
+    if not STAT_LOADED and INCL_SIGN:
+        statdf.to_excel(os.path.join(stat_path, statdf_name),)
+        print(f'...saved {statdf_name} in {stat_path}')
 
 
 def plotBoxes_moveBin_LidBin(

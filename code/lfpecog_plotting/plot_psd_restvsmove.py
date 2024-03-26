@@ -51,6 +51,7 @@ def prep_and_plot_restvsmove(
     PEAK_SHIFT_GAMMA: bool = False,
     PLOT_ALL_LINES: bool = False,
     ADD_TO_FIG_NAME = False,
+    AXES_RETURN=False,
 ):
     # check feature and source input
     if FEATURE.upper() == 'PSD':
@@ -81,10 +82,14 @@ def prep_and_plot_restvsmove(
     if BASE_METHOD == 'perc_spectral': YLIM = (0, 30)
     elif BASE_METHOD == 'OFF_zscore': YLIM = (-.75, 1.25)
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols,
+    # Create Figure or define Axes to return    
+    if isinstance(AXES_RETURN, np.ndarray):
+        axes = AXES_RETURN
+    else:
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols,
                                                       4*n_rows),
-                             **kw_params)
-    
+                                 **kw_params)
+
     if MOVESIDES_SPLITTED in ['4panel', 'StnEcog4','COH_4panel']:
         axes = axes.flatten()
     
@@ -241,12 +246,14 @@ def prep_and_plot_restvsmove(
             SMOOTH_WIN=SMOOTH_WIN,
             PEAK_SHIFT_GAMMA=PEAK_SHIFT_GAMMA,
             YLIM=YLIM,
-            )
+        )
         if MOVESIDES_SPLITTED in ['4panel', 'StnEcog4'] and i_ax in [1, 3]:
             y_ax = ax.axes.get_yaxis()
             ylab = y_ax.get_label()
             ylab.set_visible(False)
     
+    if isinstance(AXES_RETURN, np.ndarray):  return axes
+
     plt.tight_layout()
 
     if SAVE_PLOT:
@@ -492,20 +499,21 @@ def plot_moveLidSpec_PSDs(
                               STATS_VERSION=STATS_VERSION,)
 
     # add title (once per AX)
-    src_title = SOURCE.replace('lfp', 'stn')
+    src_title = SOURCE.replace('lfp', 'STN')
+    src_title = src_title.replace('ecog', 'Cortex')
     if PLOT_MOVE_TYPE == 'REST':
-        ax_title = (f'{src_title.upper()} changes: Rest')
+        ax_title = (f'{src_title}: Rest')
     elif PLOT_MOVE_TYPE == 'unilatLID':
-        if src_title == 'stn':
+        if src_title == 'STN':
             ax_title = (f'Unilat. Dyskinesia:\nSubthalamic lateralization')
         else:
             ax_title = (f'Unilat. Dyskinesia:\nCortical lateralization')
     elif PLOT_MOVE_TYPE == 'overall':
-        ax_title = (f'{src_title.upper()} changes')
+        ax_title = (f'{src_title}')
     else:
-        ax_title = (f'{src_title.upper()} changes: Movement')
-    ax_title = ax_title.replace('STNS', 'Inter-Subthalamic')
-    ax_title = ax_title.replace('STNECOG', 'Cortico-Subthalamic')
+        ax_title = (f'{src_title}: Movement')
+    ax_title = ax_title.replace('STNs', 'Inter-STN')
+    ax_title = ax_title.replace('STNECOG', 'Cortico-STN')
     if PLOT_MOVE_TYPE in ['IPSI', 'CONTRA']:
         ax_title = ax_title.replace(
             'Movement',
@@ -518,8 +526,7 @@ def plot_moveLidSpec_PSDs(
     xticks[-1] = x_plot[-1]  # fix last tick to end of array
     xlabs = np.array(xlabs).copy()[xtick_sel]
     xlabs[-1] = 90  # mark last tick with 90 (instead of 89)
-    if PEAK_SHIFT_GAMMA:
-        xlabs[-3:] = ['-10  ', 'Gamma\npeak', '  +10']
+    if PEAK_SHIFT_GAMMA: xlabs[-3:] = ['-10  ', 'Gamma\npeak', '  +10']
 
     AX.axhline(0, xmin=0, xmax=1, color='gray', alpha=.3,)
     AX.set_xticks(xticks)
@@ -545,11 +552,11 @@ def plot_moveLidSpec_PSDs(
     elif FEATURE.upper() == 'ICOH':
         ylab = rf"$\bfabs.$" + " " + rf"$\bfimag.$" + " " + rf"$\bfCoherence$"
     elif FEATURE.upper() == 'SQCOH':
-        ylab = rf"$\bfsquared$" + " " + rf"$\bfCoherence$"    
+        ylab = rf"$\bfsq.$" + " " + rf"$\bfCoherence$"    
     if BASE_METHOD == 'OFF_perc_change':
-        ylab += "\n(% change vs Med-OFF)"
+        ylab += "\n(% change vs OFF)"
     elif BASE_METHOD == 'OFF_zscore':
-        ylab += "\n(z-score, based on Med-OFF)"
+        ylab += "\n(z-score, based on OFF)"
     AX.set_ylabel(ylab, size=FS, )
 
 

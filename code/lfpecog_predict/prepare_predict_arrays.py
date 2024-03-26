@@ -24,6 +24,9 @@ from utils.utils_fileManagement import (
     get_project_path, load_ft_ext_cfg,
     load_class_pickle, get_avail_ssd_subs
 )
+from lfpecog_features.feats_spectral_helpers import (
+    get_indiv_gammaPeak_range
+)
 
 
 def get_group_arrays_for_prediction(
@@ -290,7 +293,6 @@ def get_move_selected_env_arrays(
     env_arr = {}  # dict to fill and return
 
     # get settings for variables
-    FT_VERSION='v6'
     SETTINGS = load_ft_ext_cfg(FT_VERSION=FT_VERSION)
 
     # check available data
@@ -300,7 +302,7 @@ def get_move_selected_env_arrays(
     data_path = join(get_project_path('data'),
                      f'windowed_data_classes_{win_len}s'
                      f'_{win_overlap}overlap', data_v,)
-    files = listdir(join(data_path, 'movement_feature_arrays'))
+    files = listdir(join(data_path, f'movement_feature_arrays_ft{FT_VERSION}'))
 
     # get (new) bands names
     bands = SETTINGS['SPECTRAL_BANDS'].copy()
@@ -316,21 +318,26 @@ def get_move_selected_env_arrays(
         for f in [f for f in files if sub in f ]:
             # get data array and define source
             src = f"{f.split('_')[1]}_{f.split('_')[2]}"
-            env_arr[src] = np.load(join(data_path, 'movement_feature_arrays',f),
+            env_arr[src] = np.load(join(data_path, f'movement_feature_arrays_ft{FT_VERSION}',f),
                                    allow_pickle=True)
             # define source freq ranges
             fbands_out[src] = {k: v for k, v in env_ranges.items()}  # take copy of env_ranges as start
-            g_range = f.split('gamma')[1][:4]
-            g_range = [int(g_range[:2]), int(g_range[2:])]
+            if FT_VERSION == 'v6':
+                g_range = f.split('gamma')[1][:4]
+                g_range = [int(g_range[:2]), int(g_range[2:])]
+            elif FT_VERSION == 'v8':
+                g_range = 'tobedefined'
+            if INCL_GAMMA_PEAK:
+                fbands_out[src]['gammaPeak'] = g_range  # add gamma peak per source
+                print(f'...added peakGamma range: {g_range}')
             print(f'- LOADED {src}: {f}')
-            if INCL_GAMMA_PEAK: fbands_out[src]['gammaPeak'] = g_range  # add gamma peak per source
 
         return env_arr, fbands_out
  
     # only load piclke with all selections if not loaded
     ext_subclass_path = join(
-        'D://Research/CHARITE/projects/dyskinesia_neurophys/data/',
-        'windowed_data_classes_10s_0.5overlap',
+        get_project_path('data', extern_HD=True),
+        'windowed_data_classes_10s_0.5overlap', f'ft_{FT_VERSION}',
         'selected_ephys_classes_all'
     )
     print(f'...({sub}) new extraction, loading selections pickle')
@@ -367,23 +374,26 @@ def get_move_selected_env_arrays(
                 sig = np.concatenate([a[:, i_ch] for m in src_arrs.values() for a in m])
                 assert ~ any(np.isnan(sig)), f'NaNs in sig: {sum(np.isnan(sig))}'
 
-                if INCL_GAMMA_PEAK:
+                if INCL_GAMMA_PEAK and band == 'gammaPeak':
+                    if FT_VERSION == 'v8':
+                        f_range = get_indiv_gammaPeak_range(sub=sub, src=src)
+                        print(f'...v8 INDIV GAMMA PEAK: {f_range}')
+                elif INCL_GAMMA_PEAK:
                     for f_1 in np.arange(f_range[0],
-                                        f_range[1] - (GAMMA_WIDTH - 1),
-                                        GAMMA_WIDTH / 2):
-                        f_2 = f_1 + GAMMA_WIDTH
-                        env = get_envelop(sig, fs=sfreq,
-                                                    bandpass_freqs=[f_1, f_2])
-                        var_f = variation(env)
-                        if var_f > src_max_gamma_var:
-                            src_max_gamma_var = var_f
-                            indiv_gamma_range = [f_1, f_2]
-                            # add highest gamma to env array (possibly overwritten by next higher gamma)
-                            env_arr[src][-1, :] = env  # last row for indiv peak gamma
+                                            f_range[1] - (GAMMA_WIDTH - 1),
+                                            GAMMA_WIDTH / 2):
+                        f_range = [f_1, f_1 + GAMMA_WIDTH]
+                    # get envelop within peak range
+                    env = get_envelop(sig, fs=sfreq, bandpass_freqs=f_range)
+                    var_f = variation(env)
+                    if var_f > src_max_gamma_var:
+                        src_max_gamma_var = var_f
+                        indiv_gamma_range = f_range
+                        # add highest gamma to env array (possibly overwritten by next higher gamma)
+                        env_arr[src][-1, :] = env  # last row for indiv peak gamma
                 
-                if INCL_GAMMA_BROAD:
-                    env = get_envelop(sig, fs=sfreq,
-                                      bandpass_freqs=[f_1, f_2])
+                elif INCL_GAMMA_BROAD:
+                    env = get_envelop(sig, fs=sfreq, bandpass_freqs=f_range)
                     env_arr[src][i_ch, :] = env
 
             elif 'gamma' not in band:
@@ -396,7 +406,7 @@ def get_move_selected_env_arrays(
                 try:
                     env_arr[src][i_ch, :] = env
                 except ValueError:
-                    if abs(len(sig) - len(env)) < 5:
+                    if abs(len(sig) - len(env)) <= 6:
                         env_arr[src] = env_arr[src][:, :len(env)]
                     env_arr[src][i_ch, :] = env
         
@@ -413,7 +423,9 @@ def get_move_selected_env_arrays(
         if LOAD_SAVE:
             f_name = (f'sub{sub}_{src}_movEnvArray_gamma'
                       f'{int(indiv_gamma_range[0])}{int(indiv_gamma_range[1])}.npy')
-            np.save(join(data_path, 'movement_feature_arrays', f_name),
+            np.save(join(data_path,
+                         f'movement_feature_arrays_ft{FT_VERSION}',
+                         f_name),
                     env_arr[src], allow_pickle=True)
             print(f'...saved {f_name} (arr shape: {env_arr[src].shape})')
     
@@ -423,14 +435,19 @@ def get_move_selected_env_arrays(
     return env_arr, env_ranges
 
 
+
 if __name__ == '__main__':
     """
     Run (WIN): cd REPO/code: python -m  lfpecog_predict.prepare_predict_arrays
     """
-
+    
+    from lfpecog_analysis.psd_analysis_classes import (
+        PSD_vs_Move_sub, metaSelected_ephysData
+    )
+    
     print(f'extract movement selected envelop arrays')
 
-    FT_VERSION='v6'
+    FT_VERSION='v8'
     SETTINGS = load_ft_ext_cfg(FT_VERSION=FT_VERSION)
 
     SUBS = get_avail_ssd_subs(DATA_VERSION=SETTINGS["DATA_VERSION"],
@@ -440,5 +457,6 @@ if __name__ == '__main__':
         print(f'\nextract envelop-arrays for sub-{sub}')
         # get move-selected env arrays
         _, _ = get_move_selected_env_arrays(
-            sub=sub, LOAD_SAVE=True
+            sub=sub, LOAD_SAVE=True,
+            FT_VERSION=FT_VERSION,
         )

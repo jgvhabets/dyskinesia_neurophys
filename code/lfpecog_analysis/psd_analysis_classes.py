@@ -77,7 +77,7 @@ def get_allSpecStates_Psds(
         - BLs: baseline class
     """
     assert FEATURE in ['POWER', 'COH_STNs', 'COH_STNECOG'], (
-        'incorrect FEATURE given'
+        f'incorrect FEATURE given ({FEATURE})'
     )
 
     sources = ['lfp_left', 'lfp_right', 'ecog']
@@ -881,6 +881,7 @@ class PSD_vs_Move_sub:
                            FT_VERSION=self.FT_VERSION,
                            ADD_TO_CLASS=True,
                            self_class=self,
+                           CDRS_RATER=self.CDRS_RATER,
                            ADD_FREE_MOVE_SELECTIONS=self.ADD_FREE_MOVE_SELECTIONS,)
         # put bands in 3d structure
         self.band_names = list(self.SETTINGS['SPECTRAL_BANDS'].keys())
