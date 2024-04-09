@@ -7,6 +7,7 @@ from scipy import stats
 from matplotlib import pyplot as plt
 import cebra
 
+# ToDO: take mean of STN-LFP left and right 
 
 def get_cv_folds(sub, label_method: str = "binary"):
     idx_train = np.where(sub_ids != sub)[0]
@@ -76,27 +77,70 @@ def plot_value_each_sub(val_plot, include_time: bool = True):
     plt.show()
 
 USE_CEBRA = True
+REDUCE_FEATURES = True
+ADD_ACC_FEATURES = False
 
 if __name__ == "__main__":
     
     d_out = {}
 
-    for loc in ["STN", "ECOG"]:
+    for loc in ["STN", "ECOGSTN", "ECOG"]:
 
         if loc == "ECOG":
-            with open(os.path.join("data", "X_cross_val_data_ECOG_AND_STN.pickle"), 'rb') as f:
+            with open(os.path.join("data", "X_cross_val_data_ECOG.pickle"), 'rb') as f:
                 X_cross_val_data = pickle.load(f)
-        else:
-            with open(os.path.join("data", "featLabels_ftv6_Cdrs_Ecog.P"), 'rb') as f:
+                ECOG_idx = [f_idx for f_idx, f in enumerate(X_cross_val_data["ft_names"]) if ("ecog" in f or "ECOG" in f) and "coh" not in f] 
+                X_cross_val_data["X_all"] = X_cross_val_data["X_all"][:, ECOG_idx]
+                X_cross_val_data["ft_names"] = [X_cross_val_data["ft_names"][f_idx] for f_idx in ECOG_idx]
+            with open(os.path.join("data", "ACC_data_ECOG 1.pickle"), 'rb') as f:
+                acc_ = np.array(pickle.load(f)["ACC_RMS"])
+            
+        elif loc == "STN":
+            with open(os.path.join("data", "X_cross_val_data_STN.pickle"), 'rb') as f:
                 X_cross_val_data = pickle.load(f)
+            with open(os.path.join("data", "ACC_data_STN 1.pickle"), 'rb') as f:
+                acc_ = np.array(pickle.load(f)["ACC_RMS"])
+        elif loc == "ECOGSTN":
+            with open(os.path.join("data", "X_cross_val_data_ECOG.pickle"), 'rb') as f:
+                X_cross_val_data = pickle.load(f)
+            with open(os.path.join("data", "ACC_data_ECOG 1.pickle"), 'rb') as f:
+                acc_ = np.array(pickle.load(f)["ACC_RMS"])
 
         X_all = X_cross_val_data['X_all']
+        
         y_all_binary = X_cross_val_data['y_all_binary']
         y_all_scale = X_cross_val_data['y_all_scale']
         y_all_categ = X_cross_val_data["y_all_categ"].astype(int)
         sub_ids = X_cross_val_data['sub_ids']
         ft_times_all = X_cross_val_data['ft_times_all']
         ft_names = X_cross_val_data['ft_names']
+
+        if REDUCE_FEATURES:
+            new_features_names = []
+            new_features_vals = []
+
+            for f_band in ["theta", "alpha", "lo_beta", "hi_beta", "gammaPeak", "gammaBroad"]:
+                if loc == "ECOG":
+                    # there was only one hemisphere recorded for ECoG
+                    idx = [f_idx for f_idx, f in enumerate(ft_names) if f"mean_psd" in f and f_band in f][0]
+                    new_features_vals.append(X_all[:, idx])
+                    new_features_names.append(f"ecog_{f_band}_mean_psd")
+                else:
+                    idx_left = np.where(np.array(ft_names) == f"lfp_left_{f_band}_mean_psd")[0][0]
+                    idx_right = np.where(np.array(ft_names) == f"lfp_right_{f_band}_mean_psd")[0][0]
+                    new_features_vals.append(X_all[:, [idx_left, idx_right]].mean(axis=1))
+                    new_features_names.append(f"lfp_both_{f_band}_mean_psd")
+
+            if loc != "ECOG":
+                for idx_, feature_name in enumerate(ft_names):
+                    if ("ecog" in feature_name and "mean_psd"in feature_name) or "sq_coh" in feature_name:
+                        new_features_names.append(feature_name)
+                        new_features_vals.append(X_all[:, idx_])
+                    
+            X_all = np.array(new_features_vals).T
+            ft_names = new_features_names
+        if ADD_ACC_FEATURES:
+            X_all = np.concatenate([X_all, acc_[:, None]], axis=1)
 
         for label_method in ["categ", "binary", "scale"]:
             print(f"Label method: {label_method}")
@@ -109,6 +153,8 @@ if __name__ == "__main__":
                 cm_l = []
                 y_test_pred_l = []
                 y_test_true_l = []
+                y_test_pred_proba_l = []
+                y_train_pred_proba_l = []
 
                 X_test_emb_l = []
                 X_train_emb_l = []
@@ -136,12 +182,20 @@ if __name__ == "__main__":
                     model.fit(X_train, y_train)
                     y_test_pred = model.predict(X_test)
                     y_train_pred = model.predict(X_train)
+                    
+                    if label_method != "scale":
+                        y_train_pred_proba = model.predict_proba(X_train)
+                        y_test_pred_proba = model.predict_proba(X_test)
+                        
+                        y_test_pred_proba_l.append(y_test_pred_proba)
+                        y_train_pred_proba_l.append(y_train_pred_proba)
+                        
                     y_test_pred_l.append(y_test_pred)
                     y_test_true_l.append(y_test)
                     X_train_emb_l.append(X_train)
                     y_train_true_l.append(y_train)
                     prediction.append(y_test_pred)
-                    if label_method == "scale":
+                    if label_method == "scale" or label_method == "categ":
                         per = metrics.mean_absolute_error(y_test, y_test_pred)
                     else:
                         per = metrics.balanced_accuracy_score(y_test, y_test_pred)
@@ -161,9 +215,14 @@ if __name__ == "__main__":
                     "y_train_pred_l" : y_train_pred_l,
                     "y_train_true_l" : y_train_true_l
                 }
-        # save d_out to pickle
-        with open("d_out_offset_10_dim_4.pickle", 'wb') as f:
-            pickle.dump(d_out, f)
+
+                if label_method != "scale":
+                    d_out[f"{loc}_CEBRA_{USE_CEBRA}_{label_method}"]["y_train_pred_proba"] = y_train_pred_proba_l
+                    d_out[f"{loc}_CEBRA_{USE_CEBRA}_{label_method}"]["y_test_pred_proba"] = y_test_pred_proba_l
+
+    # save d_out to pickle
+    with open("d_out_offset_10_dim_4_including_proba_plus_ECoG_only.pickle", 'wb') as f:
+        pickle.dump(d_out, f)
 
 
 

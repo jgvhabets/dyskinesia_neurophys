@@ -115,54 +115,10 @@ df = pd.DataFrame(
 
 LM_Flag = False
 add_str = ""
-# ["offset_10", "offset_36_1000_it", "offset_36_3000_it", "offset_1", "offset_10_1_cat_fixed", "offset_dim_2", "offset-10-uniform-prior", "offset_10_dim_4"]
-for model_name in ["offset_10_dim_4", "offset_model"]:  # offset_model ist 
 
-    if model_name == "offset_10":
-        with open(os.path.join("lfpecog_decode_cebra", "d_out.pickle"), "rb") as f:
-            d_out = pickle.load(f)
-    elif model_name == "offset_36_1000_it":
-        with open(
-            os.path.join("lfpecog_decode_cebra", "d_out_emb_dim_8.pickle"), "rb"
-        ) as f:
-            d_out = pickle.load(f)
-    elif model_name == "offset_36_3000_it":
-        with open(
-            os.path.join("lfpecog_decode_cebra", "d_out_3000_it.pickle"),
-            "rb",
-        ) as f:
-            d_out = pickle.load(f)
-    elif model_name == "offset_1":
-        with open(
-            os.path.join("lfpecog_decode_cebra", "d_out_offset_1.pickle"),
-            "rb",
-        ) as f:
-            d_out = pickle.load(f)
-    elif model_name == "offset_10_1_cat_fixed":
-        with open(
-            os.path.join("lfpecog_decode_cebra", "d_out_offset_10_time_delta_1_cat_fixed.pickle"),
-            "rb",
-        ) as f:
-            d_out = pickle.load(f)
-    elif model_name == "offset_dim_2":
-        with open(
-            os.path.join("lfpecog_decode_cebra", "d_out_offset_10_dim_2.pickle"),
-            "rb",
-        ) as f:
-            d_out = pickle.load(f)
-    elif model_name == "offset-10-uniform-prior":
-        with open(
-            os.path.join("lfpecog_decode_cebra", "d_out_offset_10_dim_3_uniform_prior.pickle"),
-            "rb",
-        ) as f:
-            d_out = pickle.load(f)
-    #elif model_name == "offset_10_dim_4":
-    #    with open(
-    #        os.path.join("lfpecog_decode_cebra", "d_out_offset_10_dim_4.pickle"),
-    #        "rb",
-    #    ) as f:
-    #        d_out = pickle.load(f)
-    elif model_name == "offset_10_dim_4":
+for model_name in ["offset_10_dim_4", "offset_model_with_movement"]:  # offset_model ist 
+
+    if model_name == "offset_10_dim_4":
         with open(
             #os.path.join("lfpecog_decode_cebra", ),
             "d_out_NEW_FEATURES_offset_10_dim_4.pickle",
@@ -184,7 +140,7 @@ for model_name in ["offset_10_dim_4", "offset_model"]:  # offset_model ist
             loc = "ECOG_STN"
         else:
             loc = "STN"
-        if "CEBRA_True" not in key and model_name == "offset_10_dim_4":
+        if "CEBRA_True" not in key:
             LM_Flag = True
         else:
             LM_Flag = False
@@ -199,7 +155,7 @@ for model_name in ["offset_10_dim_4", "offset_model"]:  # offset_model ist
             label_method = "binary"
             performance_metric = "balanced accuracy"
 
-        model_name_ = model_name if LM_Flag is False else "LM"
+        model_name_ = "CEBRA" if LM_Flag is False else "LM"
         model_name_ = model_name_ + "_" + add_str
         for sub_idx, sub in enumerate(sub_ids):
             
@@ -216,6 +172,7 @@ for model_name in ["offset_10_dim_4", "offset_model"]:  # offset_model ist
                                 "performance_metric": performance_metric,
                                 "performance": d_out[key]["performances"][sub_idx],
                                 "model_name": model_name_,
+                                "CEBRA" : not LM_Flag,
                             }
                         ]
                     ),
@@ -228,10 +185,12 @@ for model_name in ["offset_10_dim_4", "offset_model"]:  # offset_model ist
 plot_embedding(plt_train=False)
 
 plt.figure(figsize=(10, 6),)
+#df_plt = df.query("CEBRA == False")
+df_plt = df
 for idx, label_method in enumerate(["binary", "categ", "mean_absolute_error"]):
     plt.subplot(1, 3, idx + 1)
     sns.boxplot(
-        df.query("label_method == @label_method"),
+        df_plt.query("label_method == @label_method"),
         palette="viridis",
         x="location",
         y="performance",
@@ -247,7 +206,7 @@ for idx, label_method in enumerate(["binary", "categ", "mean_absolute_error"]):
         plt.ylabel("Mean Absolute Error")
     
     if idx == 2:
-        plt.title("Regression (Scale: 0-10)")
+        plt.title("Regression")
     plt.xlabel("Location")
 plt.tight_layout()
 
