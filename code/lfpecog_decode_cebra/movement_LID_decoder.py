@@ -7,9 +7,7 @@ from scipy import stats
 from matplotlib import pyplot as plt
 import cebra
 
-# ToDO: take mean of STN-LFP left and right 
-
-def get_cv_folds(sub, label_method: str = "binary"):
+def get_cv_folds(sub, label_method: str = "binary", add_movement_label: bool = False, threshold_mov=0):
     idx_train = np.where(sub_ids != sub)[0]
     idx_test = np.where(sub_ids == sub)[0]
 
@@ -25,7 +23,23 @@ def get_cv_folds(sub, label_method: str = "binary"):
     else:
         y_train = y_all_categ[idx_train]
         y_test = y_all_categ[idx_test]
-    
+    if add_movement_label:
+        
+        y_train = acc_[idx_train][:, None]# > threshold_mov
+        y_test = acc_[idx_test][:, None]# > threshold_mov
+        
+        #y_train = np.concatenate([y_train[:, None], acc_[idx_train][:, None] > threshold_mov], axis=1)
+        #y_test = np.concatenate([y_test[:, None], acc_[idx_test][:, None] > threshold_mov], axis=1)
+        #y_train = np.array([2 * pair[0] + pair[1] for pair in y_train])
+        #y_test = np.array([2 * pair[0] + pair[1] for pair in y_test])
+
+        
+
+        # (0, 0), 0: No Dys No Mov
+        # (0, 1), 1: No Dys, Mov
+        # (1, 0), 2: Dys, No Mov
+        # (1, 1), 3: Dys Mov
+
     return X_train, X_test, y_train, y_test
 
 def compute_embedding(X_train, y_train, X_test):
@@ -39,7 +53,7 @@ def compute_embedding(X_train, y_train, X_test):
         max_iterations = 1000,
         temperature_mode="constant",
         time_offsets = 10,
-        output_dimension = 4,
+        output_dimension = 2,  # 4
         #conditional="time_delta",
         verbose = True,
         device = "cuda",
@@ -76,15 +90,16 @@ def plot_value_each_sub(val_plot, include_time: bool = True):
     plt.tight_layout()
     plt.show()
 
-USE_CEBRA = True
+USE_CEBRA = False
 REDUCE_FEATURES = True
 ADD_ACC_FEATURES = False
+PREDICT_MOV_WITH_LID = True
 
 if __name__ == "__main__":
-
+    
     d_out = {}
 
-    for loc in ["STN", "ECOGSTN", "ECOG"]:
+    for loc in ["ECOGSTN", "STN", "ECOG"]:
 
         if loc == "ECOG":
             with open(os.path.join("data", "X_cross_val_data_ECOG_v8.pickle"), 'rb') as f:
@@ -94,14 +109,14 @@ if __name__ == "__main__":
                 X_cross_val_data["ft_names"] = [X_cross_val_data["ft_names"][f_idx] for f_idx in ECOG_idx]
             with open(os.path.join("data", "ACC_data_ECOG 1.pickle"), 'rb') as f:
                 acc_ = np.array(pickle.load(f)["ACC_RMS"])
-
+            
         elif loc == "STN":
-            with open(os.path.join("data", "X_cross_val_data_STN.pickle"), 'rb') as f:
+            with open(os.path.join("data", "X_cross_val_data_STN_v8.pickle"), 'rb') as f:
                 X_cross_val_data = pickle.load(f)
             with open(os.path.join("data", "ACC_data_STN 1.pickle"), 'rb') as f:
                 acc_ = np.array(pickle.load(f)["ACC_RMS"])
         elif loc == "ECOGSTN":
-            with open(os.path.join("data", "X_cross_val_data_ECOG.pickle"), 'rb') as f:
+            with open(os.path.join("data", "X_cross_val_data_ECOG_v8.pickle"), 'rb') as f:
                 X_cross_val_data = pickle.load(f)
             with open(os.path.join("data", "ACC_data_ECOG 1.pickle"), 'rb') as f:
                 acc_ = np.array(pickle.load(f)["ACC_RMS"])
@@ -141,10 +156,10 @@ if __name__ == "__main__":
         if ADD_ACC_FEATURES:
             X_all = np.concatenate([X_all, acc_[:, None]], axis=1)
 
-        for label_method in ["categ", "binary", "scale"]:
+        for label_method in ["binary", "categ", "scale"]:
             print(f"Label method: {label_method}")
             
-            for USE_CEBRA in [False,True]:
+            for USE_CEBRA in [True, False]:
                 print(f"USE_CEBRA: {USE_CEBRA}")
 
                 prediction = []
@@ -161,22 +176,33 @@ if __name__ == "__main__":
                 y_train_pred_l = []
                 y_train_true_l = []
 
-                for sub in np.unique(sub_ids):
-                    X_train, X_test, y_train, y_test = get_cv_folds(sub, label_method=label_method)  # categ
-                
+                plt.figure(figsize=(14, 10))
+                for sub_idx, sub in enumerate(np.unique(sub_ids)):
+                    X_train, X_test, y_train, y_test = get_cv_folds(sub, label_method=label_method, add_movement_label=True)  # categ
+
+
+
+                    # only for check how well the acc data can be separated
+                    X_emb_test, X_emb_train = compute_embedding(X_test, y_test, X_train)
+                    ax = plt.subplot(4, 4, sub_idx+1)
+                    cebra.plot_embedding(X_emb_test, y_test[:,0], markersize=10, cmap="viridis", ax=ax)
+                    plt.title(f"{sub}")
+
                     if USE_CEBRA:
                         X_emb_train, X_emb_test = compute_embedding(X_train, y_train, X_test)
                         X_train = X_emb_train
                         X_test = X_emb_test
                         X_test_emb_l.append(X_test)
                     
-                        #cebra.plot_embedding(X_train, y_train, markersize=10, cmap="viridis")
+                        cebra.plot_embedding(X_emb_test, y_test[:,0], markersize=10, cmap="viridis")
+
                         #cebra.plot_embedding(X_test, y_test, markersize=10, cmap="viridis")
 
                     if label_method == "scale":
                         model = linear_model.LinearRegression()
                     else:
-                        model = linear_model.LogisticRegression(class_weight="balanced")
+                        model = linear_model.LogisticRegression(
+                            class_weight="balanced", multi_class="multinomial", solver="lbfgs")
 
                     model.fit(X_train, y_train)
                     y_test_pred = model.predict(X_test)
@@ -200,9 +226,26 @@ if __name__ == "__main__":
                         per = metrics.balanced_accuracy_score(y_test, y_test_pred)
                     performances.append(per)
                     if label_method != "scale":
-                        cm = metrics.confusion_matrix(y_test, y_test_pred)
+                        cm = metrics.confusion_matrix(y_test, y_test_pred)  # normalize="true"
+                        label_conf = ["No Dys - No Mov", "No Dys - Mov", "Dys - No Mov", "Dys - Mov"]
+                        
+                        #plot the confusion matrix
+                        plt.figure(figsize=(8, 8))
+                        plt.imshow(cm_all_normed, cmap="Blues")
+                        plt.xticks(np.arange(4), label_conf, rotation=45)
+                        plt.yticks(np.arange(4), label_conf)
+                        plt.xlabel("Predicted")
+                        plt.ylabel("True")
+                        plt.title(f"Confusion matrix ")#  for {sub}
+                        plt.colorbar()
+                        plt.tight_layout()
+                        plt.show()
+
                         cm_l.append(cm)
-                
+                cm_all = np.array(cm_l).mean(axis=0)
+                # normalize the confusion matrix
+                cm_all_normed = cm_all / cm_all.sum(axis=1)[:, None]
+
                 d_out[f"{loc}_CEBRA_{USE_CEBRA}_{label_method}"] = {
                     "prediction": prediction,
                     "performances": performances,
