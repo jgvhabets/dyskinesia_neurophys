@@ -193,8 +193,6 @@ class get_selectedEphys:
         self.SETTINGS = load_ft_ext_cfg(FT_VERSION=self.FT_VERSION)
         data_path = get_project_path('data', extern_HD=self.USE_EXT_HD,)
 
-        # if self.USE_EXT_HD:
-        #     data_path = 'D://Research/CHARITE/projects/dyskinesia_neurophys/data/'
         picklepath = os.path.join(
             data_path,
             'windowed_data_classes_10s_0.5overlap',
@@ -233,6 +231,11 @@ class get_selectedEphys:
         # GET RELEVANT STATE PSDs per Subject and Source
         
         for sub in self.SETTINGS['TOTAL_SUBS']:
+
+            # skip ready patients (RE-REUNNING MARCH 2024)
+            if sub not in self.SETTINGS['SUBS_INCL']:
+                print(f'\n###### SKIPPED SUB-{sub},  not in SUBS_INCL list (ft-extr-json)\n')
+
             if sub.startswith('1') and self.FEATURE == 'COH_STNECOG':
                 if self.verbose: print(f'\n### No ECoG DATA, SKIP sub-{sub} {self.FEATURE}-calculation')
                 continue
@@ -1071,12 +1074,15 @@ def load_sub_states(state, sub, pickled_state_path,
 
 
 if __name__ == '__main__':
+    """
+    WIN: (cd code) python -m lfpecog_analysis.psd_analysis_classes
+    """
     
     for FT in ['POWER', 'COH_STNECOG', 'COH_STNs']:
         
-        if FT in ['POWER', 'COH_STNECOG']:
-            print(f'######### SKIP {FT}, already done')
-            continue
+        # if FT in ['POWER', 'COH_STNECOG']:
+        #     print(f'######### SKIP {FT}, already done')
+        #     continue
 
         print(f'######### START {FT}')
         

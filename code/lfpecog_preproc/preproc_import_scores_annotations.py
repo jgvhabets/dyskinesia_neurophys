@@ -303,8 +303,8 @@ def get_cdrs_specific(
     sub, side='both', rater='Patricia',
     INCL_CORE_CDRS=False,
     regularize=False,
-    subs_PK_todo=['101', '102', '103', '105', '107', '108', '109',
-                  '019', '020', '021', '022', '023'],
+    # subs_PK_todo=['101', '102', '103', '105', '107', '108', '109',
+    #               '019', '020', '021', '022', '023'],
 ):
     """
     Gives uni- or bilateral CDRS scores
@@ -323,8 +323,8 @@ def get_cdrs_specific(
     """
     if rater.capitalize() in ['Patricia', 'Jeroen']:
         # FOR NOT SCORED SCORES
-        if sub in subs_PK_todo:
-            rater = 'Jeroen'
+        # if sub in subs_PK_todo:
+        #     rater = 'Jeroen'
 
         scores_df = read_clinical_scores(sub, rater=rater)
         times = scores_df['dopa_time']

@@ -31,6 +31,7 @@ from lfpecog_features.feats_spectral_helpers import (
 
 def get_group_arrays_for_prediction(
     feat_dict, label_dict, CDRS_THRESHOLD=.1,
+    acc_dict=False,
     CDRS_CODING='binary', CATEG_CDRS=False,
     MILD_CDRS=5, SEV_CDRS=10,
     TO_PLOT = False, EXCL_CODE = 99
@@ -57,6 +58,8 @@ def get_group_arrays_for_prediction(
     sub_ids_total = []
     ft_times_total = []
 
+    acc_total = []
+
     for i_s, sub in enumerate(list(feat_dict.keys())):
 
         ft_names = []
@@ -74,6 +77,11 @@ def get_group_arrays_for_prediction(
         sub_ids_total.append([sub] * feat_dict[sub].shape[0])  # add subject code, as many times as there are feature rows
         # add subjects ft-times to list (for later plotting)
         ft_times_total.append(feat_dict[sub].index.values)
+
+        # add acc rms
+        if isinstance(acc_dict, dict): acc_total.extend(acc_dict[sub])
+
+
         ### Create X with standardised Feature-arrays
         sub_X = np.zeros_like((feat_dict[sub]))
 
@@ -85,6 +93,8 @@ def get_group_arrays_for_prediction(
                 if sub == '012': no_LID_sel = feat_dict[sub].index.values < 0
                 elif sub == '102': no_LID_sel = feat_dict[sub].index.values < 0
                 elif sub == '008': no_LID_sel = feat_dict[sub].index.values < 3
+                elif sub == '105': no_LID_sel = np.logical(feat_dict[sub].index.values > 3,
+                                                           feat_dict[sub].index.values < 6)
                 else: raise ValueError(f'for subject {sub}, no NONE-LID moments'
                                        ' found for feature z-scoring')
 
@@ -123,7 +133,11 @@ def get_group_arrays_for_prediction(
             TO_SAVE_FIG=False,
             figname='LID_ssdFeatures_boxplots_indiv_zScored'
         )
-    return X_total, y_total_coded, y_total_scale, sub_ids_total, ft_times_total, ft_names
+    
+    if isinstance(acc_dict, dict):
+        return X_total, y_total_coded, y_total_scale, sub_ids_total, ft_times_total, ft_names, np.array(acc_total)
+    else:
+        return X_total, y_total_coded, y_total_scale, sub_ids_total, ft_times_total, ft_names
 
 
 def merge_group_arrays(X_total, y_total_binary,

@@ -196,8 +196,8 @@ def scatter_Feats_LID_MOVE(
         # plot meta info
         # axes[i_ft].set_title(pow_labels[i_ft], size=fsize,
         #                      weight='bold',)
-        ylab = rf"$\bfMovement$" + " " + rf"$\bfpresence$" + "\n(acc, z-scored RMS)"
-        xlab = rf"$\bfDyskinesia$" + " " + rf"$\bfseverity$" + "\n(CDRS, sum)"
+        ylab = rf"$\bfMovement$" + " " + rf"$\bfpresence$" + "\n(indiv. z-scored acc-rms)"
+        xlab = rf"$\bfDyskinesia$" + " " + rf"$\bfseverity$" + "\n(total CDRS score)"
         if not shareX: axes[i_ft].set_xlabel(xlab, size=fsize,)
         axes[i_ft].set_ylabel(ylab, size=fsize,)
         axes[i_ft].set_ylim(-2, 4)

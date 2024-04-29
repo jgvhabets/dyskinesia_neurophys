@@ -37,6 +37,7 @@ cond_colors = {
 
 def plot_overall_PSD_COH(
     psd_arr_dict, sub_arr_dict, ps_freqs_dict,
+    FT_VERSION: str,
     BASE_METHOD: str = 'Z',     
     SAVE_PLOT = True,
     FIG_DATE = '0311',
@@ -45,14 +46,13 @@ def plot_overall_PSD_COH(
     PEAKSHIFT_GAMMA = True,
     SMOOTH_WIN: int = 0,
     ALPHA = .01,
+    DATA_VERSION: str = 'v4.0',
 ):
     """
     Aeguments:
         - psd_arrs, sub_arrs, ps_freqs: all dict containing
             lfp and ecog from def prep_10sPSDs_lidCategs()
     """
-    DATA_VERSION='v4.0'
-    FT_VERSION='v6'
     IGNORE_PTS=['011', '104', '106']
 
     SUBS = get_avail_ssd_subs(DATA_VERSION=DATA_VERSION,
@@ -60,7 +60,7 @@ def plot_overall_PSD_COH(
                               IGNORE_PTS=IGNORE_PTS)
 
     n_rows, n_cols = 2, 2
-    kw_params = {'sharey': 'row'}
+    kw_params = {}  # {'sharey': 'row'}
 
     if BASE_METHOD == 'percChange': YLIM = (-50, 100)
     elif BASE_METHOD == 'Z': YLIM = (-.5, 1.5)
@@ -97,6 +97,7 @@ def plot_overall_PSD_COH(
                 FEATURE=f'COH_{src}',
                 COH_TYPE=ft,
                 STATE_SEL='baseline',
+                FT_VERSION=FT_VERSION,
                 MIN_SEL_LENGTH=10,
                 LOAD_PICKLE=True,
                 USE_EXT_HD=True,
@@ -161,10 +162,10 @@ def plot_overall_PSD_COH(
             # MIN_SUBS_FOR_MEAN=4,
         )
 
-        if i_ax in [1, 3]:
-            y_ax = axes[1].axes.get_yaxis()
-            ylab = y_ax.get_label()
-            ylab.set_visible(False)
+        # if i_ax in [1, 3]:
+        #     y_ax = axes[i_ax].axes.get_yaxis()
+        #     ylab = y_ax.get_label()
+        #     ylab.set_visible(False)
         
     plt.tight_layout()
 

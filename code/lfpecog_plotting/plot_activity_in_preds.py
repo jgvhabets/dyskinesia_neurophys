@@ -89,9 +89,12 @@ def scatter_predErrors(
 
     # PM: plot cbar without transparancy for cbar legend
 
-    ylab = rf"$\bfMovement$" + " " + rf"$\bfpresence$" + "\n(acc, z-scored RMS)"
-    xlab = rf"$\bfTrue$" + " " + rf"$\bfdyskinesia$" + " " + rf"$\bfseverity$" + "\n(CDRS, sum)"
-    cbar_lab = rf"$\bfPrediction$" + " " + rf"$\bferror$" + "\n(CDRS, points)"
+    ylab = (rf"$\bfMovement$" + " " + rf"$\bfpresence$"
+            + "\n(indiv. z-scored acc-rms)")
+    xlab = (rf"$\bfTrue$" + " " + rf"$\bfdyskinesia$" +
+            " " + rf"$\bfseverity$" + "\n(total CDRS score)")
+    cbar_lab = (rf"$\bfPrediction$" + " " + rf"$\bferror$" +
+                "\n(\u0394 CDRS points)")
 
     ax.set_xlabel(xlab, size=fsize,)
     ax.set_ylabel(ylab, size=fsize,)
@@ -110,7 +113,7 @@ def scatter_predErrors(
     if SAVE_PLOT:
         path = join(get_project_path('figures'),
                     'final_Q1_2024',
-                    'prediction', 'group')
+                    'prediction', 'group', 'scale')
 
         print(f'...saved {fig_name} in {path}')
         plt.savefig(join(path, fig_name), facecolor='w', dpi=300,)
@@ -194,7 +197,7 @@ def plot_binary_act_distr(
         ax.set_yticklabels(np.arange(0, y2, 1).astype(int))
         ax.tick_params(axis='both', size=fsize, labelsize=fsize, )
 
-        ax.set_xlabel(f'Activitiy (indiv - zscored)', size=fsize,)
+        ax.set_xlabel(f'Movement presence\n(indiv. z-scored acc-rms)', size=fsize,)
         ax.set_ylabel(f'Observations (a.u.)', size=fsize,)
 
 
@@ -203,7 +206,7 @@ def plot_binary_act_distr(
     if SAVE_PLOT:
         path = join(get_project_path('figures'),
                     'final_Q1_2024',
-                    'prediction', 'group')
+                    'prediction', 'group', 'binary')
 
         print(f'...saved {fig_name} in {path}')
         plt.savefig(join(path, fig_name), facecolor='w', dpi=300,)
@@ -216,23 +219,32 @@ def plot_binary_act_distr(
 
 def plot_predValues_per_ActBin(
     dat_dict: dict, model: str,
+    bin_width = .8,
     SAVE_PLOT: bool = False,
     SHOW_PLOT: bool = True,
+    SensSpec=True, PredAcc=False,
     fig_name='0000_binary_act_preds', 
 ):
 
     fig, ax = plt.subplots(1, 1, figsize=(6, 3))
     fsize=14
-    bin_width = .5
     hist_bins = np.arange(-2, 4.1, bin_width)
+    clr_sens = 'mediumseagreen'
+    clr_spec = 'goldenrod'
 
-    bins = {'sens': [], 'spec': []}
+    if SensSpec:
+        metric_labels = ['sens', 'spec']
+        metric_legends = ['Sensitivity', 'Specificity']
+    else:
+        metric_labels = ['pos_pv', 'neg_pv']
+        metric_legends = ['"DYSKINESIA" predicted',
+                          '"NO-DYSKINESIA" predicted']
+
+    bins = {l: [] for l in metric_labels}
     for n in hist_bins:
-        bins['sens'].append([])
-        bins['spec'].append([])
+        for l in metric_labels:
+            bins[l].append([])
     
-    print(f'lengths: {len(bins["sens"])}, {len(bins["spec"])}')
-
     for sub in dat_dict:
         
         sub_dict = dat_dict[sub]
@@ -255,25 +267,25 @@ def plot_predValues_per_ActBin(
             if sum(bin_sel) == 0: continue
 
             all_neg = sum(sub_true[bin_sel] == 0)
+            all_pos = sum(sub_true[bin_sel] == 1)
             truepos = sum(np.logical_and(sub_true[bin_sel] == 1,
                                          sub_pred[bin_sel] == 1))
             trueneg = sum(np.logical_and(sub_true[bin_sel] == 0,
                                          sub_pred[bin_sel] == 0))
             all_pos_preds = sum(sub_pred[bin_sel] == 1)
+            all_neg_preds = sum(sub_pred[bin_sel] == 0)
 
-            # sens = truepos / all_pos_preds
-            # spec = trueneg / all_neg
 
-            if all_pos_preds > 0: bins['sens'][i_bin].append(truepos / all_pos_preds)
-            if all_neg > 0: bins['spec'][i_bin].append(trueneg / all_neg)
-
+            if SensSpec:
+                if all_pos > 0: bins['sens'][i_bin].append(truepos / all_pos)
+                if all_neg > 0: bins['spec'][i_bin].append(trueneg / all_neg)
+            else:
+                if all_pos_preds > 0: bins['pos_pv'][i_bin].append(truepos / all_pos_preds)
+                if all_neg_preds > 0: bins['neg_pv'][i_bin].append(trueneg / all_neg_preds)
+            
+            
             # print(f'...{sub}, added sns: {sens}, spc: {spec}, based on {sum(bin_sel)} samples')
     
-    # print(f'lengths sens list: {[len(l) for l in bins["sens"]]}')
-    # print(f'lengths spec list: {[len(l) for l in bins["spec"]]}')
-
-    # print(f'lengths sens list: {bins["sens"]}')
-    # print(f'lengths spec list: {bins["spec"]}')
 
     ax.axhline(xmin=hist_bins[0], xmax=hist_bins[-1], y=.5,
                color='gray', alpha=.2, lw=1, ls='--',)
@@ -281,54 +293,68 @@ def plot_predValues_per_ActBin(
                color='gray', alpha=.2, lw=1,)
     
     # PLOT BOXES
-    box_sens = ax.boxplot(
-        bins['sens'],
-        positions=hist_bins - (bin_width/6),
-        patch_artist=True,
-        widths=bin_width/3,
-    )
-    box_spec = ax.boxplot(
-        bins['spec'],
-        positions=hist_bins + (bin_width/6),
-        patch_artist=True,
-        widths=bin_width/3,
-    )
+    boxes = {}
+    for i_m, (m, w) in enumerate(
+        zip(metric_labels, [-1 * bin_width/6, bin_width / 6])
+    ):
+        boxes[m] = ax.boxplot(
+            bins[m],
+            positions=hist_bins + w,
+            patch_artist=True,
+            widths=bin_width/3,
+        )
+
     # Color Boxes
-    for box in box_spec['boxes']:
-        box.set_facecolor('purple')
-        box.set_alpha(.5)
-    for box in box_sens['boxes']:
-        box.set_facecolor('green')
-        box.set_alpha(.5)
-    
-    for box in [box_sens, box_spec]:
-        for m in box['medians']: m.set_color('gray')
+    for box_patch, clr in zip(
+        boxes.values(),
+        [clr_sens, clr_spec]
+    ):
+        for m in box_patch['medians']: m.set_color('gray')
+        for box in box_patch['boxes']:
+            box.set_facecolor(clr)
+            box.set_edgecolor(clr)
+            box.set_linewidth(0)
+            box.set_alpha(.5)
 
     # Plot LEGEND
-    fig.text(x=.8, y=.15, s='Sensitivity',
-        va='bottom', ha='left', size=fsize-2,
+    if SensSpec: x_leg, y_leg = ([.8, .8], [.15, .05])
+    else: x_leg, y_leg = ([.25, .6], [.85, .85])
+    
+    fig.text(x=x_leg[0], y=y_leg[0], s=metric_legends[0],
+        va='bottom', ha='left', size=fsize-4,
         rotation=0,  weight='bold',
-        bbox={'facecolor': 'forestgreen', 'alpha': .3},
+        bbox={'facecolor': clr_sens, 'alpha': .3, 'lw': 0,},
     )
-    fig.text(x=.8, y=.05, s='Specificity',
-        va='bottom', ha='left', size=fsize-2,
+    fig.text(x=x_leg[1], y=y_leg[1], s=metric_legends[1],
+        va='bottom', ha='left', size=fsize-4,
         rotation=0,  weight='bold',
-        bbox={'facecolor': 'purple', 'alpha': .3},
+        bbox={'facecolor': clr_spec, 'alpha': .3, 'lw': 0,},
     )
     
     # plot title and labels
-    title = (rf"$\bfDyskinesia$" + " "+ rf"$\bfprediction$" + " " rf"$\bfperformance$" + " "
-                + rf"$\bfvs.$" + " " + rf"$\bfActivity$" + f"\n(model: {model})")
-    ax.set_title(title, size=fsize-2,)
-    ax.set_xlabel(rf"$\bfActivity$" + "\n(indiv. z scored)", size=fsize,)
-    ax.set_ylabel(rf"$\bfIndividual$" + " " rf"$\bfscores$" + " " + "\n(a.u.)", size=fsize,)            
+    if SensSpec:
+        title = (rf"$\bfDyskinesia$" + " "+ rf"$\bfprediction$" + " " rf"$\bfperformance$" + " "
+                    + rf"$\bfand$" + " " + rf"$\bfActivity$" + f"\n(model: {model})")
+        ax.set_title(title, size=fsize-2,)
+    else:
+        ax.set_title(f'Model: {model}\n', size=fsize-2, loc='left',)
+
+    ax.set_xlabel(rf"$\bfMovement$" + " " + rf"$\bfpresence$"
+                  + "\n(indiv. z-scored acc-rms)",
+                  size=fsize,)
+    if SensSpec:
+        lab = (rf"$\bfPrediction$" + " " + rf"$\bfmetrics$" + " " + "\n")
+    else:
+        lab = (rf"$\bfPrediction$" + " " + rf"$\bfaccuracies$" + " " + "\n(%)")
+    ax.set_ylabel(lab, size=fsize,)            
 
     # fix ticks and axes
     ax.set_xticks(np.arange(-2, 4.1, 2))
     ax.set_xticklabels(np.arange(-2, 4.1, 2).astype(int))
     ax.set_ylim(-.1, 1.1)
     ax.set_yticks([0, .5, 1])
-    ax.set_yticklabels([0, .5, 1],)
+    if SensSpec: ax.set_yticklabels([0, .5, 1],)
+    elif PredAcc: ax.set_yticklabels(['0 %', '50 %', '100 %'],)
     ax.tick_params(axis='both', size=fsize, labelsize=fsize, )
     for r in ['right', 'top']: ax.spines[r].set_visible(False)
 
@@ -338,7 +364,9 @@ def plot_predValues_per_ActBin(
     if SAVE_PLOT:
         path = join(get_project_path('figures'),
                     'final_Q1_2024',
-                    'prediction', 'group')
+                    'prediction', 'group', 'binary')
+        if SensSpec: path = join(path, 'SensSpec')
+        elif PredAcc: path = join(path, 'PredAcc')
 
         print(f'...saved {fig_name} in {path}')
         plt.savefig(join(path, fig_name), facecolor='w', dpi=300,)

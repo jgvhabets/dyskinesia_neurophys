@@ -168,6 +168,10 @@ def select_3d_ephys_moveTaskLid(
     # select only first X minutes for baseline
     if SEL == 'BASELINE':
         time_mask = ephys_time_2d < (BASELINE_MINUTES * 60)
+        # custom baseline selection for patients with movement/lid at start
+        if psdMoveClass.sub == '105':
+            time_mask = np.logical_and(ephys_time_2d > (3 * 60),
+                                       ephys_time_2d < (6 * 60))
         MASK = np.logical_and(MASK, time_mask)  # combine with existing mask-selection
         if verbose: print(f'total KEEPS in MASK after baseline time : {np.sum(MASK) / 7 / EPHYS_FS} (sec, p/band)')
 

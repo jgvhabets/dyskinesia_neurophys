@@ -75,8 +75,8 @@ def prep_and_plot_restvsmove(
         n_cols, n_rows = 2, 2
         kw_params['sharex'] = 'col'
 
-    
-    if FEATURE == 'PSD' and not LID_BINARY: YLIM = (-60, 175)
+    if MOVESIDES_SPLITTED in ['4panel', 'StnEcog4', 'COH_4panel']: YLIM = (-35, 85)
+    elif FEATURE == 'PSD' and not LID_BINARY: YLIM = (-60, 175)
     elif FEATURE == 'PSD' and LID_BINARY: YLIM = (-30, 75)
     else: YLIM = (-50, 100)
     if BASE_METHOD == 'perc_spectral': YLIM = (0, 30)
@@ -247,7 +247,7 @@ def prep_and_plot_restvsmove(
             PEAK_SHIFT_GAMMA=PEAK_SHIFT_GAMMA,
             YLIM=YLIM,
         )
-        if MOVESIDES_SPLITTED in ['4panel', 'StnEcog4'] and i_ax in [1, 3]:
+        if MOVESIDES_SPLITTED in ['4panel', 'StnEcog4', 'COH_4panel'] and i_ax in [1, 3]:
             y_ax = ax.axes.get_yaxis()
             ylab = y_ax.get_label()
             ylab.set_visible(False)
@@ -430,16 +430,18 @@ def plot_moveLidSpec_PSDs(
             )
             # edit legend labels for readibility
             lab = lid.replace('lid', ' LID')  #  add spaces for readability
-            lab = lab.replace('below30', ' < 30min')
-            lab = lab.replace('over30', ' > 30min')
+            lab = lab.replace('all LID', 'LID')
+            lab = lab.replace('below30', ' < 30 min')
+            lab = lab.replace('over30', ' > 30 min')
             lab = lab.replace('_', ' ')
             lab = lab.replace('ipsi all', 'Ipsilateral to')
             lab = lab.replace('contra all', 'Contralateral to')
             
             if LID_BINARY: lw=3
+            elif PLOT_MOVE_TYPE == 'overall': lw = 2
             else: lw=1
             AX.plot(x_plot, m, lw=lw,
-                    color=cond_colors[lid], alpha=.8, ls=ls,
+                    color=cond_colors[lid], alpha=.7, ls=ls,
                     label=f"{lab} (n={n_subs})",)
             # plot variance shades (LID severity)
             if ('ipsi' in lid or 'contra' in lid) and 'moderate' in lid:
@@ -503,17 +505,19 @@ def plot_moveLidSpec_PSDs(
     src_title = src_title.replace('ecog', 'Cortex')
     if PLOT_MOVE_TYPE == 'REST':
         ax_title = (f'{src_title}: Rest')
+    elif PLOT_MOVE_TYPE == 'ALLMOVE':
+        ax_title = (f'{src_title}: Movement')
     elif PLOT_MOVE_TYPE == 'unilatLID':
         if src_title == 'STN':
             ax_title = (f'Unilat. Dyskinesia:\nSubthalamic lateralization')
         else:
             ax_title = (f'Unilat. Dyskinesia:\nCortical lateralization')
     elif PLOT_MOVE_TYPE == 'overall':
-        ax_title = (f'{src_title}')
+        ax_title = f'{src_title} changes'
     else:
-        ax_title = (f'{src_title}: Movement')
-    ax_title = ax_title.replace('STNs', 'Inter-STN')
-    ax_title = ax_title.replace('STNECOG', 'Cortico-STN')
+        ax_title = f'{src_title}: Movement'
+    ax_title = ax_title.replace('STNs', 'Inter-Subthalamic')
+    ax_title = ax_title.replace('STNECOG', 'Cortico-Subthalamic')
     if PLOT_MOVE_TYPE in ['IPSI', 'CONTRA']:
         ax_title = ax_title.replace(
             'Movement',
@@ -531,12 +535,22 @@ def plot_moveLidSpec_PSDs(
     AX.axhline(0, xmin=0, xmax=1, color='gray', alpha=.3,)
     AX.set_xticks(xticks)
     AX.set_xticklabels(xlabs, fontsize=FS,)
+    if YLIM[0] == -50 and YLIM[1] == 100:
+        AX.set_yticks([-50, 0, 50, 100])
+        AX.set_yticklabels(['-50%', '0%', '50%', '100%'], fontsize=FS,)
+    else:
+        AX.set_yticks([-25, 0, 25, 50, 75])
+        AX.set_yticklabels(['-25%', '0%', '25%', '50%', '75%'], fontsize=FS,)
+
     AX.set_ylim(YLIM)
 
     # Legend
     if PLOT_MOVE_TYPE == 'unilatLID':
         AX.legend(fontsize=FS - 2, frameon=False, ncol=1,
                   bbox_to_anchor=(.5, .99), loc='upper center')
+    elif LID_BINARY:
+        AX.legend(fontsize=FS - 6, frameon=False, ncol=1,
+                  bbox_to_anchor=(.99, .99), loc='upper right')
     else:
         AX.legend(fontsize=FS - 6, frameon=False, ncol=2,
                   bbox_to_anchor=(.5, .99), loc='upper center')
@@ -664,7 +678,7 @@ def prep_RestVsMove_psds(SRC, PLOT_MOVE, PSD_DICT, BASELINE,
                         bl_sd = np.std(bl, axis=0)
                         bl = bl.mean(axis=0)
                 except:
-                    print(f'### WARNING no baseline {SRC, EPHYS_SIDE} sub {sub}')
+                    print(f'### WARNING no baseline {SRC},  sub {sub}')
                     continue
                 if BASE_METHOD == 'OFF_perc_change':
                     temp_psd = ((temp_psd - bl) / bl) * 100

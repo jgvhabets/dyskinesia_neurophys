@@ -20,7 +20,7 @@ from utils.utils_fileManagement import (
 
 def plot_CDRS_distributions():
 
-    SUBS = get_avail_ssd_subs(DATA_VERSION='v4.0', FT_VERSION='v6',)
+    SUBS = get_avail_ssd_subs(DATA_VERSION='v4.0', FT_VERSION='v8',)
     print(f'SUBS: {SUBS}')
     sub_sort = np.argsort([int(s) for s in SUBS])
     SUBS = np.array(SUBS)[sub_sort]
@@ -92,7 +92,7 @@ def plot_CDRS_distributions():
 
     plt.savefig(os.path.join(get_project_path('figures'),
                              'clinical_scores',
-                             'CDRS_score_distribution'),
+                             '0328_CDRS_score_distribution'),
                 dpi=300, facecolor='w',)
 
     plt.show()

@@ -218,6 +218,8 @@ def axBox_moveBin_LidBin(
             COH_TYPE=ft,
         )
     ### Get 4 lists for boxplots
+    if INCL_SIG_REST30: rest30_coding = []  # to calc sign vs u30
+
     for i_move, move_sel in enumerate(['REST', 'ALLMOVE']):
         (
             psd_arrs, psd_freqs, psd_subs
@@ -232,11 +234,18 @@ def axBox_moveBin_LidBin(
         print(f'\n....{i_move, move_sel}, psd_arrs keys: {psd_arrs.keys()}')
         # split LID
         for lidcat, arr_list in psd_arrs.items():
+            print(f'...({src}, {move_sel}) {lidcat}')
             if 'nolid' in lidcat: i_lid = 0
             else: i_lid = 1
             for arr, s in zip(arr_list, psd_subs[lidcat]):
                 value_subs[i_lid + (i_move * 2)].extend([s] * len(arr))
                 row_values[i_lid + (i_move * 2)].extend([r for r in arr])
+                # add REST-lid minute coding
+                if INCL_SIG_REST30 and i_lid == 0 and move_sel == 'REST':
+                    if lidcat == 'nolidbelow30': code30 = 0
+                    if lidcat == 'nolidover30': code30 = 1
+                    rest30_coding.extend([code30] * len(arr))
+
     # values in 4 lists with order Rest-noLID, Rest-LID; Move-noLID, Move-LID
     row_values = [np.array(l) for l in row_values]
     value_subs = [np.array(l) for l in value_subs]
@@ -278,11 +287,24 @@ def axBox_moveBin_LidBin(
         if INCL_SIGN:
             sign_list = []  # corresponds with first boxplot-body, is baseline
             box_key = f'{src}_{band}'
+
+            if INCL_SIG_REST30:
+                sign_u30_list = []  # extra list to indicate rest-sign vs <30
+                u30_key_nolid = f'{src}_{band}_over30_vs_u30'
+                u30_key_lid = f'{src}_{band}_lid_vs_u30'
+
             if STAT_LOADED:
                 for k in ['rest_LID', 'move_LID']:
                     sign_list.append('nan')  # for no-LID box
                     p = statdf.loc[f'{box_key}_{k}']['pvalue']
                     sign_list.append(p < (ALPHA / len(f_bands)))
+                
+                if INCL_SIG_REST30:
+                    p = statdf.loc[u30_key_nolid]['pvalue']
+                    sign_u30_list.append(p < (ALPHA / len(f_bands)))
+                    p = statdf.loc[u30_key_lid]['pvalue']
+                    sign_u30_list.append(p < (ALPHA / len(f_bands)))
+
             else:
                 # perform LMM noLID vs LID (for rest and move sep)
                 for i_stat, k in enumerate(['rest_LID', 'move_LID']):
@@ -291,6 +313,7 @@ def axBox_moveBin_LidBin(
                     base_subs = value_subs[(2 * i_stat)]
                     test_values = box_values[2 * i_stat + 1]
                     test_subs = value_subs[(2 * i_stat) + 1]
+
                     # prepare equal lists with all stat info
                     stat_values = np.concatenate([base_values, test_values])
                     stat_subids = np.concatenate([base_subs, test_subs])
@@ -308,7 +331,27 @@ def axBox_moveBin_LidBin(
                                                     groups=stat_subids,)
                     sign_list.append(pval < (ALPHA / len(f_bands)))
                     statdf.loc[f'{box_key}_{k}'] = [coef, pval]
-                    print(f'\t...{band} lmm, COEF: {coef}, p: {pval}')
+                    print(f'\t...{band} lmm ({k}), COEF: {coef}, p: {pval}')
+
+                    if INCL_SIG_REST30 and k == 'rest_LID':
+                        base_sel = np.array(rest30_coding) == 0
+                        u30_values, u30_subs = base_values[base_sel], base_subs[base_sel]
+                        for df_key, [values2, subs2] in zip(
+                            [u30_key_nolid, u30_key_lid],
+                            [[base_values[~base_sel], base_subs[~base_sel]],
+                             [test_values, test_subs]]
+                        ):  # loop over keys, and values and ubs for 1) lid-over30min and 2) lid
+                            stat_labels = np.concatenate([[0] * len(u30_values),
+                                                          [1] * len(values2)])
+                            stat_values = np.concatenate([u30_values, values2])
+                            stat_subids = np.concatenate([u30_subs, subs2])
+                            # run linear mixed effect model
+                            coef, pval = run_mixEff_wGroups(dep_var=stat_values,
+                                                            indep_var=stat_labels,
+                                                            groups=stat_subids,)
+                            sign_u30_list.append(pval < (ALPHA / len(f_bands)))
+                            statdf.loc[df_key] = [coef, pval]
+                            print(f'\t...{band} lmm, "{df_key}" COEF: {coef}, p: {pval}')
 
         if SUB_MEANS:
             row_sub_values = []
@@ -341,11 +384,17 @@ def axBox_moveBin_LidBin(
                 if sig == True: a = .8
                 elif sig == False: a = .25
             patch.set_alpha(a)
-
         for median in boxplot['medians']:
             median.set_color('black')
         
-            # dash Movement-side
+        if INCL_SIG_REST30:
+            xstars = boxxticks[:2][sign_u30_list]  # xpositions of REST-boxes, that are significant
+            ystar = YLIM[1] - .05
+            for xtemp in xstars:
+                ax.text(xtemp, ystar, '*', color='k', ha='center', va='center',
+                        weight='bold', size=fsize-4)
+        
+        # dash Movement-side
         ax.fill_betweenx(y=YLIM, x1=bandtick + i_band, x2=.7 + i_band,
                          facecolor='None', edgecolor='gray', alpha=.5,
                          hatch='///',)
@@ -952,7 +1001,7 @@ def plot_moveSpec_boxplots(
             stat_lab = f'Coef.: {round(coef, 3)} (p={round(pval, 3)})'
             if pval < 1e-4: stat_lab = stat_lab.replace('=', '<')
             axes[i_ax].scatter([], [], lw=.1, c='w', label=stat_lab, zorder=3,)
-            axes[i_ax].legend(frameon=False, fontsize=fsize - 2,
+            axes[i_ax].legend(frameon=False, fontsize=fsize - 4, ncol=1,
                               prop=leg_props, **leg_loc)
                             #   loc='lower right', bbox_to_anchor=(.99, .01),
 

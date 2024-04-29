@@ -29,7 +29,7 @@ class FeatLidClass:
     """
     """
     FT_VERSION: str
-    CDRS_RATER: str = 'Jeroen'
+    CDRS_RATER: str = 'Patricia'
     ANALYSIS_SIDE: str = 'BILAT'
     INCL_STN: bool = True
     INCL_ECOG: bool = True
