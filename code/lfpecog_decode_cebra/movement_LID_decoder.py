@@ -176,17 +176,15 @@ if __name__ == "__main__":
                 y_train_pred_l = []
                 y_train_true_l = []
 
-                plt.figure(figsize=(14, 10))
+                #plt.figure(figsize=(14, 10))
                 for sub_idx, sub in enumerate(np.unique(sub_ids)):
-                    X_train, X_test, y_train, y_test = get_cv_folds(sub, label_method=label_method, add_movement_label=True)  # categ
-
-
+                    X_train, X_test, y_train, y_test = get_cv_folds(sub, label_method=label_method, add_movement_label=False)  # categ
 
                     # only for check how well the acc data can be separated
                     X_emb_test, X_emb_train = compute_embedding(X_test, y_test, X_train)
-                    ax = plt.subplot(4, 4, sub_idx+1)
-                    cebra.plot_embedding(X_emb_test, y_test[:,0], markersize=10, cmap="viridis", ax=ax)
-                    plt.title(f"{sub}")
+                    #ax = plt.subplot(4, 4, sub_idx+1)
+                    #cebra.plot_embedding(X_emb_test, y_test[:,0], markersize=10, cmap="viridis", ax=ax)
+                    #plt.title(f"{sub}")
 
                     if USE_CEBRA:
                         X_emb_train, X_emb_test = compute_embedding(X_train, y_train, X_test)

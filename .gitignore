@@ -24,3 +24,5 @@ code/meet/
 
 launch.json
 *.pickle
+
+*.pdf
