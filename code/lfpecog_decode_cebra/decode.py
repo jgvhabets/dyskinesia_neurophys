@@ -7,12 +7,43 @@ from scipy import stats
 from matplotlib import pyplot as plt
 import cebra
 
+dict_thresholds = {
+    "008": -0.35,
+    "009": -0.8,
+    "010": -0.5,
+    "012": -1.2,
+    "013": -0.7,
+    "014": -1.2,
+    "016": -1,
+    "017": -1,
+    "019": -0.7,
+    "020": -0.77,
+    "021": -0.8,
+    "022": -0.7,
+    "023": -0.8,
+    "101": -1.36,
+    "102": -1,
+    "103": -1,
+    "105": -0.8,
+    "107": -1.2,
+    "108": -1.3,
+    "109": -1.2,
+    "110": -1,
+}
+
+
+def compute_balance(cnts):
+    # 0 if the classes are perfectly balanced
+    # get's higher if unbalanced
+    classes, counts = np.unique(cnts, return_counts=True)
+    return np.var([c / cnts.shape[0] for c in counts])
+
 
 def get_cv_folds(
     sub,
     label_method: str = "binary",
     ADD_MOVEMENT_LABELS: str = "EphysMov",
-    threshold_mov: float = -0.5,
+    threshold_mov: float = -0.5,  # -0.5
 ):
     idx_train = np.where(sub_ids != sub)[0]
     idx_test = np.where(sub_ids == sub)[0]
@@ -31,18 +62,14 @@ def get_cv_folds(
         y_test = y_all_categ[idx_test]
 
     if ADD_MOVEMENT_LABELS == "EphysMov":
-        y_train = np.concatenate(
-            [y_train[:, None], acc_[idx_train][:, None] > threshold_mov], axis=1
-        )
-        y_test = np.concatenate(
-            [y_test[:, None], acc_[idx_test][:, None] > threshold_mov], axis=1
-        )
+        y_train = np.concatenate([y_train[:, None], acc_[idx_train][:, None]], axis=1)
+        y_test = np.concatenate([y_test[:, None], acc_[idx_test][:, None]], axis=1)
         y_train = np.array([2 * pair[0] + pair[1] for pair in y_train])
         y_test = np.array([2 * pair[0] + pair[1] for pair in y_test])
 
     elif ADD_MOVEMENT_LABELS == "Mov":
-        y_train = acc_[idx_train] > threshold_mov
-        y_test = acc_[idx_test] > threshold_mov
+        y_train = acc_[idx_train]
+        y_test = acc_[idx_test]
 
     return X_train, X_test, y_train, y_test
 
@@ -57,7 +84,7 @@ def compute_embedding(X_train, y_train, X_test):
         max_iterations=1000,
         temperature_mode="constant",
         time_offsets=10,
-        output_dimension=3,  # 4
+        output_dimension=4,  # 4
         # conditional="time_delta",
         verbose=True,
         device="cuda",
@@ -107,9 +134,9 @@ if __name__ == "__main__":
     d_out = {}
 
     for loc in [
+        "STN",
         "ECOGSTN",
         "ECOG",
-        "STN",
     ]:
         if loc == "ECOG":
             with open(
@@ -157,6 +184,13 @@ if __name__ == "__main__":
         sub_ids = X_cross_val_data["sub_ids"]
         ft_times_all = X_cross_val_data["ft_times_all"]
         ft_names = X_cross_val_data["ft_names"]
+
+        acc_thr = []
+        for sub in X_cross_val_data["sub_ids"]:
+            idx_ = np.where(X_cross_val_data["sub_ids"] == sub)[0]
+            acc_thr.append(acc_[idx_] > dict_thresholds[sub])
+
+        acc_ = np.concatenate(acc_thr)
 
         if REDUCE_FEATURES:
             new_features_names = []
@@ -212,12 +246,23 @@ if __name__ == "__main__":
         #        mov_labels = ["binary"]  # ["categ", "binary", "scale"]
 
         # ADD_MOVEMENT_LABELS = "Ephys"
-        for ADD_MOVEMENT_LABELS in ["EphysMov", "Mov", "Ephys"]:
+        for ADD_MOVEMENT_LABELS in [
+            "EphysMov",
+            "Ephys",
+            "Mov",
+        ]:  # ["Ephys"]:  # ["EphysMov", "Ephys", "Mov"]:
             # for ADD_MOVEMENT_LABELS in ["categ", "binary", "scale"]:
-            for label_method in ["binary"]:  # ["categ", "binary", "scale"]:  #
+            ADD_MOVEMENT_LABELS = "binary"
+            for label_method in [
+                "categ",
+                "binary",
+                "scale",
+            ]:  # ["categ", "binary", "scale"]:  # ["binary"]
                 print(f"Label method: {label_method}")
 
-                for USE_CEBRA in [False, True]:
+                for USE_CEBRA in [
+                    True,
+                ]:  # False
                     print(f"USE_CEBRA: {USE_CEBRA}")
 
                     prediction = []
@@ -321,65 +366,26 @@ if __name__ == "__main__":
                         d_out[key_]["performances_mov"] = performances_mov
     # save d_out to pickle
     with open(
-        "d_out_offset_10_dim_4_including_proba_plus_ECoG_only_v8_2904v2_incmov.pickle",
+        "d_out_offset_10_dim_4_including_proba_plus_ECoG_only_v8_0305_v2_withMovmement.pickle",
         "wb",
     ) as f:
         pickle.dump(d_out, f)
 
-    PLT_EXAMPLAR_LOSSES = False
-    if PLT_EXAMPLAR_LOSSES:
-        with open(
-            os.path.join("lfpecog_decode_cebra", "X_cross_val_data_STN.pickle"), "rb"
-        ) as f:
-            X_cross_val_data = pickle.load(f)
+# import pandas as pd
+# import seaborn as sb
 
-        X_all = X_cross_val_data["X_all"]
-        y_all_binary = X_cross_val_data["y_all_binary"]
-        y_all_scale = X_cross_val_data["y_all_scale"]
-        y_all_categ = X_cross_val_data["y_all_categ"].astype(int)
+# balances = [compute_balance(f) for f in d_out[list(d_out.keys())[0]]["y_test_true"]]
 
-        loss_ = []
-        temperature_ = []
-        for label_method in ["binary"]:  # ["categ", "binary", "scale"]:
-            if label_method == "binary":
-                y_all = y_all_binary
-            elif label_method == "scale":
-                y_all = y_all_scale
-            else:
-                y_all = y_all_categ
+# balances =
+# df_corr = pd.DataFrame()
+# df_corr["class_balances"] = 1 - np.array(balances)
+# diffs_ = np.array(d_out[list(d_out.keys())[0]]["performances_dys"]) - np.array(performances)
 
-            # 1. Define a CEBRA model
-            cebra_model = cebra.CEBRA(
-                model_architecture="offset10-model",
-                # model_architecture = "offset1-model",
-                batch_size=500,
-                learning_rate=0.001,
-                max_iterations=3000,
-                temperature_mode="auto",
-                time_offsets=5,
-                output_dimension=3,
-                # conditional="time_delta",
-                verbose=True,
-                device="cuda",
-            )
+# df_corr["BA Performance difference\n movement - no movement included"] = diffs_
+# plt.figure(figsize=(6, 5), )
+# sb.regplot(x="class_balances", y="BA Performance difference\n movement - no movement included", data=df_corr)
 
-            cebra_model.fit(X_all, y_all)
-            loss_.append(cebra_model.state_dict_["loss"])
-            temperature_.append(cebra_model.state_dict_["log"]["temperature"])
-        plt.figure(figsize=(4, 3), dpi=300)
-        plt.plot(loss_[0], label="categ")
-        plt.plot(loss_[1], label="binary")
-        plt.plot(loss_[2], label="scale")
-        plt.legend()
-        plt.ylabel("InfoNCE Loss")
-        plt.xlabel("Iterations")
-        plt.tight_layout()
-
-        plt.figure(figsize=(4, 3), dpi=300)
-        plt.plot(temperature_[0], label="categ")
-        plt.plot(temperature_[1], label="binary")
-        plt.plot(temperature_[2], label="scale")
-        plt.legend()
-        plt.ylabel("Temperature")
-        plt.xlabel("Iterations")
-        plt.tight_layout()
+# corr_ = np.round(np.corrcoef(df_corr["class_balances"],df_corr["BA Performance difference\n movement - no movement included"]), 2)[0, 1]
+# plt.title(
+#     f"Correlation of Peformance difference \nwith movement and class balances: {corr_}")
+# plt.tight_layout()
