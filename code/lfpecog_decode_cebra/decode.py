@@ -254,9 +254,7 @@ if __name__ == "__main__":
             # for ADD_MOVEMENT_LABELS in ["categ", "binary", "scale"]:
             ADD_MOVEMENT_LABELS = "binary"
             for label_method in [
-                "categ",
                 "binary",
-                "scale",
             ]:  # ["categ", "binary", "scale"]:  # ["binary"]
                 print(f"Label method: {label_method}")
 
