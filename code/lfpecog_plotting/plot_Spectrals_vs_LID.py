@@ -304,7 +304,7 @@ def plot_ratio_biomarker(
     if SAVE_FIG:
             plt.savefig(os.path.join(get_project_path('figures'),
                                         'final_Q1_2024',
-                                        'prediction',
+                                        'prediction', 'ratio',
                                         f'theta_beta_ratio_v1_10sec_min{MIN_SUBS}subs_smooth{SMOOTH_WIN}'),
                         dpi=300, facecolor='w',)
             plt.close()

@@ -113,7 +113,7 @@ def scatter_predErrors(
     if SAVE_PLOT:
         path = join(get_project_path('figures'),
                     'final_Q1_2024',
-                    'prediction', 'group', 'scale')
+                    'prediction', 'group_v8', 'scale')
 
         print(f'...saved {fig_name} in {path}')
         plt.savefig(join(path, fig_name), facecolor='w', dpi=300,)
@@ -206,7 +206,7 @@ def plot_binary_act_distr(
     if SAVE_PLOT:
         path = join(get_project_path('figures'),
                     'final_Q1_2024',
-                    'prediction', 'group', 'binary')
+                    'prediction', 'group_v8', 'binary')
 
         print(f'...saved {fig_name} in {path}')
         plt.savefig(join(path, fig_name), facecolor='w', dpi=300,)
@@ -364,7 +364,7 @@ def plot_predValues_per_ActBin(
     if SAVE_PLOT:
         path = join(get_project_path('figures'),
                     'final_Q1_2024',
-                    'prediction', 'group', 'binary')
+                    'prediction', 'group_v8', 'binary')
         if SensSpec: path = join(path, 'SensSpec')
         elif PredAcc: path = join(path, 'PredAcc')
 

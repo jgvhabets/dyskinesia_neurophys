@@ -410,8 +410,8 @@ def axBox_moveBin_LidBin(
     # Annotate Rows
     if ft.lower() == 'power' and src == 'lfp': ylab = "STN power\n(z-scores)"
     elif ft.lower() == 'power' and src == 'ecog': ylab = "Cortex power\n(z-scores)"
-    elif 'coh' in ft.lower() and src == 'STNs': ylab = "Inter-STN Coh.\n(z-scores)"
-    elif 'coh' in ft.lower() and src == 'STNECOG': ylab = "Cortico-STN Coh.\n(z-scores)"
+    elif 'coh' in ft.lower() and src == 'STNs': ylab = "Coh.\n(z-scores)"  # left out 'Inter-STN ', overlapping text
+    elif 'coh' in ft.lower() and src == 'STNECOG': ylab = "Coh.\n(z-scores)"  # left out 'Cortex-STN ', overlapping text
     if ft.lower() == 'sqcoh': ylab = ylab.replace('Coh.', 'sq. COH')
     elif ft.lower() == 'icoh': ylab = ylab.replace('Coh.', 'imag. COH')
     ax.set_ylabel(ylab, fontsize=fsize-2, weight='bold')

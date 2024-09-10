@@ -436,6 +436,9 @@ def plot_moveLidSpec_PSDs(
             lab = lab.replace('_', ' ')
             lab = lab.replace('ipsi all', 'Ipsilateral to')
             lab = lab.replace('contra all', 'Contralateral to')
+
+            lab = lab.replace('ipsi LID', 'ipsilateral')
+            lab = lab.replace('contra LID', 'contralateral')
             
             if LID_BINARY: lw=3
             elif PLOT_MOVE_TYPE == 'overall': lw = 2
@@ -501,23 +504,36 @@ def plot_moveLidSpec_PSDs(
                               STATS_VERSION=STATS_VERSION,)
 
     # add title (once per AX)
-    src_title = SOURCE.replace('lfp', 'STN')
-    src_title = src_title.replace('ecog', 'Cortex')
+    src_title = SOURCE.replace('lfp', 'Subthalamic')
+    src_title = src_title.replace('ecog', 'Cortical')
     if PLOT_MOVE_TYPE == 'REST':
         ax_title = (f'{src_title}: Rest')
     elif PLOT_MOVE_TYPE == 'ALLMOVE':
         ax_title = (f'{src_title}: Movement')
     elif PLOT_MOVE_TYPE == 'unilatLID':
         if src_title == 'STN':
-            ax_title = (f'Unilat. Dyskinesia:\nSubthalamic lateralization')
+            ax_title = (f'Lateralization in STN')
         else:
-            ax_title = (f'Unilat. Dyskinesia:\nCortical lateralization')
+            ax_title = (f'Lateralization in Cortex')
     elif PLOT_MOVE_TYPE == 'overall':
-        ax_title = f'{src_title} changes'
+        ax_title = f'{src_title} patterns'
     else:
         ax_title = f'{src_title}: Movement'
-    ax_title = ax_title.replace('STNs', 'Inter-Subthalamic')
-    ax_title = ax_title.replace('STNECOG', 'Cortico-Subthalamic')
+    # PSD overall titles
+    ax_title = ax_title.replace('STNs', 'Inter-STN')
+    ax_title = ax_title.replace('STNECOG', 'Cortex-STN')
+    # PSD Movement absence/presence titles
+    ax_title = ax_title.replace('Subthalamic: Rest', 'STN: Movement absence')
+    ax_title = ax_title.replace('Subthalamic: Movement', 'STN: Movement presence')
+    ax_title = ax_title.replace('Cortical: Rest', 'Cortex: Movement absence')
+    ax_title = ax_title.replace('Cortical: Movement', 'Cortex: Movement presence')
+    # COH Movement absence/presence titles
+    ax_title = ax_title.replace('Inter-STN: Rest', 'Inter-STN: Move. absence')
+    ax_title = ax_title.replace('Cortex-STN: Rest', 'Cortex-STN: Move. absence')
+    ax_title = ax_title.replace('Inter-STN: Movement', 'Inter-STN: Move. presence')
+    ax_title = ax_title.replace('Cortex-STN: Movement', 'Cortex-STN: Move. presence')
+    
+
     if PLOT_MOVE_TYPE in ['IPSI', 'CONTRA']:
         ax_title = ax_title.replace(
             'Movement',
