@@ -43,6 +43,7 @@ def get_cv_folds(
     sub,
     label_method: str = "binary",
     ADD_MOVEMENT_LABELS: str = "EphysMov",
+    LIMIT_FEATURES_TO_MOV_ONLY: bool = True,
     threshold_mov: float = -0.5,  # -0.5
 ):
     idx_train = np.where(sub_ids != sub)[0]
@@ -70,6 +71,15 @@ def get_cv_folds(
     elif ADD_MOVEMENT_LABELS == "Mov":
         y_train = acc_[idx_train]
         y_test = acc_[idx_test]
+
+    if LIMIT_FEATURES_TO_MOV_ONLY is True:
+        idx_mov_train = np.where(acc_[idx_train] == 1)[0]
+        idx_mov_test = np.where(acc_[idx_test] == 1)[0]
+
+        X_train = X_train[idx_mov_train]
+        y_train = y_train[idx_mov_train]
+        X_test = X_test[idx_mov_test]
+        y_test = y_test[idx_mov_test]
 
     return X_train, X_test, y_train, y_test
 
@@ -127,6 +137,7 @@ def plot_value_each_sub(val_plot, include_time: bool = True):
 USE_CEBRA = True
 REDUCE_FEATURES = True
 ADD_ACC_FEATURES = False
+LIMIT_FEATURES_TO_MOV_ONLY = False
 
 LIMIT_STN_ONLY_FROM_SAME_SUBJECTS = False
 
@@ -247,9 +258,9 @@ if __name__ == "__main__":
 
         # ADD_MOVEMENT_LABELS = "Ephys"
         for ADD_MOVEMENT_LABELS in [
-            "EphysMov",
             "Ephys",
-            "Mov",
+            # "EphysMov",
+            # "Mov",
         ]:  # ["Ephys"]:  # ["EphysMov", "Ephys", "Mov"]:
             # for ADD_MOVEMENT_LABELS in ["categ", "binary", "scale"]:
             ADD_MOVEMENT_LABELS = "binary"
@@ -284,6 +295,7 @@ if __name__ == "__main__":
                             sub,
                             label_method=label_method,
                             ADD_MOVEMENT_LABELS=ADD_MOVEMENT_LABELS,
+                            LIMIT_FEATURES_TO_MOV_ONLY=LIMIT_FEATURES_TO_MOV_ONLY,
                         )  # categ
 
                         if USE_CEBRA:
@@ -364,7 +376,7 @@ if __name__ == "__main__":
                         d_out[key_]["performances_mov"] = performances_mov
     # save d_out to pickle
     with open(
-        "d_out_offset_10_dim_4_including_proba_plus_ECoG_only_v8_0305_v2_withMovmement.pickle",
+        "d_out_offset_10_dim_4_including_proba_plus_ECoG_only_1209_movement_and_rest.pickle",
         "wb",
     ) as f:
         pickle.dump(d_out, f)

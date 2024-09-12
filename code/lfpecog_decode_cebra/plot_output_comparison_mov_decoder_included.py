@@ -17,13 +17,11 @@ def compute_balance(cnts):
     return np.var([c / cnts.shape[0] for c in counts])
 
 
-if __name__ == "__main__":
+def read_performances(PATH_READ):
     GET_PREDICTION_DYS = True
 
     with open(
-        os.path.join(
-            "d_out_offset_10_dim_4_including_proba_plus_ECoG_only_v8_2904v2_incmov.pickle"
-        ),
+        os.path.join(PATH_READ),
         "rb",
     ) as f:
         d_out = pickle.load(f)
@@ -63,6 +61,8 @@ if __name__ == "__main__":
                 continue
         elif key.endswith("AddMovementLabels_EphysMov"):
             mov_prediction = "EphysMov"
+        elif key.endswith("AddMovementLabels_binary"):
+            mov_prediction = "None"
 
         if "CEBRA_True" not in key:
             LM_Flag = True
@@ -74,13 +74,13 @@ if __name__ == "__main__":
 
         model_name_ = "CEBRA" if LM_Flag is False else "LM"
 
-        if mov_prediction == "Mov" or mov_prediction == "Ephys":
-            per_metric = d_out[key]["performances"]
-        if mov_prediction == "EphysMov":
-            if GET_PREDICTION_DYS:
-                per_metric = d_out[key]["performances_dys"]
-            else:
-                per_metric = d_out[key]["performances_mov"]
+        # if mov_prediction == "Mov" or mov_prediction == "Ephys":
+        per_metric = d_out[key]["performances"]
+        # if mov_prediction == "EphysMov":
+        #    if GET_PREDICTION_DYS:
+        #        per_metric = d_out[key]["performances_dys"]
+        #    else:
+        #        per_metric = d_out[key]["performances_mov"]
 
         for sub_idx, sub in enumerate(sub_ids):
             # check here also the label ratio per subject
@@ -109,42 +109,46 @@ if __name__ == "__main__":
                 ],
                 ignore_index=True,
             )
+    return df
 
-    plt.figure(
-        figsize=(10, 6),
+
+if __name__ == "__main__":
+    df_mov_only = read_performances(
+        "d_out_offset_10_dim_4_including_proba_plus_ECoG_only_1209_movement_only.pickle"
     )
-    # df_plt = df.query("CEBRA == False")
-    if GET_PREDICTION_DYS:
-        plt.suptitle("Dyskinesia prediction")
-    else:
-        plt.suptitle("Movement prediction")
+    df_mov_only["mov_samples_only"] = True
+    df_all = read_performances(
+        "d_out_offset_10_dim_4_including_proba_plus_ECoG_only_1209_movement_and_rest.pickle"
+    )
+    df_all["mov_samples_only"] = False
+
+    df = pd.concat([df_mov_only, df_all], ignore_index=True)
+
+    plt.figure(figsize=(4, 7), dpi=300)
+
     df_plt = df
-    for idx, model_name in enumerate(["LM", "CEBRA"]):
-        plt.subplot(1, 2, idx + 1)
-        sns.boxplot(
-            df_plt.query("model_name == @model_name"),
-            palette="viridis",
-            x="location",
-            y="performance",
-            showmeans=True,
-            hue="mov_prediction",
-            legend=True,  # if idx == 2 else False
-            meanprops={
-                "markerfacecolor": "black",
-                "markeredgecolor": "black",
-            },  # Change mean marker properties
-        )
-        # plt.ylabel("Balanced Accuracy performance")
-        plt.title(f"{model_name}")
-        plt.ylabel("Balanced Accuracy performance")
 
-        if idx == 2:
-            plt.title("Regression")
-        plt.xlabel("Location")
+    sns.boxplot(
+        df_plt,
+        palette="viridis",
+        x="location",
+        y="performance",
+        showmeans=True,
+        hue="mov_samples_only",
+        legend=True,  # if idx == 2 else False
+        meanprops={
+            "markerfacecolor": "black",
+            "markeredgecolor": "black",
+        },  # Change mean marker properties
+    )
+    # plt.ylabel("Balanced Accuracy performance")
+    plt.title("Dyskinesia prediction")
+    plt.ylabel("Balanced Accuracy performance")
+    plt.xlabel("Location")
 
-        plt.ylim(0.4, 0.95)
+    plt.ylim(0.4, 0.95)
     plt.tight_layout()
-    plt.savefig("Difference four-class vs two-class classification.pdf")
+    plt.savefig("Prediciton movement samples included yes_no.pdf")
 
     data_plt = df[df["model_name"] == "CEBRA"].query("location == 'STN'")
     sns.regplot(x="balance", y="performance", data=df_plt, order=2)
