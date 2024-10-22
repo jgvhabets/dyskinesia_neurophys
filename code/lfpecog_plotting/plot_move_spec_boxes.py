@@ -183,7 +183,7 @@ def axBox_moveBin_LidBin(
         statdf_name = f'spectralBoxStats_{ft.lower()}_{src.lower()}_ft{FT_VERSION}.xlsx'
         if INCL_SIG_REST30: statdf_name = statdf_name.replace('.xlsx', '_restU30.xlsx')
         stat_path = os.path.join(get_project_path('results'),
-                                 'stats', 'plot_stats')
+                                 'stats', 'plot_stats_over30')  ### TEST REMOVE _over30
         if statdf_name in os.listdir(stat_path):
             statdf = read_excel(os.path.join(stat_path, statdf_name),
                                 header=0, index_col=0,)
@@ -292,6 +292,7 @@ def axBox_moveBin_LidBin(
                 sign_u30_list = []  # extra list to indicate rest-sign vs <30
                 u30_key_nolid = f'{src}_{band}_over30_vs_u30'
                 u30_key_lid = f'{src}_{band}_lid_vs_u30'
+                o30_key_lid = f'{src}_{band}_lid_vs_over30'
 
             if STAT_LOADED:
                 for k in ['rest_LID', 'move_LID']:
@@ -304,6 +305,9 @@ def axBox_moveBin_LidBin(
                     sign_u30_list.append(p < (ALPHA / len(f_bands)))
                     p = statdf.loc[u30_key_lid]['pvalue']
                     sign_u30_list.append(p < (ALPHA / len(f_bands)))
+                    ### over30 test
+                    # p = statdf.loc[o30_key_lid]['pvalue']
+                    # sign_u30_list.append(p < (ALPHA / len(f_bands)))  # TODO: correct in followup function for new order of pvalues in list
 
             else:
                 # perform LMM noLID vs LID (for rest and move sep)
@@ -334,24 +338,52 @@ def axBox_moveBin_LidBin(
                     print(f'\t...{band} lmm ({k}), COEF: {coef}, p: {pval}')
 
                     if INCL_SIG_REST30 and k == 'rest_LID':
+                        ### FUNCTIONING PART 22.10.24, before adding o30
+                        # base_sel = np.array(rest30_coding) == 0
+                        # u30_values, u30_subs = base_values[base_sel], base_subs[base_sel]
+                        # for df_key, [values2, subs2] in zip(
+                        #     [u30_key_nolid, u30_key_lid],
+                        #     [[base_values[~base_sel], base_subs[~base_sel]],
+                        #      [test_values, test_subs]]
+                        # ):  # loop over keys, and values and ubs for 1) lid-over30min and 2) lid
+                        #     stat_labels = np.concatenate([[0] * len(u30_values),
+                        #                                   [1] * len(values2)])
+                        #     stat_values = np.concatenate([u30_values, values2])
+                        #     stat_subids = np.concatenate([u30_subs, subs2])
+                        #     # run linear mixed effect model
+                        #     coef, pval = run_mixEff_wGroups(dep_var=stat_values,
+                        #                                     indep_var=stat_labels,
+                        #                                     groups=stat_subids,)
+                        #     sign_u30_list.append(pval < (ALPHA / len(f_bands)))
+                        #     statdf.loc[df_key] = [coef, pval]
+                        #     print(f'\t...{band} lmm, "{df_key}" COEF: {coef}, p: {pval}')
+                        ### END ORIGINAL
+
+                        ### TEST OCT 2024 for o30
                         base_sel = np.array(rest30_coding) == 0
                         u30_values, u30_subs = base_values[base_sel], base_subs[base_sel]
-                        for df_key, [values2, subs2] in zip(
-                            [u30_key_nolid, u30_key_lid],
-                            [[base_values[~base_sel], base_subs[~base_sel]],
-                             [test_values, test_subs]]
+                        o30_values, o30_subs = base_values[~base_sel], base_subs[~base_sel]
+                        # lid values are already labeled as test_values/subs
+
+                        for df_key, [values1, subs1], [values2, subs2] in zip(
+                            [u30_key_nolid, u30_key_lid, o30_key_lid],
+                            [[u30_values, u30_subs], [u30_values, u30_subs], [o30_values, o30_subs]],
+                            [[o30_values, o30_subs], [test_values, test_subs], [test_values, test_subs]]
                         ):  # loop over keys, and values and ubs for 1) lid-over30min and 2) lid
-                            stat_labels = np.concatenate([[0] * len(u30_values),
+                            stat_labels = np.concatenate([[0] * len(values1),
                                                           [1] * len(values2)])
-                            stat_values = np.concatenate([u30_values, values2])
-                            stat_subids = np.concatenate([u30_subs, subs2])
+                            stat_values = np.concatenate([values1, values2])
+                            stat_subids = np.concatenate([subs1, subs2])
                             # run linear mixed effect model
                             coef, pval = run_mixEff_wGroups(dep_var=stat_values,
                                                             indep_var=stat_labels,
                                                             groups=stat_subids,)
-                            sign_u30_list.append(pval < (ALPHA / len(f_bands)))
+                            if df_key != o30_key_lid:  # prevent sign plot error
+                                sign_u30_list.append(pval < (ALPHA / len(f_bands)))
                             statdf.loc[df_key] = [coef, pval]
                             print(f'\t...{band} lmm, "{df_key}" COEF: {coef}, p: {pval}')
+                        
+                        ### END TEST
 
         if SUB_MEANS:
             row_sub_values = []
