@@ -408,6 +408,15 @@ def plot_indiv_timefreq_FIG1(
     task_clrs = matplotlib.cm.get_cmap('Set2')
     
     sources = plot_tf_dict.keys()
+
+    # pre-submission changes
+    task_row_i = 2  # was 0
+    acc_row_i = 0  # was 1
+    lid_row_i = 1  # was 2
+
+    task_label_y = .785  # was .86 
+    acc_label_y = .855  # was .82
+    lid_label_y = .82  # was .78
   
     ### CREATE FIGURE
     std_rows = [.35, .35, .35, .05]
@@ -417,6 +426,9 @@ def plot_indiv_timefreq_FIG1(
     gridspec = dict(hspace=0.0, height_ratios=h_ratios, width_ratios=w_ratios,)
     fsize=16
 
+    from matplotlib import rcParams
+    rcParams['font.family'] = 'sans-serif'
+
     fig, axes = plt.subplots(nrows=len(h_ratios),
                             ncols=len(w_ratios),
                             gridspec_kw=gridspec,
@@ -424,46 +436,48 @@ def plot_indiv_timefreq_FIG1(
                             constrained_layout=True,
                             )
     tf_col=1
+    
     # share all axes
     for ax in axes[1:, tf_col]: ax.sharex(axes[0, tf_col])
 
-    if FOR_FIG:
-        alltimes = [plot_tf_dict[s]['times'] for s in sources]
-        uniq_bool = np.in1d(alltimes[0], alltimes[1])
-        uniq_times = np.array(alltimes[0])[uniq_bool]
-        uniq_bool = np.in1d(uniq_times, alltimes[2])
-        uniq_times = uniq_times[uniq_bool]
-    else:
-        uniq_times = False
+    # if FOR_FIG:  # redundant?
+    #     alltimes = [plot_tf_dict[s]['times'] for s in sources]
+    #     uniq_bool = np.in1d(alltimes[0], alltimes[1])
+    #     uniq_times = np.array(alltimes[0])[uniq_bool]
+    #     uniq_bool = np.in1d(uniq_times, alltimes[2])
+    #     uniq_times = uniq_times[uniq_bool]
+    # else:
+    uniq_times = False
     
     ### PLOT TASK ROW
-    heat_task = axes[0, 1].pcolor(
+    heat_task = axes[task_row_i, 1].pcolor(
         t_cont, np.arange(2), np.atleast_2d([np.zeros(len(t_cont)),
                                              task_win.ravel()]),
         vmin=0, vmax=3, cmap='Set2',
     )
-    axes[0, 1].set_ylim(.5, 1)
-    for i_col, task_name in zip([0, 2, 5],
-                                ['rest', 'tap', 'pause']):
-        axes[0, 1].scatter([], [], color=task_clrs(i_col),
-                           s=100, marker='s',
-                           label=task_name,)
-    axes[0, 1].legend(ncol=3, bbox_to_anchor=(.5, .95),
-                      loc='lower center', fontsize=fsize,
-                      frameon=False,)
+    axes[task_row_i, 1].set_ylim(.5, 1)
+    # plot colors LEGEND for TASK
+    # for i_col, task_name in zip([0, 2, 5],
+    #                             ['rest', 'tap', 'pause']):
+    #     axes[task_row_i, 1].scatter([], [], color=task_clrs(i_col),
+    #                        s=100, marker='s',
+    #                        label=task_name,)
+    # axes[task_row_i, 1].legend(ncol=3, bbox_to_anchor=(.5, .95),
+    #                   loc='lower center', fontsize=fsize,
+    #                   frameon=False,)
 
 
     ### PLOT ACC ROW
-    axes[1, 1].plot(t_cont, acc_win, color='rosybrown', alpha=.9, )
-    axes[1, 1].set_ylim(-.5, 3)
+    axes[acc_row_i, 1].plot(t_cont, acc_win, color='rosybrown', alpha=.9, )
+    axes[acc_row_i, 1].set_ylim(-.5, 3)
 
 
     ### PLOT DYSKINESIA ROW HEATMAP
-    heat_lid = axes[2, 1].pcolor(t_cont, np.arange(2),
+    heat_lid = axes[lid_row_i, 1].pcolor(t_cont, np.arange(2),
                                  np.atleast_2d([np.zeros(len(t_cont)),
                                                 cdrs_win.astype(float)]),
                                  vmin=0, vmax=MAX_CDRS, cmap='Reds',)
-    axes[2, 1].set_ylim(0.5, 1)
+    axes[lid_row_i, 1].set_ylim(0.5, 1)
     
 
     ### Plot heatmaps for TimeFreqs
@@ -485,7 +499,7 @@ def plot_indiv_timefreq_FIG1(
             )
         if LOG_POWER: tf_values = np.log10(tf_values)
             
-        # PLOT TIMEFREQ AND DYSKIENSIA SCORES
+        # PLOT TIMEFREQ AND DYSKINESIA SCORES
         ax_low = axes[len(std_rows) + 2 + (i_s*4), tf_col]
         ax_high=axes[len(std_rows) + (i_s*4), tf_col]
         tf_cbar = plot_splitted_timefreq_ax(
@@ -537,19 +551,28 @@ def plot_indiv_timefreq_FIG1(
         cbar_ax.set_yticks([],)
 
     # Plot LID
-    fig.text(x=.12, y=.78, s='LID',
+    fig.text(x=.12, y=lid_label_y, s='LID',
              va='center', ha='right', size=fsize-4,
              rotation=0, weight='bold',)
     # Plot MOVE
-    fig.text(x=.12, y=.82, s='MOVE',
+    fig.text(x=.12, y=acc_label_y, s='ACC',
              va='center', ha='right', size=fsize-4,
-             rotation=0,  weight='bold',
-             )
+             rotation=0,  weight='bold',)
     # Plot TASK
-    fig.text(x=.12, y=.86, s='TASK',
+    fig.text(x=.12, y=task_label_y, s='TASK',
              va='center', ha='right', size=fsize-4,
-             rotation=0,  weight='bold',
-             )
+             rotation=0,  weight='bold',)
+    # Plot task names
+    label_x_dict = {'rest': [.165, .54, .685],
+                    'tap': [.42, .62, .84],
+                    'pause': [.465, .77]}
+    for label_name, label_list in label_x_dict.items():
+        for label_x in label_list:
+            fig.text(x=label_x, y=task_label_y + .01, s=label_name,
+                    va='center', ha='right', size=fsize-6,
+                    rotation=0,)  # weight='bold'
+    
+
     # Plot y-label Frequency left
     fig.text(x=.03, y=.5, s='Frequency (Hz)',
              va='center', ha='right', size=fsize+4,
@@ -595,7 +618,7 @@ def plot_indiv_timefreq_FIG1(
             
         else:
             plt.savefig(join(path, fig_name),
-                    facecolor='w', dpi=300,)
+                    facecolor='w', dpi=450,)
         
 
         print(f'sub-{sub}, figure saved: {fig_name}')
@@ -721,7 +744,7 @@ def correct_xticks_50min(xticks, xtlabels):
     if 50 in list(xtlabels):
         i_50 = np.where(xtlabels == 50)[0][0]
         xtlabels = list(xtlabels)
-        xtlabels[i_50 - 1] = '40 **'
+        xtlabels[i_50 - 1] = '40 *'
         xtlabels.pop(i_50)
         xticks = np.delete(xticks, i_50)
 

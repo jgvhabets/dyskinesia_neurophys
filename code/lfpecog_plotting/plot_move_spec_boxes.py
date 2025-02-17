@@ -132,7 +132,9 @@ def plotPsdrestmove_boxStats(
     FIG_PATH = os.path.join(get_project_path('figures'),
                             'final_Q1_2024',
                             'FIG_PSD_boxes')
-            
+    
+    FIG_NAME += '.pdf'
+
     plt.savefig(os.path.join(FIG_PATH, FIG_NAME),
                 dpi=300, facecolor='w',)
 
