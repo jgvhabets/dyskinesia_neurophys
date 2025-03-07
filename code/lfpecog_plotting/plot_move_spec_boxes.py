@@ -61,6 +61,7 @@ def plotPsdrestmove_boxStats(
     SMOOTH_WIN: int = 3,
     INCL_BOX_SIGN: bool = True,
     INCL_SIG_REST30: bool = False,
+    ONLY4FREQS: bool = False,
     FIG_NAME: str = f'0000_Spectra_Boxes',
 ):
     fig, axes = plt.subplots(
@@ -101,6 +102,7 @@ def plotPsdrestmove_boxStats(
         value_dict=ft_dict, BL_dict=bl_dict,
         INCL_SIGN=INCL_BOX_SIGN, FT_VERSION=FT_VERSION,
         INCL_SIG_REST30=INCL_SIG_REST30,
+        ONLY4FREQS=ONLY4FREQS,
     )
 
     axBox_moveBin_LidBin(
@@ -109,6 +111,7 @@ def plotPsdrestmove_boxStats(
         INCL_SIGN=INCL_BOX_SIGN,
         FT_VERSION=FT_VERSION,
         INCL_SIG_REST30=INCL_SIG_REST30,
+        ONLY4FREQS=ONLY4FREQS,
     )
 
     # Add Legend for Boxes
@@ -149,6 +152,7 @@ def axBox_moveBin_LidBin(
     SUB_MEANS = True,
     INCL_SIGN: bool = False,
     INCL_SIG_REST30: bool = False,
+    ONLY4FREQS: bool = False,
     ALPHA = .01,
 ):
     """
@@ -260,6 +264,9 @@ def axBox_moveBin_LidBin(
 
 
     ### Loop over freq-bands and plot
+
+    if ONLY4FREQS: del(f_bands['alpha'], f_bands['hi_beta'])
+
     for i_band, (band, f_range) in enumerate(f_bands.items()):
         if band == 'delta': band = 'theta'
         ticklabels.append(band_labels[band])
