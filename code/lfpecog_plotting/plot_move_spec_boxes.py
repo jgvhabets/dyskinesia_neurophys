@@ -64,6 +64,12 @@ def plotPsdrestmove_boxStats(
     ONLY4FREQS: bool = False,
     FIG_NAME: str = f'0000_Spectra_Boxes',
 ):
+    """
+    function to plot psds
+
+    Input:
+    - to do
+    """
     fig, axes = plt.subplots(
         2, 3, figsize=(16, 6),
         gridspec_kw={'width_ratios': [2, 2, 4]},
