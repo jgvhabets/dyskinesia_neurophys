@@ -243,6 +243,8 @@ def plot_ratio_biomarker(
     MIN_SUBS = 6, fsize = 14,
     SMOOTH_WIN : int = 0,
     SAVE_FIG: bool = False,
+    FIGNAME_EDIT: str = '__',
+    SAVE_pdf: bool = False,
 ):
     # subjects contributing to mean, per window
     n_hemisf_present = np.sum(~np.isnan(ratio_arr), axis=0)
@@ -264,7 +266,8 @@ def plot_ratio_biomarker(
         ratio_mean = np.nanmean(z_ratios, axis=0)
 
 
-    fig, ax = plt.subplots(1,1, figsize=(8, 4))
+    fig, ax = plt.subplots(1,1, figsize=(9, 3))
+
 
     x = t_new[n_subs_wins >= MIN_SUBS] / 60
     y = ratio_mean[n_subs_wins >= MIN_SUBS]
@@ -277,12 +280,12 @@ def plot_ratio_biomarker(
     ax.fill_between(x, y1=y - var, y2=y + var, alpha=.5,)
     ax.axvline(x=0, color='gray', alpha=.5, lw=3, ls='--',)
 
-    if Z_SCORE_RATIOS: r = 'Z-scored Ratio'
+    if Z_SCORE_RATIOS: r = 'Ratio (z-scored)'
     else: r = 'Ratio'
-    ax.set_ylabel(f'STN Theta * Gamma / Beta {r}',  #\n(4-8 / 12-20 Hz)',
-            size=fsize, weight='bold',)
+    ax.set_ylabel(f'Oscillatory Dynamics\nRatio (a.u.)',  #\n(4-8 / 12-20 Hz)',
+            size=fsize,)  #  weight='bold',
     ax.set_xlabel('Time vs Dyskinesia Onset (minutes)',
-            size=fsize, weight='bold',)
+            size=fsize, )  # weight='bold',
 
     ax.tick_params(axis='both', size=fsize, labelsize=fsize,)
 
@@ -302,10 +305,12 @@ def plot_ratio_biomarker(
     plt.tight_layout()
 
     if SAVE_FIG:
+            fname = f'{FIGNAME_EDIT}_SpectralRatio_min{MIN_SUBS}subs_smooth{SMOOTH_WIN}'
+            if SAVE_pdf: fname += '.pdf'
             plt.savefig(os.path.join(get_project_path('figures'),
-                                        'final_Q1_2024',
-                                        'prediction', 'ratio',
-                                        f'theta_beta_ratio_v1_10sec_min{MIN_SUBS}subs_smooth{SMOOTH_WIN}'),
+                                     'final_Q1_2024',
+                                     'prediction', 'ratio',
+                                     fname),
                         dpi=300, facecolor='w',)
             plt.close()
     else:
