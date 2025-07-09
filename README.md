@@ -76,8 +76,9 @@ terminal commands are given within the functions.
     - supporting strings as command-arguments: ´ "012" "v3.0"´
 
 - Feature Extraction based on merged-dataframes
-    - main file to run: ...
-    - supporting string-infos to run as arguments: ...
+    - main file to run: ´python -m lfpecog_features.run_ssd_ftExtr´
+    - supporting string as argument: ´"ftExtr_spectral_v8.json"´
+    - requires on sub presence in indiv peak freq excel
 
 
 ### Specifications of functions and settings

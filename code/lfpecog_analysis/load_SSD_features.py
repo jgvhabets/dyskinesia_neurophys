@@ -29,6 +29,9 @@ class ssdFeatures:
     """
     Main class to load SSD'd Features
 
+    contains every included subject as "subXXX" variable,
+    e.g. Class.sub001
+
     Arguments:
         - settings_json: filename of json file,
             location should be defined in utils_fileManagement
