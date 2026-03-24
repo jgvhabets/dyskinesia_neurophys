@@ -230,8 +230,8 @@ def get_seconds_of_LID_start():
     od_path = os.path.join(get_onedrive_path('data'), 'clinical scores')
     json_f = os.path.join(od_path, 'med_info.json')
 
-    with open(json_f, 'w') as jsonfile:
-        med_info = json.load(json_f,)
+    with open(json_f, 'r') as jsonfile:
+        med_info = json.load(jsonfile,)
     
     LDOPA_intakes_hhmm = med_info['lt_intakes_hhmm']
     LID_start_hhmm = med_info['lid_start_hhmm']

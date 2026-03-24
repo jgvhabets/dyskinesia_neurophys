@@ -105,8 +105,7 @@ def get_n_and_length_taps(win_tap_bool, acc_fs):
 Sides = namedtuple('Sides', 'left right')
 
 def load_acc_and_task(
-    sub, dataversion='v3.1',
-    resample_freq=0,
+    sub, dataversion='v3.1', resample_freq=0, EXTERN_HD: bool = False,
 ):
     """
     Imports ACC classes with:
@@ -123,10 +122,10 @@ def load_acc_and_task(
         - labels: dataframe containing all none-acc, none-
             ephys-columns
     """
-    pickle_path = join(get_project_path('data'),
-                               'merged_sub_data',
-                               dataversion,
-                               f'sub-{sub}',)
+    pickle_path = join(
+        get_project_path('data', extern_HD=EXTERN_HD), 'merged_sub_data',
+        dataversion, f'sub-{sub}',
+    )
     files = listdir(pickle_path)
 
     for f in files:

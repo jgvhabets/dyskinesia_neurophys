@@ -264,7 +264,9 @@ def run_mixEff_wGroups(dep_var, indep_var,
                        ALPHA=.01,
                        RETURN_CI=False,
                        RETURN_GRADIENT=False,
-                       allow_lm_error: bool = True,):
+                       allow_lm_error: bool = True,
+                       PRINT_RESULTS=False,
+                       ):
     """
     # tests sign effect of LID on ephys
     # Model: https://www.statsmodels.org/stable/generated/statsmodels.regression.mixed_linear_model.MixedLM.html
@@ -295,6 +297,10 @@ def run_mixEff_wGroups(dep_var, indep_var,
         else:
             print(dep_var.shape, indep_var.shape, groups.shape)
             lm_results = lm_model.fit()
+
+    if PRINT_RESULTS:
+        print(lm_results.summary())
+
 
     # extract results
     fixeff_cf = lm_results._results.fe_params[0]
